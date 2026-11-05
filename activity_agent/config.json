@@ -1,0 +1,12 @@
+{
+  "api_url": "http://127.0.0.1:8000/api/v1/activity",
+  "api_token": "dev-token",
+  "employee_id": "emp-001",
+  "batch_interval_seconds": 60,
+  "idle_threshold_seconds": 60,
+  "tick_seconds": 1,
+  "request_timeout_seconds": 10,
+  "spool_file": "data/spool.jsonl",
+  "max_spool_batches": 10000,
+  "log_file": "data/agent.log"
+}
