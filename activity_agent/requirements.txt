@@ -1,4 +1,7 @@
 pynput>=1.7
 psutil>=5.9
-# macOS дээр foreground app нэр авахад:
-# pyobjc-framework-Cocoa; sys_platform == "darwin"
+opencv-python>=4.10
+ultralytics>=8.3
+requests>=2.31
+pandas>=2.2
+scikit-learn>=1.5
