@@ -1,0 +1,9 @@
+.venv/
+.env
+__pycache__/
+*.py[cod]
+*.sqlite3
+staticfiles/
+.coverage
+schema.yml
+.DS_Store
