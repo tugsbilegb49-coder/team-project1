@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Logs
 logs
 *.log
@@ -22,3 +23,31 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+=======
+__pycache__/
+*.pyc
+venv/
+.venv/
+env/
+*.egg-info/
+.DS_Store
+
+# runtime artifacts
+data/*.csv
+*.pt
+backend/db.sqlite3
+backend/.env
+backend/staticfiles/
+agent/config.json
+agent/.agent_tokens.json
+agent/.pending_events.json
+agent/control.json
+data/.pending_camera_events.json
+
+# streamlit
+.streamlit/
+
+# IDE
+.vscode/
+.idea/
+>>>>>>> origin/database
