@@ -1,4 +1,9 @@
-<<<<<<< HEAD
+# Backend API
+
+Root `manage.py` нь шинээр нэгтгэсэн Django API-г ажиллуулна. Тохиргоо, endpoint болон тестийн заавар: [README-backend.md](README-backend.md).
+
+`backend/` доторх өмнөх Django төсөл мөн хадгалагдсан. Эдгээр нь тусдаа settings, model, API-тай тул нэг өгөгдлийн сангийн schema гэж үзэж болохгүй.
+
 
 # WorkTrack
 
@@ -28,7 +33,6 @@ npm install
 npm run dev
 ```
 
-=======
 # Ажилтны идэвх хянах систем
 
 Энэ төсөл нь camera-аар `WORKING`, `IDLE`, `PHONE`, `AWAY` төлөв илрүүлж,
@@ -150,4 +154,3 @@ productivity score харагдана.
 ## Зогсоох
 
 Agent, camera болон backend ажиллаж буй Terminal бүр дээр `Ctrl + C` дарна.
->>>>>>> origin/database
