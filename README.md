@@ -4,6 +4,41 @@ React frontend, Django API, computer activity agent болон camera monitor н
 `backend/` сервер, нэг database ашиглана. Root болон `backend/` доторх `manage.py`
 хоёулаа ижил Django төслийг ажиллуулна.
 
+## Нэг даралтаар асаах (macOS)
+
+Finder-ээс төслийн хавтас дахь **Start WorkTrack.command** файлыг давхар дарна.
+Энэ нь Python environment, backend dependency, npm dependency-ийг шаардлагатай үед
+бэлдэж, migration хийгээд backend, frontend, computer agent-ийг хамт асаана.
+Серверүүд өмнө нь ажиллаж байвал дахин асаахгүй. Browser автоматаар нээгдэнэ.
+Анх удаа Python 3 болон Node.js/npm суусан байх шаардлагатай.
+
+- Admin account байхгүй бол terminal дотор үүсгэх алхам гарна.
+- Agent-ийн эхний тохиргоонд хугацаагаа бүртгүүлэх account-ийн username/password
+  оруулна. Password дэлгэц дээр харагдахгүй, файлд хадгалагдахгүй; JWT хадгалагдана.
+- Monitoring consent байхгүй бол зөвшөөрөл асууна. Татгалзвал зөвхөн веб ажиллана.
+- Camera асаах эсэхийг `y/N` асуултаар сонгоно. `y` гэвэл camera dependency-ийг
+  шаардлагатай үед суулгана. OS camera permission тусдаа шаардагдаж болно.
+- Launcher цонхыг нээлттэй байлгана. Зогсоохдоо **Ctrl+C** дарна.
+  Launcher өөрөө асаасан process-уудаа л зогсооно.
+
+Дараагийн удаа зөвхөн энэ файлыг давхар дарахад хангалттай. Хадгалсан login-ийн
+хугацаа дуусвал дахин нэвтрэхийг асууна. Agent өмнө нь pause болсон бол pause
+төлөвийг хэвээр хадгална; resume хийхдээ `python agent/main.py --resume` ашиглана.
+Веб дотор нэвтэрсэн account болон agent-ийн account тусдаа тул dashboard дээр
+agent-д сонгосон хэрэглэгчийн тайланг харна.
+
+Terminal-аас ашиглах хувилбарууд:
+
+```bash
+python3 worktrack.py              # Backend + frontend + agent, camera сонголт
+python3 worktrack.py --web-only   # Зөвхөн веб систем
+python3 worktrack.py --camera     # Agent болон camera хамт
+```
+
+Log-ууд `.runtime/backend.log`, `frontend.log`, `agent.log`, `camera.log` дотор байна.
+Launcher ажиллаж байхад agent-ийг өөр terminal эсвэл OS startup script-ээр давхар
+асаахгүй. macOS startup helper-ийн тохиргоо launcher-аас тусдаа хэвээр.
+
 ## Тохируулах
 
 ```bash

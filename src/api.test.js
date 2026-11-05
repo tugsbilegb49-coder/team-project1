@@ -38,3 +38,9 @@ test('list retrieves every page and delete accepts 204',async () => {
   globalThis.fetch=async () => reply(null,204);
   assert.equal(await client.api('/api/tasks/1/',{method:'DELETE'}),null);
 });
+
+test('offline backend proxy response shows an actionable error', async () => {
+  const client = await setup();
+  globalThis.fetch = async () => new Response('Proxy error', {status:500});
+  await assert.rejects(client.login('worker','password'), /Backend сервертэй холбогдож чадсангүй/);
+});

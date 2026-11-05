@@ -35,7 +35,16 @@ export async function api(path, options = {}, retry = true) {
     clearAuth();
   }
   if (response.status === 204) return null;
-  const data = await response.json();
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error(
+      response.status >= 500
+        ? "Backend сервертэй холбогдож чадсангүй. Django сервер 8000 порт дээр ажиллаж байгаа эсэхийг шалгана уу."
+        : "Серверээс буруу форматтай хариу ирлээ. API хаягийг шалгана уу.",
+    );
+  }
   if (!response.ok)
     throw new Error(
       typeof data.detail === "string" ? data.detail : JSON.stringify(data),

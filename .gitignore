@@ -62,3 +62,6 @@ schema.yml
 
 # Activity agent runtime
 activity_agent/data/
+
+# Local launcher logs and lock
+.runtime/
