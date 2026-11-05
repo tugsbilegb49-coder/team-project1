@@ -1,2 +1,2 @@
-# team-project1
+# team project1
 ajliin bvteemj shalgah system
