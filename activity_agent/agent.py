@@ -29,7 +29,9 @@ log = logging.getLogger("agent")
 def load_config(path):
     with open(path, encoding="utf-8") as f:
         config = json.load(f)
-    for key in ("spool_file", "log_file"):
+    for key in ("spool_file", "log_file", "token_file"):
+        if key not in config:
+            continue
         if not os.path.isabs(config[key]):
             config[key] = os.path.join(BASE_DIR, config[key])
     return config
@@ -54,6 +56,7 @@ def make_sender(config):
     return BatchSender(
         config["api_url"], config["api_token"], config["spool_file"],
         timeout=config["request_timeout_seconds"], max_spool_batches=config["max_spool_batches"],
+        token_file=config.get("token_file"),
     )
 
 

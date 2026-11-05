@@ -8,6 +8,7 @@ User = get_user_model()
 
 
 class UserSerializer(serializers.ModelSerializer):
+    is_admin = serializers.BooleanField(source="is_admin_role", read_only=True)
     password = serializers.CharField(write_only=True, required=False, min_length=8)
     department_name = serializers.CharField(source="department.name", read_only=True)
 
@@ -15,9 +16,21 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             "id", "username", "password", "first_name", "last_name", "email",
-            "role", "department", "department_name", "is_active",
+            "role", "is_admin", "department", "department_name", "is_active",
         ]
         read_only_fields = ["id"]
+
+    def validate(self, attrs):
+        if self.instance is None and not attrs.get("password"):
+            raise serializers.ValidationError({"password": "A password is required."})
+        if attrs.get("password"):
+            from django.contrib.auth.password_validation import validate_password
+            from django.core.exceptions import ValidationError
+            try:
+                validate_password(attrs["password"], self.instance or User(username=attrs.get("username", "")))
+            except ValidationError as exc:
+                raise serializers.ValidationError({"password": exc.messages})
+        return attrs
 
     def create(self, validated_data):
         password = validated_data.pop("password")

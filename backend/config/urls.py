@@ -3,6 +3,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from activity.batch import ActivityBatchView
 from users.views import ConsentRecordViewSet, DeviceViewSet, UserViewSet
 from workforce.views import DepartmentViewSet, TaskViewSet
 from activity.views import ActivityEventViewSet, ComputerActivityViewSet
@@ -20,6 +21,7 @@ router.register("computer-activity", ComputerActivityViewSet, basename="computer
 router.register("scores", ProductivityScoreViewSet, basename="score")
 
 urlpatterns = [
+    path("api/v1/activity", ActivityBatchView.as_view()),
     path("admin/", admin.site.urls),
     path("api/auth/login/", TokenObtainPairView.as_view(), name="token-obtain-pair"),
     path("api/auth/refresh/", TokenRefreshView.as_view(), name="token-refresh"),

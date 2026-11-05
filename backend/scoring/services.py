@@ -3,6 +3,7 @@
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.db.models import Avg, Sum
+from django.utils import timezone
 
 from activity.models import ActivityEvent, ComputerActivity
 from workforce.models import Task
@@ -50,7 +51,7 @@ def calculate_daily_score(employee, score_date):
     on_time_count = sum(
         1
         for task in completed.exclude(completed_at__isnull=True)
-        if task.completed_at.date() <= task.due_date
+        if timezone.localtime(task.completed_at).date() <= task.due_date
     )
 
     task_completion = _percentage(completed_count, task_count)

@@ -1,156 +1,284 @@
-# Backend API
-
-Root `manage.py` нь шинээр нэгтгэсэн Django API-г ажиллуулна. Тохиргоо, endpoint болон тестийн заавар: [README-backend.md](README-backend.md).
-
-`backend/` доторх өмнөх Django төсөл мөн хадгалагдсан. Эдгээр нь тусдаа settings, model, API-тай тул нэг өгөгдлийн сангийн schema гэж үзэж болохгүй.
-
-
 # WorkTrack
 
-Ажлын бүтээмж болон даалгавар хянах веб аппликейшн.
+React frontend, Django API, computer activity agent болон camera monitor нь нэг
+`backend/` сервер, нэг database ашиглана. Root болон `backend/` доторх `manage.py`
+хоёулаа ижил Django төслийг ажиллуулна.
 
-## Ашигласан технологи
-- React
-- Vite
-- JavaScript
-- CSS
-- LocalStorage
-
-## Үндсэн боломжууд
-- Даалгавар нэмэх
-- Даалгавар устгах
-- Даалгаврын төлөв өөрчлөх
-- Ажилтанд даалгавар хуваарилах
-- Ажилтнаар шүүх
-- Төлөвөөр шүүх
-- Хугацаа хэтэрсэн даалгавар хянах
-- Dashboard хэсэгт мэдээлэл харах
-
-## Ажиллуулах заавар
-
-```bash
-npm install
-npm run dev
-```
-
-# Ажилтны идэвх хянах систем
-
-Энэ төсөл нь camera-аар `WORKING`, `IDLE`, `PHONE`, `AWAY` төлөв илрүүлж,
-компьютер дээр ашигласан application-ийн хугацааг бүртгэнэ. Үр дүнг Django
-backend болон Streamlit dashboard дээр харна.
-
-## Шаардлага
-
-- Python 3
-- Mac-ийн built-in camera эсвэл USB camera
-- Camera ашиглах зөвшөөрөл
-
-## Эхний тохиргоо
-
-Төслийн үндсэн хавтас руу орно:
-
-```bash
-cd ~/Desktop/bolson/worker-activity-monitor
-```
-
-Camera болон dashboard-ийн сангуудыг суулгана:
+## Тохируулах
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
+npm ci
+cp backend/.env.example backend/.env
 ```
 
-Backend-ийн сангуудыг суулгана:
+`backend/.env` дахь `DJANGO_SECRET_KEY`-г өөрийн random утгаар солино.
+Хэрэв файл өмнө нь байгаа бол хуулж дарж болохгүй.
 
 ```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
 python manage.py migrate
 python manage.py createsuperuser
-```
-
-## Ажиллуулах
-
-Гурван Terminal нээнэ.
-
-### 1. Backend асаах
-
-```bash
-cd ~/Desktop/bolson/worker-activity-monitor/backend
-source .venv/bin/activate
 python manage.py runserver
 ```
 
-Backend: `http://127.0.0.1:8000/admin/`
-
-### 2. Computer agent асаах
-
-Эхний удаа config файл үүсгэнэ:
+Хоёр дахь terminal:
 
 ```bash
-cd ~/Desktop/bolson/worker-activity-monitor
+npm run dev
+```
+
+http://localhost:5173 дээр superuser-аар нэвтэрнэ. Vite `/api/` хүсэлтийг
+http://127.0.0.1:8000 руу дамжуулна. Production build-д ижил origin reverse proxy
+эсвэл build хийхээс өмнө `VITE_API_URL` болон backend CORS тохируулна.
+
+## Хэрэглэх дараалал
+
+1. Багийн гишүүд хэсэгт username, нэр, нууц үгтэй employee үүсгэнэ.
+   Department, manager тохиргоог http://127.0.0.1:8000/admin/ дээр хийнэ.
+2. Даалгавар хэсэгт ажилтанд task хуваарилж, deadline, status, чанарын үнэлгээг оруулна.
+3. Ажилтан өөрийн account-аар agent-д нэвтэрч, monitoring consent олгоно.
+4. Agent/camera өгөгдөл ирсний дараа Dashboard дээр ажилтан, өдөр сонгож
+   «Оноо тооцох / шинэчлэх» дарна. Application, camera, score нь database-аас уншигдана.
+
+Admin бүх хэрэглэгчийг, manager өөрийн хэлтсийг, employee зөвхөн өөрийн өгөгдлийг харна.
+Task өөрчлөх эрх admin/manager-д байна. Нэр, task зэрэг бизнес өгөгдөл browser-ийн
+localStorage-д хадгалагдахгүй. Login session нь tab-ийн sessionStorage-д хадгалагдана.
+
+## Computer agent (үндсэн)
+
+```bash
+pip install -r activity_agent/requirements.txt
 cp agent/config.example.json agent/config.json
+python agent/main.py --login
+python agent/main.py --grant-consent 2026-11
+python agent/main.py
 ```
 
-`agent/config.json` файл доторх `employee_username`-ийг Django admin-д
-үүсгэсэн username-аар солино.
+Тохиргооны API URL нь `http://127.0.0.1:8000`. Employee account-аар login хийнэ.
+Agent нь device enroll, JWT refresh, offline queue ашиглана. OS-specific setup-ийг
+`agent/` доторх script-үүдээс харна. Давхар хугацаа бүртгэхээс сэргийлж нэг компьютер
+дээр хоёр computer agent зэрэг ажиллуулахгүй.
 
-Эхний удаа нэвтэрч device бүртгүүлнэ:
+## Activity agent (өөр хувилбар)
 
 ```bash
-python3 agent/main.py --login
-python3 agent/main.py --grant-consent 2026-11
+pip install -r activity_agent/requirements.txt
+python agent/main.py --login
+python agent/main.py --grant-consent 2026-11
 ```
 
-Дараа нь agent-аа асаана:
+`activity_agent/config.json` дахь `employee_id`-г login хийсэн username болгон солино.
+`token_file` нь үндсэн agent-ийн JWT файл; `dev-token` ашиглахгүй.
 
 ```bash
-python3 agent/main.py
+python activity_agent/agent.py run
 ```
 
-Энэ terminal-ийг нээлттэй үлдээнэ. Agent нь 30 секунд тутам идэвхтэй байгаа
-application болон idle хугацааг backend рүү илгээнэ.
+`POST /api/v1/activity` compatibility endpoint нь batch-ийг ижил Django database-д
+хадгалж, retry хийхэд ижил мөрийг дахин үүсгэхгүй. Aggregate app хугацаанд дарааллын
+мэдээлэл байдаггүй тул хадгалсан цагийн offset нь бодит foreground дараалал биш.
+Энэ contract-д app-ийн work ангилал байхгүй учраас `OTHER` ангиллаар хадгална;
+keyboard/mouse event тоонуудыг database-д хадгалахгүй. Mock server нь зөвхөн тусдаа
+тестийн хэрэгсэл; үндсэн системд асаах шаардлагагүй.
 
-### 3. Camera monitor асаах
-
-Шинэ Terminal дээр:
+## Camera
 
 ```bash
-cd ~/Desktop/bolson/worker-activity-monitor
-source .venv/bin/activate
-python3 main.py
+pip install -r requirements.txt
+python main.py
 ```
 
-Mac camera permission асуувал **System Settings → Privacy & Security →
-Camera** хэсгээс Terminal эсвэл VS Code-д зөвшөөрөл өгнө.
+`config.yaml`-ийн `api_sync.enabled: true` нь camera state-ийг agent-ийн account,
+device, token ашиглан `/api/activity-events/ingest/` рүү илгээнэ. Camera permission
+олгох шаардлагатай. Single-person горимд account-д хамааруулна; multi-person
+camera identity integration хийгдээгүй. Raw зураг API руу илгээхгүй.
 
-`config.yaml` файл дахь `camera_index: 0` нь MacBook-ийн дотоод camera.
-USB camera ашиглавал `1` болгож туршиж болно.
+## Database ба хуучин backend
 
-## Үр дүн харах
+SQLite default файл: `backend/db.sqlite3`. PostgreSQL-д `backend/.env` дахь
+`POSTGRES_*` утгуудыг тохируулаад migrate хийнэ. Хуучин root `db.sqlite3`-ийг өөрчлөхгүй;
+түүний `core` schema-г шинэ database руу автоматаар зөөхгүй. `core/` нь өмнөх
+хэрэгжүүлэлтийн эх код бөгөөд үндсэн серверт ачаалагдахгүй. Доорх API заавар нь
+зөвхөн одоогийн `backend/` серверт хамаарна. Хуучин `core/` endpoint болон model-ууд
+одоогийн API-тай ижил биш; өмнөх эх код, зааврыг Git түүхээс харж болно.
 
-Шинэ Terminal дээр:
+Оноо нь `backend/scoring/services.py`-ийн дүрмийг ашиглана: T/Q/D нь task-аас,
+W нь computer activity-ийн WORK харьцаанаас; computer data байхгүй үед camera
+WORKING харьцаанаас гарна. Энэ дүрэм хуучин `core`-ийн дүрмээс ялгаатай.
+
+## Шалгах
 
 ```bash
-cd ~/Desktop/bolson/worker-activity-monitor
-source .venv/bin/activate
-streamlit run dashboard/app.py
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py test users workforce activity scoring
+python -m unittest discover -s agent -p 'test*.py'
+python -m unittest discover -s activity_agent/tests
+npm run test
+npm run lint
+npm run build
 ```
 
-Terminal дээр гарсан `http://localhost:8501` холбоосыг browser-оор нээнэ.
+Integration тест нь JWT login → task → device/consent → computer/camera ingest →
+score → dashboard урсгал, batch replay, бусдын account-аар бичихийг хориглох,
+invalid batch-ийн atomicity-г шалгана. Бодит camera capture болон PostgreSQL-г
+эдгээр SQLite тестүүд баталгаажуулахгүй.
 
-Dashboard-ийн зүүн талд:
+## API лавлагаа
 
-1. **Django API** сонгоно.
-2. API URL: `http://127.0.0.1:8000`
-3. Username, password-оо оруулж **Login** дарна.
+Business API бүр JWT authentication шаарддаг. Login-оос авсан access token-ийг
+`Authorization: Bearer ACCESS_TOKEN` header-т явуулна. Access token 30 минут,
+refresh token 1 өдөр хүчинтэй. Agent-ууд refresh token ашиглан access-аа шинэчилнэ.
 
-Dashboard дээр application бүрийн минут, camera төлөвийн хугацаа болон нийт
-productivity score харагдана.
+| Endpoint | Method | Зориулалт |
+| --- | --- | --- |
+| `/api/auth/login/` | POST | Username, password-аар access/refresh авах |
+| `/api/auth/refresh/` | POST | Refresh token-оор access шинэчлэх |
+| `/api/users/`, `/api/users/{id}/` | GET, POST / GET, PUT, PATCH, DELETE | User удирдах; өөрчлөх эрх зөвхөн admin |
+| `/api/users/me/` | GET | Одоогийн хэрэглэгч |
+| `/api/departments/`, `/api/departments/{id}/` | GET, POST / GET, PUT, PATCH, DELETE | Хэлтэс; өөрчлөх эрх зөвхөн admin |
+| `/api/tasks/`, `/api/tasks/{id}/` | GET, POST / GET, PUT, PATCH, DELETE | Task; өөрчлөх эрх admin/manager |
+| `/api/devices/enroll/` | POST | Өөрийн workstation бүртгүүлэх |
+| `/api/devices/` | GET | Харах эрхтэй device-ууд |
+| `/api/consents/grant/` | POST | Өөрийн monitoring consent олгох |
+| `/api/consents/revoke/` | POST | Өөрийн consent цуцлах |
+| `/api/consents/status/` | GET | Өөрийн consent төлөв |
+| `/api/computer-activity/ingest/` | POST | Үндсэн agent-ийн application segment |
+| `/api/computer-activity/` | GET | Computer activity түүх |
+| `/api/activity-events/ingest/` | POST | Өөрийн camera state segment |
+| `/api/activity-events/` | GET | Camera activity түүх |
+| `/api/v1/activity` | POST | Өөр agent-ийн v1.0 batch; төгсгөлийн `/` байхгүй |
+| `/api/scores/calculate/` | POST | Employee/date оноо тооцох буюу шинэчлэх |
+| `/api/scores/dashboard/?employee_id=2&date=2026-11-05` | GET | Өдрийн score, application, camera summary |
+| `/api/scores/` | GET | Харах эрхтэй онооны түүх |
 
-## Зогсоох
+List хариу нь `count`, `next`, `previous`, `results` бүтэцтэй; нэг хуудсанд 50 мөр.
+`employee`, `employee_id`, `device_id` утгуудыг бодит API хариунаас авна.
 
-Agent, camera болон backend ажиллаж буй Terminal бүр дээр `Ctrl + C` дарна.
+Login хүсэлтийн JSON:
+
+```json
+{"username":"employee1","password":"YOUR_PASSWORD"}
+```
+
+Task үүсгэх JSON (admin/manager):
+
+```json
+{"employee":2,"title":"API integration","description":"Agent холбох","due_date":"2026-11-05","status":"TODO"}
+```
+
+Task status нь `TODO`, `IN_PROGRESS`, `DONE`. `DONE` болоход сервер `completed_at`
+онооно; дахин нээхэд цэвэрлэнэ. `quality_score` нь 0–100 эсвэл null.
+
+Computer segment-ийн JSON (тухайн employee-ийн token):
+
+```json
+{"started_at":"2026-11-05T10:00:00+08:00","duration_seconds":30,"application":"Code","category":"WORK"}
+```
+
+Category: `WORK`, `COMMUNICATION`, `BROWSER`, `OTHER`. Camera segment:
+
+```json
+{"timestamp":"2026-11-05T10:00:00+08:00","duration_seconds":30,"state":"WORKING"}
+```
+
+Camera state: `WORKING`, `PHONE`, `IDLE`, `AWAY`. Хоёр ingest endpoint-д enrollment
+хариуны `device_id`-г нэмэх боломжтой; device нь нэвтэрсэн хэрэглэгчийнх байна.
+`REQUIRE_MONITORING_CONSENT=true` үед өмнө нь consent grant хийсэн байх ёстой:
+
+```json
+{"policy_version":"2026-11"}
+```
+
+Оноо тооцох JSON:
+
+```json
+{"employee_id":2,"date":"2026-11-05"}
+```
+
+Admin бүх ажилтанд, manager өөрийн хэлтэст, employee өөртөө оноо тооцож болно.
+Ирээдүйн өдрийн оноо тооцохгүй. Өгөгдөл өөрчлөгдвөл дахин тооцно.
+
+## Activity agent-ийн contract ба найдвартай байдал
+
+`activity_agent/` дотор `collector.py` нь хугацаа болон app-ийг цуглуулж,
+`contract.py` batch үүсгэж шалгана. `sender.py` нь offline spool, retry, JWT refresh
+хариуцна. `summary.py`, `mock_server.py` нь тусдаа туршилтын хэрэгсэл.
+
+`POST /api/v1/activity` хүсэлт:
+
+```json
+{
+  "schema_version":"1.0",
+  "agent_version":"0.1.0",
+  "employee_id":"employee1",
+  "device_id":"dde59b7ef949f039",
+  "period_start":"2026-11-05T02:00:00Z",
+  "period_end":"2026-11-05T02:01:00Z",
+  "active_seconds":42,
+  "idle_seconds":18,
+  "keyboard_events":120,
+  "mouse_events":15,
+  "apps":[{"name":"chrome.exe","seconds":30},{"name":"code.exe","seconds":12}]
+}
+```
+
+`employee_id` нь нэвтэрсэн username эсвэл user ID-г string хэлбэрээр агуулна.
+Цаг нь timezone-тай байна; agent UTC `Z` формат үүсгэдэг. Django өдрийн тайланг
+`Asia/Ulaanbaatar` timezone-аар гаргана. Batch нь хамгийн ихдээ 3600 секунд,
+500 app мөртэй. App секундийн нийлбэр active хугацаанаас хэтрэхгүй, rounding-ийн
+2 секундийн зөрүү зөвшөөрнө. Validation бүхэлдээ амжилттай болсны дараа хадгална.
+
+| Тохиргоо | Зориулалт |
+| --- | --- |
+| `api_url` | `http://127.0.0.1:8000/api/v1/activity` |
+| `token_file` | `../agent/.agent_tokens.json`; зам нь config байрласан хавтаснаас |
+| `employee_id` | Login хийсэн username |
+| `batch_interval_seconds` | Batch илгээх давтамж; default 60 секунд |
+| `idle_threshold_seconds` | Input байхгүй үед idle болох босго; default 60 секунд |
+| `spool_file` | Илгээгдээгүй batch-ийн JSON Lines файл |
+| `max_spool_batches` | Хадгалах batch-ийн дээд тоо; default 10000 |
+
+Шинэ app мөр хадгалбал 201, ижил batch дахин ирж шинэ мөр үүсэхгүй бол 200.
+Contract алдаа 400, JWT алдаа 401, identity/consent/device эрхийн алдаа 403.
+Сүлжээний алдаа, 5xx, 408, 429 үед spool-д хадгалж дахин оролдоно. 401/403 үед
+өгөгдлийг хадгалж login эсвэл consent засагдахыг хүлээнэ. Бусад 4xx алдаатай batch-ийг
+log-д бичээд дахин илгээхгүй. Spool хязгаарт хүрвэл хамгийн хуучин batch-ууд хасагдана.
+
+Agent restart хийсэн ч spool хадгалагдана. Laptop sleep-ийн 10 секундээс урт
+завсрыг activity гэж тооцохгүй. Listener зогсвол main loop дахин эхлүүлнэ.
+Нэг туршилтын batch илгээхдээ `python activity_agent/agent.py mock` ашиглана;
+энэ нь тохируулсан бодит endpoint руу өгөгдөл бичдэгийг анхаарна.
+
+## Нууцлал ба OS permission
+
+Keyboard/mouse-ийн агуулга, clipboard, цонхны гарчиг, file content, screenshot-ийг
+computer agent илгээхгүй. Alternative agent key/click-ийн тоог batch-д оруулдаг ч
+Django adapter тэдгээрийг хадгалахгүй. Mouse coordinate нь idle илрүүлэхэд ашиглагдаж,
+серверт явдаггүй. Alternative device ID нь hostname/MAC-ийн hash бөгөөд hostname
+өөрөө илгээгдэхгүй. Camera API зөвхөн боловсруулсан state, хугацаа хүлээн авна.
+
+macOS-д шаардлагатай үед System Settings → Privacy & Security хэсгийн Accessibility,
+Input Monitoring болон Camera эрхийг Terminal/Python-д олгоно. Linux Wayland-д
+input listener ажиллахгүй бол Xorg session ашиглана. Foreground app танихад macOS
+дээр `pyobjc-framework-Cocoa` шаардлагатай байж болно.
+
+## Асуудал шийдэх
+
+| Асуудал | Шалгах зүйл |
+| --- | --- |
+| Frontend API хүрэхгүй | Django 8000 порт дээр, Vite 5173 дээр ажиллаж байгаа эсэх; `VITE_API_URL`, proxy, CORS |
+| Login 401 | Username/password шалгах; agent-д `python agent/main.py --login` дахин ажиллуулах |
+| Ingest 403 | Consent grant, device enabled болон username тохирч байгаа эсэх |
+| Batch 400 | Log дахь validation алдаа; app секунд, period, schema version |
+| ModuleNotFoundError | `.venv` идэвхтэй эсэх; тухайн хэсгийн requirements-ийг ижил Python-оор суулгасан эсэх |
+| Spool томорч байна | Backend холболт, token/consent болон `activity_agent/data/agent.log` |
+| Camera мэдээлэл харагдахгүй | `api_sync.enabled`, agent login/token, camera permission, single-person горим |
+| Оноо хуучин байна | Зөв employee/date сонгоод «Оноо тооцох / шинэчлэх» дарах |
+
+Agent/camera terminal-уудыг `Ctrl+C`-ээр зогсооно. Үндсэн agent-ийн pause/resume болон
+OS startup сонголтуудыг `python agent/main.py --help` болон `agent/` доторх install
+script-ийн `--help`-ээс харна. Startup script-үүдийг ашиглахаас өмнө тэдгээрийн
+Python болон project замыг өөрийн virtual environment-тэй тааруулна.

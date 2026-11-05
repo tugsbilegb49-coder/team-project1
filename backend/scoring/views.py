@@ -1,4 +1,5 @@
 from datetime import date
+from django.utils import timezone
 
 from django.contrib.auth import get_user_model
 from django.db.models import Sum
@@ -35,7 +36,7 @@ class ProductivityScoreViewSet(viewsets.ReadOnlyModelViewSet):
         requester = self.request.user
         if requester.is_admin_role:
             return
-        if requester.is_manager and requester.department_id == employee.department_id:
+        if requester.is_manager and requester.department_id and requester.department_id == employee.department_id:
             return
         if requester.pk == employee.pk:
             return
@@ -47,10 +48,12 @@ class ProductivityScoreViewSet(viewsets.ReadOnlyModelViewSet):
         employee = get_object_or_404(User, pk=employee_id)
         self._can_calculate_for(employee)
         try:
-            score_date = date.fromisoformat(request.data.get("date", date.today().isoformat()))
+            score_date = date.fromisoformat(request.data.get("date", timezone.localdate().isoformat()))
         except (TypeError, ValueError) as exc:
             raise ValidationError({"date": "Use ISO format: YYYY-MM-DD."}) from exc
 
+        if score_date > timezone.localdate():
+            raise ValidationError({"date": "Future dates cannot be calculated."})
         score = calculate_daily_score(employee, score_date)
         return Response(self.get_serializer(score).data, status=status.HTTP_201_CREATED)
 
@@ -61,7 +64,7 @@ class ProductivityScoreViewSet(viewsets.ReadOnlyModelViewSet):
         employee = get_object_or_404(User, pk=employee_id)
         self._can_calculate_for(employee)
         try:
-            report_date = date.fromisoformat(request.query_params.get("date", date.today().isoformat()))
+            report_date = date.fromisoformat(request.query_params.get("date", timezone.localdate().isoformat()))
         except ValueError as exc:
             raise ValidationError({"date": "Use ISO format: YYYY-MM-DD."}) from exc
 

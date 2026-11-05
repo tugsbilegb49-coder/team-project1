@@ -106,10 +106,14 @@ class ApiIntegrationTest(unittest.TestCase):
 
     def test_rejected_batch_not_retried_forever(self):
         self.start_server()
-        self.assertEqual(self.sender(token="wrong").send(batch_at(0)), (1, 0))
         bad = batch_at(60)
         bad["password"] = "x"
         self.assertEqual(self.sender().send(bad), (1, 0))
+
+    def test_auth_failure_retains_batch_until_login_fixed(self):
+        self.start_server()
+        self.assertEqual(self.sender(token="wrong").send(batch_at(0)), (0, 1))
+        self.assertEqual(self.sender().send(batch_at(60)), (2, 0))
 
     def test_corrupt_spool_line_skipped(self):
         with open(self.spool, "w") as f:

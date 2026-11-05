@@ -67,7 +67,7 @@ class ActivityEventViewSet(viewsets.ModelViewSet):
         activity, created = ActivityEvent.objects.get_or_create(
             employee=request.user,
             source_person_id="",
-            device=device,
+            defaults={"device": device},
             **data,
         )
         return Response(
@@ -104,7 +104,7 @@ class ComputerActivityViewSet(viewsets.ModelViewSet):
         device = _resolve_device(request, data)
         activity, created = ComputerActivity.objects.get_or_create(
             employee=request.user,
-            device=device,
+            defaults={"device": device},
             **data,
         )
         return Response(

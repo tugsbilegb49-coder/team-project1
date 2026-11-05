@@ -46,7 +46,7 @@ class TaskViewSet(viewsets.ModelViewSet):
 
     def _ensure_employee_in_manager_department(self, employee):
         user = self.request.user
-        if user.is_manager and employee.department_id != user.department_id:
+        if user.is_manager and (not user.department_id or employee.department_id != user.department_id):
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("Managers can only manage employees in their own department.")
 
@@ -60,6 +60,9 @@ class TaskViewSet(viewsets.ModelViewSet):
         employee = serializer.validated_data.get("employee", serializer.instance.employee)
         self._ensure_employee_in_manager_department(employee)
         task = serializer.save()
+        if task.status != Task.Status.DONE and task.completed_at is not None:
+            task.completed_at = None
+            task.save(update_fields=["completed_at", "updated_at"])
         if task.status == Task.Status.DONE and task.completed_at is None:
             task.completed_at = timezone.now()
             task.save(update_fields=["completed_at", "updated_at"])

@@ -1,378 +1,347 @@
-
 import { useEffect, useState } from "react";
-import "./App.css";
+import { api, list, login, clearAuth } from "./api";
 import Tasks from "./Tasks";
-
+import "./App.css";
+const statuses = {
+  TODO: "Хүлээгдэж байна",
+  IN_PROGRESS: "Хийгдэж байна",
+  DONE: "Дууссан",
+};
 function App() {
-  const [page, setPage] = useState("dashboard");
-
-const [tasks, setTasks] = useState(() => {
-  const savedTasks = localStorage.getItem("worktrack-tasks");
-  return savedTasks ? JSON.parse(savedTasks) : [];
-});
-
-const [members, setMembers] = useState(() => {
-  const savedMembers = localStorage.getItem("worktrack-members");
-  return savedMembers ? JSON.parse(savedMembers) : [];
-});
-const [memberName, setMemberName] = useState("");
-const [memberEmail, setMemberEmail] = useState("");
-const [roles, setRoles] = useState(() => {
-  const savedRoles = localStorage.getItem("worktrack-roles");
-
-  return savedRoles
-    ? JSON.parse(savedRoles)
-    : [
-        "Frontend Developer",
-        "Backend Developer",
-        "Database & Data Model Developer",
-        "Computer Activity Agent Developer",
-        "Camera Developer",
-        "AI Developer",
-        "QA Engineer",
-        "Documentation",
-      ];
-});
-
-const [memberRole, setMemberRole] = useState("Frontend Developer");
-const [newRole, setNewRole] = useState("");
-function addMember(e) {
-  e.preventDefault();
-
-  if (!memberName.trim() || !memberEmail.trim()) {
-    alert("Нэр болон имэйлээ оруулна уу.");
-    return;
+  const [user, setUser] = useState(null),
+    [page, setPage] = useState("dashboard");
+  const [tasks, setTasks] = useState([]),
+    [members, setMembers] = useState([]);
+  const [report, setReport] = useState(null),
+    [employee, setEmployee] = useState("");
+  const [date, setDate] = useState(() =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ulaanbaatar" }).format(
+      new Date(),
+    ),
+  );
+  const [error, setError] = useState(""),
+    [busy, setBusy] = useState(false),
+    [ready, setReady] = useState(false);
+  const canManage = user && (user.is_admin || user.role === "MANAGER");
+  async function load() {
+    const [me, users, rows] = await Promise.all([
+      api("/api/users/me/"),
+      list("/api/users/"),
+      list("/api/tasks/"),
+    ]);
+    setUser(me);
+    setMembers(
+      users.map((u) => ({
+        ...u,
+        name:
+          [u.first_name, u.last_name].filter(Boolean).join(" ") || u.username,
+      })),
+    );
+    setTasks(
+      rows.map((t) => ({
+        ...t,
+        status: statuses[t.status],
+        deadline: t.due_date,
+        assignedTo: t.employee_name,
+      })),
+    );
+    setEmployee((current) => current || String(me.id));
   }
-
-  const newMember = {
-    id: Date.now(),
-    name: memberName,
-    email: memberEmail,
-    role: memberRole,
-  };
-
-  setMembers([...members, newMember]);
-
-  setMemberName("");
-  setMemberEmail("");
-  setMemberRole("Frontend Developer");
-}
-
-function deleteMember(id) {
-  setMembers(members.filter((member) => member.id !== id));
-}
-
-function addRole(e) {
-  e.preventDefault();
-
-  const role = newRole.trim();
-
-  if (!role) {
-    alert("Үүргийн нэрээ оруулна уу.");
-    return;
+  async function run(action) {
+    setError("");
+    setBusy(true);
+    try {
+      await action();
+      return true;
+    } catch (e) {
+      setError(e.message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
   }
-
-  if (roles.includes(role)) {
-    alert("Энэ үүрэг аль хэдийн байна.");
-    return;
+  useEffect(() => {
+    let active = true;
+    api("/api/users/me/")
+      .then(() => load())
+      .catch(() => clearAuth())
+      .finally(() => {
+        if (active) setReady(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!user || !employee) return;
+    let active = true;
+    api(`/api/scores/dashboard/?employee_id=${employee}&date=${date}`)
+      .then((data) => {
+        if (active) setReport(data);
+      })
+      .catch((e) => {
+        if (active) {
+          setReport(null);
+          setError(e.message);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [user, employee, date]);
+  async function signIn(e) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    await run(async () => {
+      await login(form.get("username"), form.get("password"));
+      await load();
+    });
   }
-
-  setRoles([...roles, role]);
-  setMemberRole(role);
-  setNewRole("");
-}
-
-function deleteRole(roleToDelete) {
-  if (members.some((member) => member.role === roleToDelete)) {
-    alert("Энэ үүрэгтэй гишүүн бүртгэлтэй байна.");
-    return;
+  async function mutate(path, method, data) {
+    return run(async () => {
+      await api(path, {
+        method,
+        ...(data ? { body: JSON.stringify(data) } : {}),
+      });
+      await load();
+    });
   }
-
-  const updatedRoles = roles.filter((role) => role !== roleToDelete);
-
-  setRoles(updatedRoles);
-
-  if (memberRole === roleToDelete) {
-    setMemberRole(updatedRoles[0] || "");
-  }
-}
-useEffect(() => {
-  localStorage.setItem("worktrack-members", JSON.stringify(members));
-}, [members]);
-
-useEffect(() => {
-  localStorage.setItem("worktrack-roles", JSON.stringify(roles));
-}, [roles]);
-
-  const totalTasks = tasks.length;
-  const completedTasks = tasks.filter(
-    (task) => task.status === "Дууссан"
-  ).length;
-  const progress = totalTasks === 0
-  ? 0
-  : Math.round((completedTasks / totalTasks) * 100);
-  const inProgressTasks = tasks.filter(
-    (task) => task.status === "Хийгдэж байна"
-  ).length;
-  const pendingTasks = tasks.filter(
-    (task) => task.status === "Хүлээгдэж байна"
-  ).length;
-const today = new Date().toISOString().split("T")[0];
-
-const overdueTasks = tasks.filter(
-  (task) =>
-    task.deadline &&
-    task.deadline < today &&
-    task.status !== "Дууссан"
-).length;
+  if (!ready) return <main className="main">Уншиж байна…</main>;
+  if (!user)
+    return (
+      <main className="main">
+        <form className="task-form" onSubmit={signIn}>
+          <h1>WorkTrack — Нэвтрэх</h1>
+          <label>
+            Хэрэглэгчийн нэр
+            <input name="username" autoComplete="username" required />
+          </label>
+          <label>
+            Нууц үг
+            <input
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+            />
+          </label>
+          {error && <p role="alert">{error}</p>}
+          <button disabled={busy}>Нэвтрэх</button>
+        </form>
+      </main>
+    );
+  const done = tasks.filter((t) => t.status === statuses.DONE).length;
   return (
     <div className="app">
       <aside className="sidebar">
         <h2>WorkTrack</h2>
-
         <nav>
-          <p
-            className={page === "dashboard" ? "active" : ""}
-            onClick={() => setPage("dashboard")}
-          >
-            Dashboard
-          </p>
-
-          <p
-            className={page === "tasks" ? "active" : ""}
-            onClick={() => setPage("tasks")}
-          >
-            Миний даалгавар
-          </p>
-
-          <p
-  className={page === "members" ? "active" : ""}
-  onClick={() => setPage("members")}
->
-  Багийн гишүүд
-</p>
-          <p
-  className={page === "reports" ? "active" : ""}
-  onClick={() => setPage("reports")}
->
-  Тайлан
-</p>
+          {[
+            ["dashboard", "Dashboard"],
+            ["tasks", "Даалгавар"],
+            ["members", "Багийн гишүүд"],
+            ["reports", "Тайлан"],
+          ].map(([key, label]) => (
+            <p
+              key={key}
+              className={page === key ? "active" : ""}
+              onClick={() => setPage(key)}
+            >
+              {label}
+            </p>
+          ))}
         </nav>
+        <p>
+          {user.username} · {user.role}
+        </p>
+        <button
+          onClick={() => {
+            clearAuth();
+            setUser(null);
+            setTasks([]);
+            setMembers([]);
+            setReport(null);
+            setEmployee("");
+          }}
+        >
+          Гарах
+        </button>
       </aside>
-
-      <main className="main">
-        {page === "dashboard" ? (
-          <>
+      <main className="main" aria-busy={busy}>
+        {error && <p role="alert">{error}</p>}
+        {busy && <p>Хадгалж байна…</p>}
+        {page === "tasks" ? (
+          <Tasks
+            tasks={tasks}
+            members={members}
+            canManage={canManage && !busy}
+            onCreate={(data) => mutate("/api/tasks/", "POST", data)}
+            onUpdate={(id, label) =>
+              mutate(`/api/tasks/${id}/`, "PATCH", {
+                status: Object.keys(statuses).find(
+                  (key) => statuses[key] === label,
+                ),
+              })
+            }
+            onQuality={(id, quality_score) =>
+              mutate(`/api/tasks/${id}/`, "PATCH", { quality_score })
+            }
+            onDelete={(id) => mutate(`/api/tasks/${id}/`, "DELETE")}
+          />
+        ) : page === "members" ? (
+          <section>
+            <h1>Багийн гишүүд</h1>
+            {user.is_admin && (
+              <form
+                className="task-form"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const form = e.currentTarget;
+                  const data = Object.fromEntries(new FormData(form));
+                  if (await mutate("/api/users/", "POST", data)) form.reset();
+                }}
+              >
+                <h2>Гишүүн нэмэх</h2>
+                <input
+                  name="username"
+                  placeholder="Хэрэглэгчийн нэр"
+                  required
+                />
+                <input name="first_name" placeholder="Нэр" required />
+                <input name="email" type="email" placeholder="Имэйл" />
+                <input
+                  name="password"
+                  type="password"
+                  placeholder="Анхны нууц үг"
+                  minLength={8}
+                  required
+                />
+                <select name="role">
+                  <option value="EMPLOYEE">Employee</option>
+                  <option value="MANAGER">Manager</option>
+                  <option value="ADMIN">Admin</option>
+                </select>
+                <button disabled={busy}>Нэмэх</button>
+              </form>
+            )}
+            {members.map((m) => (
+              <article className="task-item" key={m.id}>
+                <div>
+                  <h3>{m.name}</h3>
+                  <p>
+                    {m.email} · {m.role}
+                  </p>
+                  <small>{m.department_name}</small>
+                </div>
+                {user.is_admin && m.id !== user.id && m.is_active && (
+                  <button
+                    disabled={busy}
+                    onClick={() =>
+                      mutate(`/api/users/${m.id}/`, "PATCH", {
+                        is_active: false,
+                      })
+                    }
+                  >
+                    Идэвхгүй болгох
+                  </button>
+                )}
+              </article>
+            ))}
+          </section>
+        ) : (
+          <section>
             <header className="header">
-              <div>
-                <h1>Dashboard</h1>
-                <p>Ажлын бүтээмж хянах систем</p>
-              </div>
-
-              <div className="user">👤 Админ</div>
+              <h1>{page === "reports" ? "Тайлан" : "Dashboard"}</h1>
+              <button disabled={busy} onClick={() => run(load)}>
+                Шинэчлэх
+              </button>
             </header>
-
             <section className="stats">
               <div className="stat-card">
                 <p>Нийт даалгавар</p>
-                <h2>{totalTasks}</h2>
+                <h2>{tasks.length}</h2>
               </div>
-
               <div className="stat-card">
                 <p>Дууссан</p>
-                <h2>{completedTasks}</h2>
-              </div>
-
-              <div className="stat-card">
-                <p>Хийгдэж байна</p>
-                <h2>{inProgressTasks}</h2>
-              </div>
-              <div className="stat-card overdue-card">
-                <p>Хугацаа хэтэрсэн</p>
-                <h2>{overdueTasks}</h2>
+                <h2>{done}</h2>
               </div>
               <div className="stat-card">
-                <p>Хүлээгдэж байна</p>
-                <h2>{pendingTasks}</h2>
+                <p>Гүйцэтгэл</p>
+                <h2>
+                  {tasks.length ? Math.round((done / tasks.length) * 100) : 0}%
+                </h2>
               </div>
             </section>
-            <section className="progress-section">
-  <h2>Нийт гүйцэтгэл</h2>
-  <p>{progress}% дууссан</p>
-
-  <div className="progress-bar">
-    <div
-      className="progress-fill"
-      style={{ width: `${progress}%` }}
-    ></div>
-  </div>
-</section>
             <section className="task-section">
-              <h2>Сүүлийн даалгаврууд</h2>
-
-              {tasks.length === 0 ? (
-                <p>Одоогоор даалгавар алга.</p>
-              ) : (
-                tasks.slice(-3).reverse().map((task) => (
-                  <div className="task-row" key={task.id}>
-                    <span>{task.title}</span>
-                    <span
-                      className={`status ${
-                        task.status === "Дууссан" ? "done" : ""
-                      }`}
-                    >
-                      {task.status}
-                    </span>
-                  </div>
-                ))
+              <h2>Өдрийн activity ба бүтээмж</h2>
+              <select
+                value={employee}
+                onChange={(e) => setEmployee(e.target.value)}
+              >
+                {members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                required
+              />
+              <button
+                disabled={busy || !date}
+                onClick={() =>
+                  run(async () => {
+                    await api("/api/scores/calculate/", {
+                      method: "POST",
+                      body: JSON.stringify({
+                        employee_id: Number(employee),
+                        date,
+                      }),
+                    });
+                    setReport(
+                      await api(
+                        `/api/scores/dashboard/?employee_id=${employee}&date=${date}`,
+                      ),
+                    );
+                  })
+                }
+              >
+                Оноо тооцох / шинэчлэх
+              </button>
+              {report && (
+                <>
+                  <p>
+                    Оноо:{" "}
+                    {report.score
+                      ? `${report.score.score} (${report.score.category})`
+                      : "Тооцоолоогүй"}
+                  </p>
+                  <h3>Application</h3>
+                  {report.applications.length ? (
+                    report.applications.map((row) => (
+                      <p key={row.application + row.category}>
+                        {row.application} · {row.category}:{" "}
+                        {(row.seconds / 60).toFixed(1)} мин
+                      </p>
+                    ))
+                  ) : (
+                    <p>Activity бүртгэгдээгүй.</p>
+                  )}
+                  <h3>Camera</h3>
+                  {report.camera.length ? (
+                    report.camera.map((row) => (
+                      <p key={row.state}>
+                        {row.state}: {(row.seconds / 60).toFixed(1)} мин
+                      </p>
+                    ))
+                  ) : (
+                    <p>Camera мэдээлэл бүртгэгдээгүй.</p>
+                  )}
+                </>
               )}
-            </section>
-          </>
-              ) : page === "tasks" ? (
-  <Tasks
-    tasks={tasks}
-    setTasks={setTasks}
-    members={members}
-  />
-  ) : page === "members" ? (
-<section className="members-section">
-  <header className="header">
-    <div>
-      <h1>Багийн гишүүд</h1>
-      <p>Төслийн багийн гишүүдийн мэдээлэл</p>
-    </div>
-  </header>
-
-  <form className="task-form" onSubmit={addMember}>
-    <h2>Шинэ гишүүн нэмэх</h2>
-
-    <label>Нэр</label>
-    <input
-      type="text"
-      placeholder="Гишүүний нэр"
-      value={memberName}
-      onChange={(e) => setMemberName(e.target.value)}
-    />
-
-    <label>Имэйл</label>
-    <input
-      type="email"
-      placeholder="example@gmail.com"
-      value={memberEmail}
-      onChange={(e) => setMemberEmail(e.target.value)}
-    />
-
-   <label>Үүрэг</label>
-<select
-  value={memberRole}
-  onChange={(e) => setMemberRole(e.target.value)}
->
-  {roles.map((role) => (
-    <option key={role} value={role}>
-      {role}
-    </option>
-  ))}
-</select>
-
-    <button type="submit">+ Гишүүн нэмэх</button>
-  </form>
-<section className="tasks-list">
-  <h2>Үүргийн жагсаалт ({roles.length})</h2>
-
-  <form onSubmit={addRole}>
-    <input
-      type="text"
-      placeholder="Шинэ үүргийн нэр"
-      value={newRole}
-      onChange={(e) => setNewRole(e.target.value)}
-    />
-
-    <button type="submit">+ Үүрэг нэмэх</button>
-  </form>
-
-  {roles.map((role) => (
-    <article className="task-item" key={role}>
-      <span>{role}</span>
-
-      <button
-        type="button"
-        className="delete-button"
-        onClick={() => deleteRole(role)}
-      >
-        Хасах
-      </button>
-    </article>
-  ))}
-</section>
-  <section className="tasks-list">
-    <h2>Гишүүдийн жагсаалт ({members.length})</h2>
-
-    {members.length === 0 ? (
-      <p>Одоогоор гишүүн нэмээгүй байна.</p>
-    ) : (
-      members.map((member) => (
-        <article className="task-item" key={member.id}>
-          <div>
-            <h3>{member.name}</h3>
-            <p>{member.email}</p>
-            <small>{member.role}</small>
-          </div>
-
-          <button
-            type="button"
-            className="delete-button"
-            onClick={() => deleteMember(member.id)}
-          >
-            Устгах
-          </button>
-        </article>
-      ))
-    )}
-  </section>
-</section>
-) : (
-          
-          <section className="report-section">
-            <header className="header">
-              <div>
-                
-                <h1>Тайлан</h1>
-                <p>Ажлын бүтээмжийн тайлан</p>
-              </div>
-            </header>
-
-            <section className="stats">
-              <div className="stat-card">
-                <p>Нийт даалгавар</p>
-                <h2>{totalTasks}</h2>
-              </div>
-
-              <div className="stat-card">
-                <p>Дууссан</p>
-                <h2>{completedTasks}</h2>
-              </div>
-
-              <div className="stat-card">
-                <p>Хийгдэж байна</p>
-                <h2>{inProgressTasks}</h2>
-              </div>
-
-              <div className="stat-card">
-                <p>Хүлээгдэж байна</p>
-                <h2>{pendingTasks}</h2>
-              </div>
-            </section>
-
-            <section className="progress-section">
-              <h2>Нийт гүйцэтгэл</h2>
-              <p>{progress}% дууссан</p>
-
-              <div className="progress-bar">
-                <div
-                  className="progress-fill"
-                  style={{ width: `${progress}%` }}
-                ></div>
-              </div>
             </section>
           </section>
         )}
@@ -380,5 +349,4 @@ const overdueTasks = tasks.filter(
     </div>
   );
 }
-
 export default App;
