@@ -1,0 +1,21 @@
+{
+  "api_url": "http://127.0.0.1:8000",
+  "username": "employee_username",
+  "interval_seconds": 30,
+  "idle_threshold_seconds": 300,
+  "productive_apps": [
+    "Visual Studio Code",
+    "Code",
+    "PyCharm",
+    "Terminal",
+    "iTerm2",
+    "Microsoft Word",
+    "Microsoft Excel",
+    "Microsoft PowerPoint",
+    "Numbers",
+    "Pages",
+    "Keynote",
+    "Figma",
+    "Notion"
+  ]
+}

@@ -1,0 +1,36 @@
+# Worker Activity Monitor configuration
+
+camera_index: 0
+model_name: yolov8n.pt          # YOLOv8 nano — fast, good enough for this task
+confidence_threshold: 0.45
+detect_every_n_frames: 5        # run detection every Nth frame to save CPU
+
+# Optional: head-pose heuristic to reduce false "PHONE" positives
+use_gaze_heuristic: false
+
+# Multi-person mode: tracks each visible person separately (DeepSORT) and
+# logs per-person activity, for open-office/multi-desk camera feeds.
+# Leave false for a single dedicated workstation.
+multi_person: false
+track_max_age: 30   # frames a lost person track is kept alive before dropping
+
+log_file: data/activity_log.csv
+
+# For a single-user Mac, completed camera activity segments are sent to Django
+# under the account authenticated by `python3 agent/main.py --login`.
+# The local CSV log is still written if the server is unavailable.
+api_sync:
+  enabled: true
+  api_url: http://127.0.0.1:8000
+  token_file: agent/.agent_tokens.json
+  device_config_file: agent/config.json
+  queue_file: data/.pending_camera_events.json
+
+# `python3 agent/main.py --pause` updates this shared local control state.
+control_file: agent/control.json
+
+# Labels (must match COCO class names used by the YOLO model)
+labels:
+  person: person
+  laptop: laptop
+  phone: cell phone
