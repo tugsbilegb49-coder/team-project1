@@ -64,3 +64,30 @@ class ComputerActivity(models.Model):
     def __str__(self) -> str:
         return f"{self.employee} - {self.application} ({self.duration_seconds:.0f}s)"
 
+class WebsiteActivity(models.Model):
+    """Privacy-minimised website domain usage."""
+
+    employee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="website_activities",
+    )
+    device = models.ForeignKey(
+        "users.Device",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="website_activities",
+    )
+    domain = models.CharField(max_length=253)
+    started_at = models.DateTimeField()
+    duration_seconds = models.FloatField(
+        validators=[MinValueValidator(0)]
+    )
+    imported_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+
+    def __str__(self):
+        return f"{self.employee} - {self.domain}"

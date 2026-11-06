@@ -388,7 +388,46 @@ function App() {
                     <p>Activity бүртгэгдээгүй.</p>
                   )}
                 </div>
+			                  <div className="activity-detail-card">
+                    <h3>Website activity</h3>
 
+                    {report.websites?.length ? (
+                      <div className="activity-chart">
+                        {report.websites.map((row) => {
+                          const minutes = row.seconds / 60;
+                          const maxMinutes = Math.max(
+                            ...report.websites.map(
+                              (item) => item.seconds / 60
+                            ),
+                            1
+                          );
+
+                          return (
+                            <div className="chart-item" key={row.domain}>
+                              <div className="chart-value">
+                                {minutes.toFixed(1)} мин
+                              </div>
+
+                              <div className="chart-bar-bg">
+                                <div
+                                  className="chart-bar-fill"
+                                  style={{
+                                    width: `${(minutes / maxMinutes) * 100}%`,
+                                  }}
+                                />
+                              </div>
+
+                              <div className="chart-label">
+                                {row.domain}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p>Website мэдээлэл одоогоор бүртгэгдээгүй.</p>
+                    )}
+                  </div>
                   <div className="activity-detail-card">
                     <h3>Camera activity</h3>
                     {report.camera.length ? (

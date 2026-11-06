@@ -5,13 +5,16 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import ActivityEvent, ComputerActivity
-from .validation import save_segment
+from .models import ActivityEvent, ComputerActivity, WebsiteActivity
+from .validation import save_segment, save_website_segment
 from .serializers import (
     ActivityEventIngestSerializer,
     ActivityEventSerializer,
     ComputerActivityIngestSerializer,
     ComputerActivitySerializer,
+    WebsiteActivityIngestSerializer,
+    WebsiteActivitySerializer,
+
 )
 from users.permissions import IsSystemAdmin
 from users.models import ConsentRecord, Device
@@ -101,6 +104,41 @@ class ComputerActivityViewSet(viewsets.ModelViewSet):
         activity, created = save_segment(ComputerActivity, request.user, data, device)
         return Response(
             ComputerActivitySerializer(activity).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+class WebsiteActivityViewSet(viewsets.ModelViewSet):
+    serializer_class = WebsiteActivitySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = WebsiteActivity.objects.select_related(
+            "employee", "employee__department"
+        )
+        if user.is_admin_role:
+            return queryset
+        if user.is_manager and user.department_id:
+            return queryset.filter(employee__department_id=user.department_id)
+        return queryset.filter(employee=user)
+
+    def get_permissions(self):
+        if self.action in {"create", "update", "partial_update", "destroy"}:
+            return [IsSystemAdmin()]
+        return [IsAuthenticated()]
+
+    @action(detail=False, methods=["post"])
+    def ingest(self, request):
+        """Accept domain-only website usage for the authenticated user."""
+        _require_consent(request)
+        serializer = WebsiteActivityIngestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+        device = _resolve_device(request, data)
+        activity, created = save_website_segment(
+            request.user, data, device
+        )
+        return Response(
+            WebsiteActivitySerializer(activity).data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 

@@ -8,7 +8,7 @@ from django.db.models import F
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
-from .models import ComputerActivity
+from .models import ComputerActivity, WebsiteActivity
 
 MAX_SEGMENT_SECONDS = 3600
 
@@ -18,7 +18,7 @@ def interval(model, data):
     if not math.isfinite(duration) or not 0 < duration <= MAX_SEGMENT_SECONDS:
         raise ValidationError({'duration_seconds': 'Use a finite duration greater than 0 and at most 3600 seconds.'})
     try:
-        if model is ComputerActivity:
+        if model in (ComputerActivity, WebsiteActivity):
             start = data['started_at']
             end = start + timedelta(seconds=duration)
         else:
@@ -44,22 +44,22 @@ def lock_employee(employee):
 
 def reject_overlap(model, employee, data, exclude_pk=None):
     start, end = interval(model, data)
-    field = 'started_at' if model is ComputerActivity else 'timestamp'
+    field = 'started_at' if model in (ComputerActivity, WebsiteActivity) else 'timestamp'
     rows = model.objects.filter(employee=employee)
-    if model is ComputerActivity:
+    if model in (ComputerActivity, WebsiteActivity):
         rows = rows.filter(started_at__lt=end)
     else:
         rows = rows.filter(timestamp__gt=start)
     if exclude_pk is not None:
         rows = rows.exclude(pk=exclude_pk)
     for timestamp, duration in rows.values_list(field, 'duration_seconds').iterator():
-        if model is ComputerActivity:
+        if model in (ComputerActivity, WebsiteActivity):
             old_start, old_end = timestamp, timestamp + timedelta(seconds=duration)
         else:
             old_start, old_end = timestamp - timedelta(seconds=duration), timestamp
         # Camera duration is rounded to 0.1s by the uploader, while its end
         # timestamp keeps microseconds. Do not reject normal rounding jitter.
-        tolerance = 0 if model is ComputerActivity else 0.1
+        tolerance = 0 if model in (ComputerActivity, WebsiteActivity) else 0.1
         overlap = (min(old_end, end) - max(old_start, start)).total_seconds()
         if overlap > tolerance:
             raise ValidationError({'duration_seconds': 'This employee already has overlapping activity in this stream.'})
@@ -75,3 +75,21 @@ def save_segment(model, employee, data, device=None):
         return existing, False
     reject_overlap(model, employee, data)
     return model.objects.create(**lookup, device=device), True
+def save_website_segment(employee, data, device=None):
+    from .models import WebsiteActivity
+
+    lock_employee(employee)
+    interval(WebsiteActivity, data)
+
+    lookup = {"employee": employee, **data}
+    existing = WebsiteActivity.objects.filter(**lookup).first()
+
+    if existing:
+        return existing, False
+
+    reject_overlap(WebsiteActivity, employee, data)
+
+    return WebsiteActivity.objects.create(
+        **lookup,
+        device=device,
+    ), True

@@ -397,3 +397,35 @@
   font-size: 14px;
   font-weight: 500;
 }
+/* Application and Website usage charts */
+.activity-detail-card {
+  min-width: 0;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.activity-detail-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(30, 70, 55, 0.09);
+}
+
+.chart-item {
+  grid-template-columns: 75px minmax(0, 1fr) 130px;
+}
+
+.chart-bar-bg {
+  height: 16px;
+}
+
+.chart-label {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 650px) {
+  .chart-item {
+    grid-template-columns: 65px minmax(0, 1fr);
+  }
+
+  .chart-label {
+    grid-column: 2;
+  }
+}

@@ -7,7 +7,11 @@ from users.auth import LoginView, LogoutView
 from activity.batch import ActivityBatchView
 from users.views import ConsentRecordViewSet, DeviceViewSet, UserViewSet
 from workforce.views import DepartmentViewSet, TaskViewSet
-from activity.views import ActivityEventViewSet, ComputerActivityViewSet
+from activity.views import (
+    ActivityEventViewSet,
+    ComputerActivityViewSet,
+    WebsiteActivityViewSet,
+)
 from scoring.views import ProductivityScoreViewSet
 
 
@@ -19,6 +23,7 @@ router.register("departments", DepartmentViewSet, basename="department")
 router.register("tasks", TaskViewSet, basename="task")
 router.register("activity-events", ActivityEventViewSet, basename="activity-event")
 router.register("computer-activity", ComputerActivityViewSet, basename="computer-activity")
+router.register("website-activity", WebsiteActivityViewSet, basename="website-activity")
 router.register("scores", ProductivityScoreViewSet, basename="score")
 
 urlpatterns = [
