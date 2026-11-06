@@ -3,7 +3,7 @@ from datetime import date
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 
-from scoring.services import calculate_daily_score
+from scoring.services import calculate_daily_score, ScoreNotReady
 
 
 class Command(BaseCommand):
@@ -27,8 +27,14 @@ class Command(BaseCommand):
                 raise CommandError("Employee username was not found.")
 
         count = 0
+        skipped = 0
         for employee in users.iterator():
-            result = calculate_daily_score(employee, score_date)
+            try:
+                result = calculate_daily_score(employee, score_date)
+            except ScoreNotReady as exc:
+                skipped += 1
+                self.stderr.write(f"Skipped {employee.username}: {exc} Task IDs: {exc.task_ids}")
+                continue
             count += 1
             self.stdout.write(f"{employee.username}: {result.score} ({result.category})")
-        self.stdout.write(self.style.SUCCESS(f"Calculated {count} score(s) for {score_date}."))
+        self.stdout.write(self.style.SUCCESS(f"Calculated {count} score(s) for {score_date}; skipped {skipped}."))

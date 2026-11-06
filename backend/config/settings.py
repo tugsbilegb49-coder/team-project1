@@ -119,3 +119,10 @@ CORS_ALLOWED_ORIGINS = [origin for origin in os.environ.get("CORS_ALLOWED_ORIGIN
 CSRF_TRUSTED_ORIGINS = [origin for origin in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",") if origin]
 SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "false").lower() == "true"
 
+
+# Server-side allowlist for the aggregate activity_agent contract. Browsers
+# are not productive by default; configure explicitly for your team's work.
+PRODUCTIVE_APPLICATIONS = [name.strip() for name in os.environ.get(
+    "PRODUCTIVE_APPLICATIONS",
+    "Visual Studio Code,Code,PyCharm,Terminal,iTerm2,Microsoft Word,WINWORD,Microsoft Excel,EXCEL,Microsoft PowerPoint,POWERPNT,Numbers,Pages,Keynote,Figma,Notion",
+).split(",") if name.strip()]

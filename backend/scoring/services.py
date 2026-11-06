@@ -1,6 +1,8 @@
 """Business rules for daily productivity scores."""
 
 from decimal import Decimal, ROUND_HALF_UP
+from datetime import datetime, time, timedelta
+from django.db import transaction
 
 from django.db.models import Avg, Sum
 from django.utils import timezone
@@ -35,6 +37,13 @@ def category_for(score: Decimal) -> str:
     return ProductivityScore.Category.LOW
 
 
+class ScoreNotReady(ValueError):
+    def __init__(self, message, task_ids):
+        super().__init__(message)
+        self.task_ids = task_ids
+
+
+@transaction.atomic
 def calculate_daily_score(employee, score_date):
     """Calculate and persist one employee's score for one day.
 
@@ -47,7 +56,14 @@ def calculate_daily_score(employee, score_date):
     """
     tasks = Task.objects.filter(employee=employee, due_date=score_date)
     task_count = tasks.count()
-    completed = tasks.filter(status=Task.Status.DONE)
+    missing_completion = list(tasks.filter(status=Task.Status.DONE, completed_at__isnull=True).values_list('pk', flat=True))
+    if missing_completion:
+        raise ScoreNotReady('Completed tasks need a completion timestamp.', missing_completion)
+    day_end = timezone.make_aware(datetime.combine(score_date + timedelta(days=1), time.min))
+    completed = tasks.filter(status=Task.Status.DONE, completed_at__lt=day_end)
+    missing_quality = list(completed.filter(quality_score__isnull=True).values_list('pk', flat=True))
+    if missing_quality:
+        raise ScoreNotReady('Enter quality_score for every completed task before calculating this day.', missing_quality)
     completed_count = completed.count()
     on_time_count = sum(
         1

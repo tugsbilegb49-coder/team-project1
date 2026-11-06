@@ -157,8 +157,11 @@ python activity_agent/agent.py run
 `POST /api/v1/activity` compatibility endpoint нь batch-ийг ижил Django database-д
 хадгалж, retry хийхэд ижил мөрийг дахин үүсгэхгүй. Aggregate app хугацаанд дарааллын
 мэдээлэл байдаггүй тул хадгалсан цагийн offset нь бодит foreground дараалал биш.
-Энэ contract-д app-ийн work ангилал байхгүй учраас `OTHER` ангиллаар хадгална;
-keyboard/mouse event тоонуудыг database-д хадгалахгүй. Mock server нь зөвхөн тусдаа
+Энэ contract-ийн аппуудыг серверийн `PRODUCTIVE_APPLICATIONS` жагсаалтаар
+`WORK`, browser нэрээр `BROWSER`, харилцааны аппын нэрээр `COMMUNICATION`, бусдыг
+`OTHER` гэж ангилна. Idle хугацааг `Idle/OTHER`, апп нь тодорхойгүй active хугацааг
+`Unattributed activity/OTHER` segment болгон хадгалж, W-ийн нийт хугацаанд оруулна.
+Keyboard/mouse event тоонуудыг database-д хадгалахгүй. Mock server нь зөвхөн тусдаа
 тестийн хэрэгсэл; үндсэн системд асаах шаардлагагүй.
 
 ## Camera
@@ -185,6 +188,47 @@ SQLite default файл: `backend/db.sqlite3`. PostgreSQL-д `backend/.env` да
 Оноо нь `backend/scoring/services.py`-ийн дүрмийг ашиглана: T/Q/D нь task-аас,
 W нь computer activity-ийн WORK харьцаанаас; computer data байхгүй үед camera
 WORKING харьцаанаас гарна. Энэ дүрэм хуучин `core`-ийн дүрмээс ялгаатай.
+
+## Онооны тодорхой дүрэм
+
+| Үзүүлэлт | Тооцоолол |
+| --- | --- |
+| T | Тухайн өдөр due болсон task-уудаас тэр өдрийн эцэс гэхэд DONE болсон хувь |
+| Q | Дээрх completed task бүрийн `quality_score`-ийн дундаж |
+| D | Тухайн өдөр due болсон нийт task-аас deadline өдрөөсөө оройтохгүй дууссан хувь |
+| W | WORK секунд / нийт computer activity секунд × 100; idle, browser, unknown хугацаа нийтэд орно |
+| P | `0.4T + 0.3Q + 0.2D + 0.1W` |
+
+Computer data байхгүй бол W нь camera-ийн WORKING / нийт camera секунд болно.
+Camera fallback байгаа нь аппын W-тэй ижил хэмжигдэхүүн биш бөгөөд онооны энэ
+хувилбарын сонгосон дүрэм юм. T/Q/D-д task байхгүй бол 0, activity байхгүй бол W=0.
+Өгөгдөлгүй өдрийн 0 нь баталгаатай муу гүйцэтгэл гэсэн дүгнэлт биш.
+P-г 0–100-д хязгаарлаж 2 оронд тоймлоно. LOW: P < 65, MEDIUM: 65 ≤ P < 85,
+HIGH: P ≥ 85. Энэ нь дүрэмд суурилсан тооцоо; AI таамаглал биш.
+
+Дууссан task-ийн completion timestamp эсвэл Q үнэлгээ дутуу бол шинэ оноо
+хадгалахгүй. API 400 болон асуудалтай `task_ids` буцаана. 0 гэсэн чанарын үнэлгээ
+бол зөв утга; null-аас ялгаатай. Хэрэв өмнөх score байсан бол түүнийг өөрчлөхгүй;
+өмнөх `calculated_at`-тай тооцоо хэвээр үлдэнэ. Үнэлгээг нөхөөд дахин тооцно.
+Дараагийн өдөр дууссан task нь өмнөх өдрийн T/Q/D-г буцааж нэмэгдүүлэхгүй.
+Өдрийн CLI/scheduler нь үнэлгээ дутуу ажилтныг log-д мэдээлээд бусдын тооцоог үргэлжлүүлнэ.
+
+Alternative agent-ийн server allowlist-ийг `backend/.env`-д тохируулна:
+
+```dotenv
+PRODUCTIVE_APPLICATIONS=Visual Studio Code,Code,PyCharm,WINWORD,Microsoft Word
+```
+
+App нэрийн том/жижиг үсэг, `.exe`, `.app` өргөтгөлийг normalize хийнэ. `code.exe`
+нь `Code`-той таарна. Safari/Chrome нь default WORK биш. Ажлын browser-ийг WORK
+болгох шаардлагатай бол нэрийг жагсаалтад ил тод нэмнэ. Серверээ дахин асааж хэрэглэнэ.
+Энэ жагсаалт alternative batch-д үйлчилнэ; үндсэн agent-ийн ангиллыг
+`agent/config.json` дахь `productive_apps` удирдана.
+
+Өмнө хадгалсан ангиллыг автоматаар өөрчлөхгүй. Accepted batch-ийг replay хийхэд
+allowlist өөрчлөгдсөн байсан ч өмнөх category хадгалагдана. Хуучин `OTHER` мөрүүдийг
+дахин ангилах migration энэ өөрчлөлтөд ороогүй. Шинэ дүрмээр оноогоо харахын тулд
+өгөгдөл/чанарын үнэлгээгээ шалгаад score-оо дахин тооцно.
 
 ## Шалгах
 

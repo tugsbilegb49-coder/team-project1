@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from users.models import Device
 from .models import ComputerActivity
+from .classification import category_for_application
 from .views import _require_consent
 
 
@@ -68,11 +69,28 @@ class ActivityBatchView(APIView):
             created = 0
             # Alphabetical order provides deterministic replay keys. This contract
             # has aggregate app times; offsets do not represent observed app order.
+            def store(application, seconds, category):
+                nonlocal cursor, created
+                if seconds <= 0:
+                    return
+                identity = {'started_at':cursor, 'duration_seconds':seconds, 'application':application}
+                # Classification settings can change after an accepted batch.
+                # Replay preserves its original category rather than duplicating it.
+                existing = ComputerActivity.objects.filter(employee=request.user, **identity).first()
+                if existing is None:
+                    _, new = save_segment(ComputerActivity, request.user, {**identity, 'category':category}, device)
+                    created += int(new)
+                cursor += timedelta(seconds=seconds)
+
+            app_seconds = 0
             for app in sorted(data['apps'], key=lambda row: (row['name'], row['seconds'])):
-                if not app['seconds']:
-                    continue
-                _, new = save_segment(ComputerActivity, request.user, {
-                    'started_at':cursor, 'duration_seconds':app['seconds'], 'application':app['name'], 'category':'OTHER'}, device)
-                created += int(new)
-                cursor += timedelta(seconds=app['seconds'])
+                store(app['name'], app['seconds'], category_for_application(app['name']))
+                app_seconds += app['seconds']
+            # Preserve denominator time even when app resolution failed. Counts
+            # and input contents are not stored; only duration and category are.
+            remaining = max(0, (data['period_end'] - cursor).total_seconds())
+            unknown = min(max(0, data['active_seconds'] - app_seconds), remaining)
+            store('Unattributed activity', unknown, 'OTHER')
+            remaining = max(0, (data['period_end'] - cursor).total_seconds())
+            store('Idle', min(data['idle_seconds'], remaining), 'OTHER')
         return Response({'created':created}, status=201 if created else 200)

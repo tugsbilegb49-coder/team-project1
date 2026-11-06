@@ -12,7 +12,7 @@ from rest_framework.response import Response
 
 from .models import ProductivityScore
 from .serializers import ProductivityScoreSerializer
-from .services import calculate_daily_score
+from .services import calculate_daily_score, ScoreNotReady
 from activity.models import ComputerActivity
 from activity.reporting import camera_totals_for_day
 
@@ -55,7 +55,10 @@ class ProductivityScoreViewSet(viewsets.ReadOnlyModelViewSet):
 
         if score_date > timezone.localdate():
             raise ValidationError({"date": "Future dates cannot be calculated."})
-        score = calculate_daily_score(employee, score_date)
+        try:
+            score = calculate_daily_score(employee, score_date)
+        except ScoreNotReady as exc:
+            raise ValidationError({'detail': str(exc), 'task_ids': exc.task_ids}) from exc
         return Response(self.get_serializer(score).data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=["get"])

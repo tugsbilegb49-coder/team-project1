@@ -54,10 +54,10 @@ class UnifiedFlowTests(TestCase):
         batch = self.batch()
         for expected in (201,200):
             self.assertEqual(self.client.post('/api/v1/activity',batch,format='json').status_code,expected)
-        self.assertEqual(ComputerActivity.objects.count(),1)
+        self.assertEqual(ComputerActivity.objects.count(),2)
         batch['employee_id']='admin'
         self.assertEqual(self.client.post('/api/v1/activity',batch,format='json').status_code,403)
-        self.assertEqual(ComputerActivity.objects.count(),1)
+        self.assertEqual(ComputerActivity.objects.count(),2)
 
     def test_invalid_batch_is_atomic_and_consent_required(self):
         self.login('worker')
@@ -112,7 +112,7 @@ class LiveUploaderTests(LiveServerTestCase):
                 'apps':[{'name':'Code','seconds':40}]}
             self.assertEqual(sender.send(batch),(1,0))
             self.assertEqual(sender.send(batch),(1,0))
-            self.assertEqual(ComputerActivity.objects.filter(employee=user).count(),1)
+            self.assertEqual(ComputerActivity.objects.filter(employee=user).count(),2)
             tokens=json.loads(token_path.read_text());tokens['access']='expired-again';token_path.write_text(json.dumps(tokens))
             camera=CameraEventUploader(self.live_server_url,str(token_path),str(Path(directory)/'device.json'),str(Path(directory)/'camera.json'))
             camera.log('WORKING',30,now)
