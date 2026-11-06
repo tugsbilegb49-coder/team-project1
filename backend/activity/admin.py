@@ -1,6 +1,16 @@
 from django.contrib import admin
 
-from .models import ActivityEvent, ComputerActivity
+from .models import ActivityEvent, ComputerActivity, CameraPresence
+
+
+@admin.register(CameraPresence)
+class CameraPresenceAdmin(admin.ModelAdmin):
+    list_display = ('employee', 'timestamp', 'present', 'confidence')
+    list_filter = ('present',)
+    readonly_fields = ('employee', 'device', 'timestamp', 'present', 'confidence')
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(ActivityEvent)

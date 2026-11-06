@@ -8,7 +8,7 @@ from users.health import HealthView
 from activity.batch import ActivityBatchView
 from users.views import ConsentRecordViewSet, DeviceViewSet, UserViewSet
 from workforce.views import DepartmentViewSet, TaskViewSet
-from activity.views import ActivityEventViewSet, ComputerActivityViewSet
+from activity.views import ActivityEventViewSet, ComputerActivityViewSet, CameraPresenceViewSet
 from scoring.views import ProductivityScoreViewSet
 
 
@@ -19,6 +19,7 @@ router.register("devices", DeviceViewSet, basename="device")
 router.register("departments", DepartmentViewSet, basename="department")
 router.register("tasks", TaskViewSet, basename="task")
 router.register("activity-events", ActivityEventViewSet, basename="activity-event")
+router.register('camera-presence', CameraPresenceViewSet, basename='camera-presence')
 router.register("computer-activity", ComputerActivityViewSet, basename="computer-activity")
 router.register("scores", ProductivityScoreViewSet, basename="score")
 

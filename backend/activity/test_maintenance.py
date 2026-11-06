@@ -10,7 +10,7 @@ from django.core.management import call_command, CommandError
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 from .backups import create_backup, restore_backup, verify_backup
-from .models import ActivityEvent, ComputerActivity
+from .models import ActivityEvent, ComputerActivity, CameraPresence
 from users.models import User
 
 
@@ -88,6 +88,8 @@ class ActivityRetentionTests(TestCase):
         crossing=ComputerActivity.objects.create(employee=user,started_at=cutoff-timedelta(seconds=10),duration_seconds=30,application='Crossing')
         recent=ComputerActivity.objects.create(employee=user,started_at=now-timedelta(seconds=30),duration_seconds=30,application='Recent')
         camera=ActivityEvent.objects.create(employee=user,timestamp=cutoff-timedelta(seconds=1),duration_seconds=30,state='WORKING')
+        presence=CameraPresence.objects.create(employee=user,timestamp=cutoff-timedelta(seconds=1),present=True,confidence=.8)
+        recent_presence=CameraPresence.objects.create(employee=user,timestamp=now,present=False,confidence=0)
         from scoring.models import ProductivityScore
         score=ProductivityScore.objects.create(employee=user,date=(cutoff-timedelta(days=1)).date(),task_completion=0,quality=0,deadline_completion=0,work_process=0,score=0,category='LOW')
         with patch('activity.management.commands.cleanup_activity.timezone.now',return_value=now):
@@ -96,6 +98,8 @@ class ActivityRetentionTests(TestCase):
             call_command('cleanup_activity',apply=True,stdout=StringIO())
         self.assertFalse(ComputerActivity.objects.filter(pk=old.pk).exists())
         self.assertFalse(ActivityEvent.objects.filter(pk=camera.pk).exists())
+        self.assertFalse(CameraPresence.objects.filter(pk=presence.pk).exists())
+        self.assertTrue(CameraPresence.objects.filter(pk=recent_presence.pk).exists())
         self.assertEqual(set(ComputerActivity.objects.values_list('pk',flat=True)),{crossing.pk,recent.pk})
         self.assertTrue(ProductivityScore.objects.filter(pk=score.pk).exists())
         self.assertTrue(User.objects.filter(pk=user.pk).exists())

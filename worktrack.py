@@ -210,7 +210,7 @@ def main():
                     if probe.returncode:
                         print('Camera dependency-уудыг суулгаж байна…', flush=True)
                         subprocess.run([str(python), '-m', 'pip', 'install', '-r', 'requirements.txt'], cwd=ROOT, check=True)
-                    start('camera', [str(python), '-u', 'main.py'])
+                    start('camera', [str(python), '-u', 'main.py', '--consent'])
         print(f'\nWorkTrack: {WEB}\nЗогсоох: энэ цонхонд Ctrl+C. Оноо автоматаар 60 секунд тутам шинэчлэгдэнэ.\nLog: .runtime/\nЦонхоо нээлттэй байлгана уу.', flush=True)
         webbrowser.open(WEB)
         while True:

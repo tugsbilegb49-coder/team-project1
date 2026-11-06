@@ -5,13 +5,15 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import ActivityEvent, ComputerActivity
+from .models import ActivityEvent, ComputerActivity, CameraPresence
 from .validation import save_segment
 from .serializers import (
     ActivityEventIngestSerializer,
     ActivityEventSerializer,
     ComputerActivityIngestSerializer,
     ComputerActivitySerializer,
+    CameraPresenceSerializer,
+    CameraPresenceIngestSerializer,
 )
 from users.permissions import IsSystemAdmin
 from users.models import ConsentRecord, Device
@@ -37,6 +39,41 @@ def _require_consent(request):
     if not ConsentRecord.objects.filter(employee=request.user, granted=True, revoked_at__isnull=True).exists():
         from rest_framework.exceptions import PermissionDenied
         raise PermissionDenied("Active monitoring consent is required before data can be uploaded.")
+
+
+class CameraPresenceViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = CameraPresenceSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        rows = CameraPresence.objects.select_related('employee', 'employee__department')
+        if user.is_admin_role:
+            return rows
+        if user.is_manager and user.department_id:
+            return rows.filter(employee__department_id=user.department_id)
+        return rows.filter(employee=user)
+
+    @action(detail=False, methods=['post'])
+    def ingest(self, request):
+        from django.db import transaction
+        from rest_framework.exceptions import ValidationError
+        from .validation import lock_employee
+        # Camera presence always requires consent, including local development.
+        if not ConsentRecord.objects.filter(employee=request.user, granted=True, revoked_at__isnull=True).exists():
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Active monitoring consent is required for camera presence.')
+        serializer = CameraPresenceIngestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+        device = _resolve_device(request, data)
+        with transaction.atomic():
+            lock_employee(request.user)
+            event, created = CameraPresence.objects.get_or_create(employee=request.user, timestamp=data['timestamp'],
+                defaults={'present': data['present'], 'confidence': data['confidence'], 'device': device})
+            if not created and (event.present != data['present'] or event.confidence != data['confidence'] or event.device_id != (device.pk if device else None)):
+                raise ValidationError('This timestamp already contains a different presence result.')
+        return Response(self.get_serializer(event).data, status=201 if created else 200)
 
 
 class ActivityEventViewSet(viewsets.ModelViewSet):

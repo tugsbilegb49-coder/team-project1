@@ -1,4 +1,8 @@
 # Worker Activity Monitor configuration
+camera_mode: presence          # Store only timestamp, person boolean and confidence
+presence_interval_seconds: 1
+presence_log_file: data/presence.csv
+presence_queue_file: data/.pending_presence_events.json
 
 max_camera_gap_seconds: 10
 camera_index: 0

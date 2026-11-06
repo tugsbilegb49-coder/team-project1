@@ -1,0 +1,14 @@
+{
+  "status":"pending_human_rehearsal",
+  "presenter":null,
+  "performed_at":null,
+  "steps":[
+    {"step":"Start WorkTrack.command, login and open dashboard","result":"pending"},
+    {"step":"Show consent scope; grant monitoring consent using a voluntary demo account","result":"pending"},
+    {"step":"Camera presence: person visible, leave frame, return; no image/video files created","result":"pending"},
+    {"step":"Pause/resume; revoke consent; server rejects new presence uploads","result":"pending"},
+    {"step":"Run Random Forest demo; explain synthetic data, grouped split and Accuracy/F1","result":"pending"},
+    {"step":"Open final QA report and show bug list, provenance and unresolved validation gaps","result":"pending"},
+    {"step":"Stop launcher and camera; confirm camera indicator off","result":"pending"}
+  ]
+}

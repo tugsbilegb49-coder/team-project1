@@ -1,0 +1,36 @@
+{
+  "items": [
+    {
+      "id": "QA-01",
+      "type": "validation_gap",
+      "status": "open",
+      "title": "Real independently labeled camera evaluation unavailable",
+      "impact": "No claim of real-world precision/recall until present and absent observations are human labeled",
+      "next": "Collect metadata-only expected/predicted/confidence rows; use evaluate_camera.py --mode presence"
+    },
+    {
+      "id": "QA-02",
+      "type": "research_limitation",
+      "status": "open",
+      "title": "AI training data is synthetic",
+      "impact": "Low/Medium/High experiment is not a validated measure of employee productivity",
+      "next": "Obtain voluntary anonymized research labels, use held-out participants and record limitations"
+    },
+    {
+      "id": "QA-03",
+      "type": "team_process",
+      "status": "open",
+      "title": "Team PR evidence and remote CI need future updates",
+      "impact": "Issue/milestone board is published; code and CI workflow have not yet been pushed",
+      "next": "Link every implementation PR and CI artifact on its task issue; board https://github.com/tugsbilegb49-coder/team-project1/issues/9"
+    },
+    {
+      "id": "QA-04",
+      "type": "manual_check",
+      "status": "open",
+      "title": "Defense rehearsal requires presenter",
+      "impact": "Automated QA cannot certify that a human presentation was rehearsed",
+      "next": "Follow the README demo script and update qa/rehearsal.json with actual observations"
+    }
+  ]
+}

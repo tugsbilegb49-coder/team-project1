@@ -1,0 +1,18 @@
+{
+  "status": "passed",
+  "command": ".venv/bin/python verify_postgresql.py",
+  "tests_reported": 78,
+  "tests_skipped": 1,
+  "checks": [
+    "PASS: private PostgreSQL cluster started (Unix socket only).",
+    "PASS: PostgreSQL migrations.",
+    "PASS: shared cache read across independent processes.",
+    "PASS: two-worker Gunicorn readiness and shared login throttle.",
+    "PASS: daily PostgreSQL backup and verified second copy.",
+    "PASS: real PostgreSQL restore reverted the probe row.",
+    "PASS: safety backup independently restored."
+  ],
+  "log_sha256": "016354f822567123e9097960c1f3ac0873333cf843b698720a3e9e2fdac7410a",
+  "log": ".runtime/qa/postgresql-final.log",
+  "scope": "Private temporary PostgreSQL cluster; real database unchanged"
+}

@@ -1,0 +1,126 @@
+{
+  "title": "Camera, AI, QA, documentation — 7 day delivery",
+  "columns": [
+    "Todo",
+    "In progress",
+    "Review",
+    "Done"
+  ],
+  "items": [
+    {
+      "day": 1,
+      "key": "CAM-QA-01",
+      "title": "Privacy scope, issue board and documentation skeleton",
+      "status": "Review",
+      "acceptance": [
+        "Only timestamp, presence boolean and confidence are persisted by the default camera mode",
+        "Five fictional QA users; no fabricated real consent",
+        "GitHub issue/milestone board published and linked"
+      ],
+      "evidence": [
+        "README.md#camera-ai-qa-documentation",
+        "qa/consent_checklist.csv",
+        "qa/publish_board.py",
+        "qa/evidence/github-board.json"
+      ]
+    },
+    {
+      "day": 2,
+      "key": "CAM-QA-02",
+      "title": "ERD/API review and five-user consent checklist",
+      "status": "Review",
+      "acceptance": [
+        "ERD matches model ownership",
+        "JWT identity selects employee; foreign device denied",
+        "All five test users pass no-consent, grant, replay, isolation, revoke"
+      ],
+      "evidence": [
+        "backend/activity/test_presence.py",
+        "backend/activity/migrations/0004_camerapresence.py",
+        "qa/consent_checklist.csv"
+      ]
+    },
+    {
+      "day": 3,
+      "key": "CAM-QA-03",
+      "title": "Agent expected versus actual event report",
+      "status": "Review",
+      "acceptance": [
+        "App switches, upload boundary, pause, sleep and idle cases have independent expected events",
+        "Report is generated from the real sampler with fake OS inputs"
+      ],
+      "evidence": [
+        "qa/fixtures/agent_cases.json",
+        "qa/agent_correctness.py",
+        "qa/evidence/final-qa.json"
+      ]
+    },
+    {
+      "day": 4,
+      "key": "CAM-QA-04",
+      "title": "OpenCV/YOLO presence demo and confidence threshold",
+      "status": "Review",
+      "acceptance": [
+        "YOLO save/save_txt/save_crop explicitly disabled",
+        "Present/absent demo and pause verified",
+        "Human-labeled present AND absent samples collected without recording frames"
+      ],
+      "evidence": [
+        "src/presence.py",
+        "src/detector.py",
+        "tests/test_presence.py"
+      ],
+      "remaining": "Independent human labels and present/absent hardware rehearsal"
+    },
+    {
+      "day": 5,
+      "key": "CAM-QA-05",
+      "title": "Random Forest Low/Medium/High experiment",
+      "status": "Review",
+      "acceptance": [
+        "Features and labels documented",
+        "Participant-disjoint holdout; seed and dataset checksum recorded",
+        "Synthetic results explicitly marked experimental; no official scores changed"
+      ],
+      "evidence": [
+        "ai/experiment.py",
+        "qa/fixtures/ai_demo.csv",
+        "qa/evidence/ai-report.json"
+      ]
+    },
+    {
+      "day": 6,
+      "key": "CAM-QA-06",
+      "title": "Camera precision/recall, AI F1 and final integration QA",
+      "status": "Review",
+      "acceptance": [
+        "Metric table records provenance and coverage",
+        "API, agents, frontend and browser integration tests pass",
+        "All PRs link issue and exact test evidence; known gaps remain visible"
+      ],
+      "evidence": [
+        "verify_camera_ai.py",
+        "evaluate_camera.py",
+        "qa/evidence/final-qa.json",
+        "qa/bugs.json"
+      ],
+      "remaining": "Real camera validation set and team PR evidence links"
+    },
+    {
+      "day": 7,
+      "key": "CAM-QA-07",
+      "title": "Live demonstration, README final and defense rehearsal",
+      "status": "Todo",
+      "acceptance": [
+        "Run the README demo from start to finish",
+        "Demonstrate consent grant/revoke, camera presence, AI experiment and QA report",
+        "Record presenter/date/evidence without video or personal data"
+      ],
+      "evidence": [
+        "qa/rehearsal.json",
+        "README.md#camera-ai-qa-documentation"
+      ],
+      "remaining": "Human presentation rehearsal"
+    }
+  ]
+}

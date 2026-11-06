@@ -1,0 +1,6 @@
+test_user,kind,store_frames,store_video,metadata_only,no_consent_denied,grant_allowed,replay_deduplicated,self_only,revoke_denied,verification
+qa-camera-1,fictional_test_user,false,false,true,automated,automated,automated,automated,automated,backend.activity.test_presence.CameraPresenceTests
+qa-camera-2,fictional_test_user,false,false,true,automated,automated,automated,automated,automated,backend.activity.test_presence.CameraPresenceTests
+qa-camera-3,fictional_test_user,false,false,true,automated,automated,automated,automated,automated,backend.activity.test_presence.CameraPresenceTests
+qa-camera-4,fictional_test_user,false,false,true,automated,automated,automated,automated,automated,backend.activity.test_presence.CameraPresenceTests
+qa-camera-5,fictional_test_user,false,false,true,automated,automated,automated,automated,automated,backend.activity.test_presence.CameraPresenceTests

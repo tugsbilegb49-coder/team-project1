@@ -1,0 +1,28 @@
+name: Camera / AI / QA evidence
+description: Track an acceptance criterion and its actual test evidence.
+title: "[QA] "
+body:
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Observable behavior and expected result.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: PR and test evidence
+      description: Link PR, tested revision, commands, results and CI artifacts. Never attach camera frames or private data.
+    validations:
+      required: true
+  - type: dropdown
+    id: provenance
+    attributes:
+      label: Data provenance
+      options:
+        - Synthetic experiment
+        - Voluntary anonymized labels
+        - Not applicable
+    validations:
+      required: true

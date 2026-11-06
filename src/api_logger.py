@@ -25,6 +25,8 @@ class CameraAPISyncError(RuntimeError):
 
 
 class CameraEventUploader:
+    event_route = "/api/activity-events/ingest/"
+
     def __init__(self, api_url: str, token_file: str, device_config_file: str = "agent/config.json", queue_file: str = "data/.pending_camera_events.json", max_queue_events: int = 10000, max_queue_bytes: int = 10 * 1024 * 1024):
         bounded_queue([], max_queue_events, max_queue_bytes)
         self.max_queue_events, self.max_queue_bytes = max_queue_events, max_queue_bytes
@@ -42,7 +44,7 @@ class CameraEventUploader:
                         raise ApiError(exc.status, str(exc), route=getattr(exc, "route", None)) from exc
                     raise AgentError(str(exc)) from exc
         self._worker = PendingUploader(UploadClient(), self.queue_file,
-            max_events=max_queue_events, max_bytes=max_queue_bytes, event_route="/api/activity-events/ingest/")
+            max_events=max_queue_events, max_bytes=max_queue_bytes, event_route=self.event_route)
         self._worker.start()
 
     def _device_id(self) -> str | None:
@@ -128,12 +130,12 @@ class CameraEventUploader:
     def _send(self, payload: dict[str, Any]) -> None:
         tokens = self._read_tokens()
         try:
-            self._post("/api/activity-events/ingest/", payload, tokens["access"])
+            self._post(self.event_route, payload, tokens["access"])
         except CameraAPISyncError as exc:
             if getattr(exc, "status", None) != 401:
                 raise
             tokens = self._refresh(tokens)
-            self._post("/api/activity-events/ingest/", payload, tokens["access"])
+            self._post(self.event_route, payload, tokens["access"])
 
     def log(self, state: str, duration_seconds: float, timestamp: datetime | None = None) -> None:
         """Persist a segment; background upload never blocks the frame loop on HTTP."""
@@ -156,4 +158,22 @@ class CameraEventUploader:
             self._worker.append_many(queue)
         except OSError as exc:
             raise CameraAPISyncError(f"Could not persist camera queue: {exc}") from exc
+        self._worker.request_flush()
+
+
+class PresenceEventUploader(CameraEventUploader):
+    event_route = "/api/camera-presence/ingest/"
+
+    def log(self, present, confidence, timestamp=None):
+        from src.presence import validate_presence
+        validate_presence(present, confidence)
+        payload = {'timestamp': (timestamp or datetime.now().astimezone()).isoformat(),
+                   'present': present, 'confidence': confidence}
+        device_id = self._device_id()
+        if device_id:
+            payload['device_id'] = device_id
+        try:
+            self._worker.append(payload)
+        except OSError as exc:
+            raise CameraAPISyncError(f"Could not persist presence queue: {exc}") from exc
         self._worker.request_flush()

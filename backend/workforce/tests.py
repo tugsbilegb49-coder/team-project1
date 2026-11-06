@@ -91,6 +91,41 @@ class UnifiedFlowTests(TestCase):
 @override_settings(REQUIRE_MONITORING_CONSENT=False)
 class LiveUploaderTests(LiveServerTestCase):
     """Exercise the real HTTP uploaders against Django, not the mock API."""
+    def test_presence_uploader_refresh_consent_and_replay_over_http(self):
+        import json
+        import sys
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from django.core.cache import cache
+        from users.models import ConsentRecord
+        from activity.models import CameraPresence
+        cache.clear()
+        sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
+        from src.api_logger import PresenceEventUploader
+        user=User.objects.create_user('presence-live-worker',password='test-pass-very-long-123')
+        client=APIClient()
+        tokens=client.post('/api/auth/login/',{'username':user.username,'password':'test-pass-very-long-123'},format='json').data
+        tokens['access']='expired-token'
+        consent=ConsentRecord.objects.create(employee=user,granted=True,policy_version='camera-presence-v1')
+        with TemporaryDirectory() as directory:
+            root=Path(directory)
+            (root/'tokens.json').write_text(json.dumps(tokens))
+            uploader=PresenceEventUploader(self.live_server_url,str(root/'tokens.json'),str(root/'device.json'),root/'pending.json')
+            timestamp=timezone.now()-timedelta(seconds=1)
+            try:
+                uploader.log(True,.81,timestamp)
+                self.assertTrue(uploader.flush(3))
+                uploader.log(True,.81,timestamp)
+                self.assertTrue(uploader.flush(3))
+                self.assertEqual(CameraPresence.objects.filter(employee=user).count(),1)
+                consent.revoked_at=timezone.now();consent.save(update_fields=['revoked_at'])
+                uploader.log(False,0,timezone.now()-timedelta(milliseconds=10))
+                self.assertFalse(uploader.flush(3))
+            finally:
+                uploader.close()
+            self.assertEqual(len(json.loads((root/'pending.json').read_text())),1)
+            self.assertEqual(CameraPresence.objects.filter(employee=user).count(),1)
+
     def test_launcher_recognizes_current_backend_over_http(self):
         import sys
         from pathlib import Path

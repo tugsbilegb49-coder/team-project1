@@ -3,6 +3,19 @@ from django.core.validators import MinValueValidator
 from django.db import models
 
 
+class CameraPresence(models.Model):
+    """Camera metadata only; no images, embeddings, boxes or identity recognition."""
+    employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='camera_presence')
+    device = models.ForeignKey('users.Device', on_delete=models.SET_NULL, null=True, blank=True, related_name='presence_events')
+    timestamp = models.DateTimeField()
+    present = models.BooleanField()
+    confidence = models.FloatField()
+
+    class Meta:
+        ordering = ['-timestamp']
+        constraints = [models.UniqueConstraint(fields=['employee', 'timestamp'], name='unique_camera_presence_sample')]
+
+
 class ActivityEvent(models.Model):
     class State(models.TextChoices):
         WORKING = "WORKING", "Working"

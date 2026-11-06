@@ -2,7 +2,7 @@ from datetime import timedelta
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
-from activity.models import ActivityEvent, ComputerActivity
+from activity.models import ActivityEvent, ComputerActivity, CameraPresence
 
 
 class Command(BaseCommand):
@@ -18,13 +18,15 @@ class Command(BaseCommand):
         cutoff = timezone.now() - timedelta(days=options['days'])
         with transaction.atomic():
             camera = ActivityEvent.objects.filter(timestamp__lt=cutoff)
+            presence = CameraPresence.objects.filter(timestamp__lt=cutoff)
             # Old imported segments may span the cutoff, so inspect their END.
             ids = [pk for pk,start,duration in ComputerActivity.objects.filter(started_at__lt=cutoff)
                 .values_list('pk','started_at','duration_seconds').iterator()
                 if start + timedelta(seconds=duration) < cutoff]
-            self.stdout.write(f'Cutoff {cutoff.isoformat()}: camera={camera.count()}, computer={len(ids)}')
+            self.stdout.write(f'Cutoff {cutoff.isoformat()}: camera={camera.count()}, computer={len(ids)}, presence={presence.count()}')
             if options['apply']:
                 camera.delete()
+                presence.delete()
                 for offset in range(0,len(ids),500):
                     ComputerActivity.objects.filter(pk__in=ids[offset:offset+500]).delete()
                 self.stdout.write('Activity deleted. Users, tasks, consent and stored scores retained.')

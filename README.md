@@ -178,9 +178,219 @@ python main.py
 ```
 
 `config.yaml`-ийн `api_sync.enabled: true` нь camera state-ийг agent-ийн account,
-device, token ашиглан `/api/activity-events/ingest/` рүү илгээнэ. Camera permission
-олгох шаардлагатай. Single-person горимд account-д хамааруулна; multi-person
-camera identity integration хийгдээгүй. Raw зураг API руу илгээхгүй.
+device, token ашиглан илгээнэ. Default `camera_mode: presence` үед зөвхөн timestamp,
+`present` boolean, confidence хадгалж `/api/camera-presence/ingest/` ашиглана.
+Camera permission болон тухайн session-д зөвшөөрөл шаардлагатай. API нь active
+monitoring consent-ийг үргэлж шалгана. Presence нь productivity score-д шууд орохгүй.
+Өмнөх state experiment-ийг `python main.py --mode activity` гэж тусад нь асаана;
+тэр нь `/api/activity-events/ingest/` ашиглана. Multi-person identity integration
+хийгдээгүй. Аль ч горимд raw зураг API руу илгээхгүй.
+
+## Camera, AI, QA, documentation
+
+Энэ хэсэг нь 5 дахь гишүүний 7 өдрийн ажлын хэрэгжүүлэлт, хэмжилт болон demo-ийн
+лавлагаа. Ажлын manifest: [qa/board.json](qa/board.json), consent checklist:
+[qa/consent_checklist.csv](qa/consent_checklist.csv), bug/validation gap:
+[qa/bugs.json](qa/bugs.json). Нэг README-г үндсэн баримт хэвээр ашиглана.
+
+| Өдөр | Бэлэн үр дүн | Баталгаажуулалт |
+|---|---|---|
+| 1 | Privacy scope, task manifest, GitHub issue/PR template | `.github/ISSUE_TEMPLATE/qa-task.yml`, `.github/pull_request_template.md` |
+| 2 | ERD/API review, 5 fictional test user-ийн consent lifecycle | `backend/activity/test_presence.py` |
+| 3 | Agent expected/actual event report: switch, stable, pause, sleep, idle | `qa/fixtures/agent_cases.json`, `qa/agent_correctness.py` |
+| 4 | OpenCV/YOLO person present/absent, configurable confidence, metadata log | `src/presence.py`, `src/detector.py`, `tests/test_presence.py` |
+| 5 | Random Forest Low/Medium/High experiment, feature/label contract, grouped holdout | `ai/experiment.py`, `qa/fixtures/ai_demo.csv` |
+| 6 | Camera Precision/Recall/F1, AI Accuracy/F1, final QA runner, CI artifacts | `evaluate_camera.py`, `verify_camera_ai.py`, `.github/workflows/qa.yml` |
+| 7 | Demo script, test evidence, rehearsal checklist | `qa/evidence/final-qa.json`, `qa/rehearsal.json`; хүнтэй rehearsal pending |
+
+### Privacy ба test data
+
+Default camera mode нь frame-ийг RAM-д боловсруулна. YOLO-д `save=False`,
+`save_txt=False`, `save_crop=False`, `show=False` өгдөг; OpenCV зөвхөн preview
+харуулна. Frame/video, нүүрний embedding, bounding box, нэр, нас болон хүн таних
+мэдээлэл хадгалахгүй. `confidence` нь threshold-ийг давсан person detection-уудын
+хамгийн их confidence; person илрээгүй бол 0. Энэ нь хүн байхгүй гэсэн probability
+эсвэл ажиллаж байгаа гэсэн үнэлгээ биш. Default threshold 0.45; model/threshold-ийг
+хэмжилтийн тайланд хамт тэмдэглэж, test set дээр тааруулж өндөр metric гаргахгүй.
+
+Local CSV: `data/presence.csv`, баганууд `timestamp,present,confidence`.
+Offline queue: `data/.pending_presence_events.json`; upload нь тусдаа thread,
+bounded queue, retry/quarantine болон shared token lock ашиглана. API дээр employee
+нь JWT-ээс, device нь тухайн хэрэглэгчийн enroll-оос тогтоно. Зураг/video зэрэг
+илүү field, бусдын device, ирээдүйн timestamp, NaN/Infinity confidence-ийг хүлээн
+авахгүй. Ижил timestamp-тай ижил sample replay 200; өөр утгатай replay 400.
+
+Session camera consent-ийг `python main.py` асууна. Launcher-ийн camera `y` сонголт
+нь тухайн camera session-ийн зөвшөөрөл болно. `python agent/main.py --pause` эсвэл
+`--revoke-consent` нь local camera sampling-ийг pause хийнэ. Server consent цуцалбал
+API шинэ upload-ийг 403 буцаана; local capture-ийг мөн зогсоохдоо pause/Ctrl+C хэрэглэнэ.
+Зөвшөөрлийг бодит хүний өмнөөс автоматаар олгохгүй. 5 checklist account нь зөвхөн
+Django-ийн түр test database-д үүснэ; бодит database-д user/consent нэмэхгүй.
+Real label цуглуулахын өмнө оролцогч сайн дураар зөвшөөрч, хүрээг тайлбарлуулсан байна.
+
+Presence metadata нь `cleanup_activity --days 90` preview болон `--apply` retention-д
+хамрагдана. Local CSV/label файлуудыг хэрэгцээ дуусмагц оператор устгана; Git-д
+оруулахгүй. QA artifact-д scalar aggregate, fictional fixture л оруулна.
+
+### ERD / API review
+
+```mermaid
+erDiagram
+    DEPARTMENT ||--o{ USER : contains
+    USER ||--o{ CONSENT_RECORD : grants
+    USER ||--o{ DEVICE : enrolls
+    USER ||--o{ TASK : receives
+    USER ||--o{ COMPUTER_ACTIVITY : owns
+    USER ||--o{ ACTIVITY_EVENT : owns
+    USER ||--o{ CAMERA_PRESENCE : owns
+    USER ||--o{ PRODUCTIVITY_SCORE : receives
+    DEVICE o|--o{ CAMERA_PRESENCE : identifies_source
+```
+
+Review: user ownership FK; device устгавал presence device нь NULL, user устгавал
+өөрийн presence cascade; `(employee,timestamp)` unique. API list нь admin бүх,
+manager өөрийн хэлтэс, employee зөвхөн өөрийн metadata-г харна. Presence list нь
+read-only, ingest нь зөвхөн өөрийн JWT identity-д бичнэ. Confidence нь [0,1],
+present нь JSON boolean. Backend migration: `0004_camerapresence`.
+
+```json
+{"timestamp":"2026-11-06T10:00:00+08:00","present":true,"confidence":0.83}
+```
+
+Үүнийг JWT header-тэй `POST /api/camera-presence/ingest/` рүү илгээнэ. Five-user
+тест нь no-consent 403 → grant → 201 → replay 200 → self-only list → revoke → 403
+дарааллыг тус бүрд шалгана. Foreign device/ownership, invalid metadata, manager
+scope болон бодит HTTP upload + JWT refresh мөн тесттэй.
+
+### Random Forest experiment
+
+```bash
+pip install -r requirements-ai.txt
+python -m ai.experiment
+python -m ai.experiment --csv qa/fixtures/ai_demo.csv --data-kind synthetic
+```
+
+Бүх feature нь нэг тогтсон research window-ийн [0,1] aggregate ratio:
+
+| Feature | Тодорхойлолт |
+|---|---|
+| `active_ratio` | non-idle секунд / ажиглагдсан computer секунд |
+| `work_app_ratio` | тохируулсан WORK app секунд / ажиглагдсан computer секунд |
+| `presence_ratio` | present sample / ажиглагдсан camera sample |
+| `task_completion_ratio` | тухайн window-д оноосон task-аас дууссан хувь |
+
+Zero observation/zero assigned task үед 0 гэж таахгүй: бодит dataset-д missing
+window-ийг хасаж эсвэл тусдаа missing-data protocol тодорхойлно. Feature бүр ижил
+window-д хамаарах ёстой; window дууссаны дараах task outcome-ийг input-д оруулахгүй.
+Жинхэнэ label нь тусдаа human annotation rubric-аар Low/Medium/High байна;
+ажилтны чанарыг camera-аар дүгнэхгүй. Real annotator-ууд feature/таамаглалыг харж
+label хуулж тавихгүй; санал зөрөлдөх, missing label-ийг тусад нь бүртгэнэ.
+
+Одоогийн 450 window, 5 fictional participant-ийн dataset **synthetic**. Label нь
+noisy latent simulation-оос үүссэн; бодит бүтээмжийн ground truth биш. CSV нь
+`participant_id,sample_id,data_kind,active_ratio,work_app_ratio,presence_ratio,task_completion_ratio,label`
+гэсэн яг энэ schema-тай. Seed 42, 200 tree, max depth 6, min leaf 3.
+Participant-аар `GroupShuffleSplit`: train 3 participant / 270 sample, test 2 / 180;
+оролцогчийн давхцал 0. Test set-ийг hyperparameter сонгоход ашиглаагүй.
+Одоогийн нэг split нь тогтвортой generalization/шалтгаант үр нөлөөг батлахгүй.
+Report-д library version, seed, dataset checksum, baseline, class support,
+confusion matrix, feature importance орно. Official scoring formula-д model-ийг
+холбоогүй. Data хангалтгүй тул энэ нь **experimental result** хэвээр.
+
+### Camera evaluation ба metric table
+
+Бодит label цуглуулахдаа оролцогчийн зөвшөөрөлтэйгээр:
+
+```bash
+python -m qa.collect_camera_labels --consent
+python evaluate_camera.py .runtime/qa/camera-labeled.csv --mode presence --data-kind real --output .runtime/qa/camera-metrics.json
+```
+
+Operator `p` (person present), `a` (absent) expected label-ийг **inference-ээс өмнө**
+өгнө; prediction-оос expected label үүсгэхгүй. Утга хадгалахдаа timestamp, random
+sample ID, expected/predicted boolean, confidence, data kind л хадгална. Янз бүрийн
+гэрэл, зай, хагас халхлалт, present/absent-ийн coverage хэрэгтэй. Зорилтот validation
+нь тус бүр дор хаяж 50 бие даасан present/absent observation, нэг frame-ийг олон
+удаа тоолж metric өсгөхгүй. 100 sample нь хүртэл production certification биш.
+
+| Хэмжилт | Өгөгдөл / хамрах хүрээ | Одоогийн үр дүн |
+|---|---|---|
+| Camera live smoke | Зөвшөөрсөн 20 metadata sample; human label байхгүй | 19 present, 1 absent prediction; accuracy тооцоогүй |
+| Camera evaluator fixture | 8 **synthetic** мөр | Precision 0.750, Recall 0.750, F1 0.750; бодит camera metric биш |
+| Camera real Precision/Recall/F1 | Independent human labels | **Pending** |
+| Random Forest Accuracy | Synthetic; 180 held-out sample | 0.7611 |
+| Random Forest macro F1 | Synthetic; Low/Medium/High | 0.7624 |
+| Majority baseline Accuracy | Ижил synthetic holdout | 0.3333 |
+
+Precision = TP/(TP+FP), Recall = TP/(TP+FN), F1 = 2TP/(2TP+FP+FN).
+Denominator байхгүй metric нь null; support/coverage болон confusion matrix-ийг
+хамт харна. Synthetic fixture-ийг real гэж дамжуулбал evaluator алдаа өгнө.
+Хуучин 4-state evaluation `python evaluate_camera.py states.csv` хэвээр ажиллана.
+
+### Final QA ба PR evidence
+
+```bash
+python verify_camera_ai.py
+```
+
+Python camera/AI tests → computer agent → alternative agent → Django integration
+(5 consent test user орно) → frontend unit/lint/build → mocked browser tests →
+түр database-тай бодит Django/browser demo-г ажиллуулна. Жинхэнэ webcam-ийг автоматаар
+асаахгүй, бодит database-д fake user/record нэмэхгүй. Тест бүрийн command, exit code,
+хугацаа, log, Git revision, dirty flag, source checksum, agent expected/actual events,
+AI болон synthetic evaluator metric-ийг `.runtime/qa/final-qa.json`-д бичнэ.
+Алдаа/тасалдсан run-ийг passed гэж бичихгүй. Full QA-д Chromium хэрэгтэй:
+`npx playwright install chromium`. `--skip-browser` нь бодит browser/Django run-ийг
+explicit skipped болгон тэмдэглэнэ; full-system QA-тай адил гэж үзэхгүй.
+
+Сүүлийн reviewed snapshot: [qa/evidence/final-qa.json](qa/evidence/final-qa.json).
+Real hardware smoke log-ийн aggregate-ийг report-д нэмэх бол
+`--camera-log .runtime/qa/camera-live.csv` ашиглана; raw frame хэрэггүй.
+CI workflow нь PR/main run бүрийн evidence/log-ийг 14 хоногийн artifact болгоно.
+Remote CI run нь push хийгдсэний дараа л үүснэ; local test-ийг remote CI гэж нэрлэхгүй.
+
+GitHub issue board: [7 өдрийн board #9](https://github.com/tugsbilegb49-coder/team-project1/issues/9),
+[milestone](https://github.com/tugsbilegb49-coder/team-project1/milestone/1), task issue #2–#8.
+Нэвтрэх эрхийг нэмэгдүүлэхгүйгээр одоогийн git login-оор issue/milestone board үүсгэсэн.
+Дахин sync хийх болон тусдаа GitHub Projects хувилбар:
+
+```bash
+python qa/publish_board.py              # Reviewable dry-run; GitHub холболт шаардахгүй
+python qa/publish_board.py --apply --issues-only  # Одоогийн git login; issue/milestone board
+python qa/publish_board.py --apply      # Тусдаа GitHub Projects; gh auth + project эрхтэй үед
+python qa/publish_board.py --apply --project 3   # Өмнөх project-оо дахин ашиглана
+```
+
+Publisher нь manifest-ийн 7 issue-г үүсгэж project-д холбоно; acceptance checkbox-ийг
+шалгаагүй байхад Done гэж хаахгүй. Дахин ажиллуулахдаа өмнөх project number-ийг
+өгнө. Existing issue-г title-аар дахин ашиглана. Багийн **PR бүрд** linked issue,
+tested revision, command/result, CI artifact URL шаардлагатай. PR template-ийн
+evidence-г linked issue/project item дээр мөн шинэчилнэ. GitHub холболтгүй үед
+manifest нь local бэлтгэл; remote board үүссэн гэж үзэхгүй.
+
+### 7 дахь өдрийн demo / rehearsal
+
+1. `Start WorkTrack.command` нээж, admin login, test ажилтан/task болон dashboard
+   урсгалыг харуулна. Бодит хүний нэр/нууц мэдээлэл demo-д оруулахгүй.
+2. Privacy scope-ийг тайлбарлаж, сайн дурын demo account-ийн monitoring consent,
+   camera session permission-ийг өгнө.
+3. `python main.py --consent --seconds 20` — хүн харагдах, frame-ээс гарах, буцаж
+   орохыг харуулна. `data/presence.csv`-ийн зөвхөн 3 багана, зураг/video байхгүйг шалгана.
+4. Pause/resume, consent revoke хийж sampling болон API rejection-ийг харуулна.
+   Camera-г Ctrl+C/q-ээр бүрэн зогсооно.
+5. `python -m ai.experiment` ажиллуулж Low/Medium/High, Accuracy/F1, baseline,
+   grouped holdout, synthetic хязгаарлалтыг тайлбарлана.
+6. `python verify_camera_ai.py` болон report-ийг харуулж agent expected/actual,
+   consent lifecycle, browser/API integration болон open validation gap-уудыг хэлнэ.
+7. Launcher-ийг Ctrl+C-ээр зогсоож camera indicator унтарсныг шалгана.
+
+Жинхэнэ rehearsal хийсэн хүн [qa/rehearsal.json](qa/rehearsal.json)-д presenter,
+performed_at, алхам бүрийн actual result/evidence-г бичнэ. Автомат тест нь хүний
+live presentation rehearsal-ийг хийсэн гэж батлахгүй.
+
+Implementation лавлагаа: [Ultralytics predict](https://docs.ultralytics.com/modes/predict/),
+[RandomForestClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestClassifier.html),
+[GroupShuffleSplit](https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GroupShuffleSplit.html).
 
 ## Database ба хуучин backend
 
@@ -524,6 +734,8 @@ refresh token 1 өдөр хүчинтэй. Agent-ууд refresh token ашигл
 | `/api/computer-activity/ingest/` | POST | Үндсэн agent-ийн application segment |
 | `/api/computer-activity/` | GET | Computer activity түүх |
 | `/api/activity-events/ingest/` | POST | Өөрийн camera state segment |
+| `/api/camera-presence/ingest/` | POST | Зөвшөөрөлтэй өөрийн presence boolean/confidence |
+| `/api/camera-presence/` | GET | Эрхийн хүрээн дэх presence metadata; pagination ашиглана |
 | `/api/activity-events/` | GET | Camera activity түүх |
 | `/api/v1/activity` | POST | Өөр agent-ийн v1.0 batch; төгсгөлийн `/` байхгүй |
 | `/api/scores/calculate/` | POST | Employee/date оноо тооцох буюу шинэчлэх |

@@ -1,0 +1,20 @@
+{
+  "samples": 8,
+  "accuracy": 0.75,
+  "precision": 0.75,
+  "recall": 0.75,
+  "f1": 0.75,
+  "specificity": 0.75,
+  "coverage": {
+    "present": 4,
+    "absent": 4
+  },
+  "confusion_matrix": {
+    "TP": 3,
+    "FP": 1,
+    "TN": 3,
+    "FN": 1
+  },
+  "data_kind": "synthetic",
+  "label_requirement": "Expected labels must be assigned by a human, independently of predictions."
+}

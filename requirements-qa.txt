@@ -1,0 +1,7 @@
+-r backend/requirements.txt
+-r requirements-ai.txt
+pytest>=8,<10
+numpy>=1.26,<3
+pandas>=2.2,<4
+opencv-python-headless>=4.9,<5
+pyyaml>=6,<7

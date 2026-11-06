@@ -24,6 +24,7 @@ dist-ssr
 *.sw?
 __pycache__/
 *.pyc
+.pytest_cache/
 venv/
 .venv/
 env/
@@ -75,3 +76,7 @@ deploy/production.env
 agent/.agent_tokens.*
 agent/.pending_events*.json
 data/.pending_camera_events*.json
+data/.pending_presence_events*.json
+*.mp4
+*.avi
+*.mov

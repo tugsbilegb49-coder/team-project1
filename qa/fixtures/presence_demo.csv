@@ -1,0 +1,9 @@
+sample_id,data_kind,expected,predicted,confidence
+synthetic-01,synthetic,1,1,0.91
+synthetic-02,synthetic,1,1,0.82
+synthetic-03,synthetic,1,0,0
+synthetic-04,synthetic,0,0,0
+synthetic-05,synthetic,0,0,0
+synthetic-06,synthetic,0,1,0.55
+synthetic-07,synthetic,1,1,0.76
+synthetic-08,synthetic,0,0,0
