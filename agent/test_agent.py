@@ -46,3 +46,124 @@ class AgentHelpersTests(unittest.TestCase):
         self.assertEqual(application_for_idle_state("Visual Studio Code", 301, 300), "Idle")
         self.assertEqual(application_for_idle_state("Visual Studio Code", 30, 300), "Visual Studio Code")
 
+
+
+class SamplingTests(unittest.TestCase):
+    def simulate(self, app_at, paused_at=lambda t: False, seconds=35):
+        from unittest.mock import Mock, patch
+        import main as agent
+        from datetime import datetime, timedelta, timezone
+        clock = [0]
+        beginning = datetime(2026,11,6,tzinfo=timezone.utc)
+        rows = []
+        uploader = Mock()
+        uploader.append.side_effect = rows.append
+
+        def sleep(interval):
+            self.assertEqual(interval, 1)
+            clock[0] += interval
+            if clock[0] >= seconds:
+                raise KeyboardInterrupt
+
+        config = {'interval_seconds':30,'poll_interval_seconds':1,'idle_threshold_seconds':300,
+                  'productive_apps':['Code'],'device_id':'test-device'}
+        with patch.object(agent,'PendingUploader',return_value=uploader), \
+             patch.object(agent.time,'monotonic',side_effect=lambda:clock[0]), \
+             patch.object(agent.time,'sleep',side_effect=sleep), \
+             patch.object(agent,'_now',side_effect=lambda:beginning+timedelta(seconds=clock[0])), \
+             patch.object(agent,'foreground_application',side_effect=lambda:app_at(clock[0])), \
+             patch.object(agent,'idle_seconds',return_value=0), \
+             patch.object(agent,'is_paused',side_effect=lambda:paused_at(clock[0])):
+            agent.run_agent(config,Mock())
+        return rows,uploader
+
+    def test_multiple_switches_before_upload_have_separate_contiguous_segments(self):
+        rows,uploader=self.simulate(lambda t:'Safari' if 10 <= t < 20 else 'Code')
+        self.assertEqual([r['application'] for r in rows],['Code','Safari','Code','Code'])
+        self.assertEqual([r['duration_seconds'] for r in rows],[10,10,10,4])
+        self.assertEqual([r['category'] for r in rows],['WORK','BROWSER','WORK','WORK'])
+        self.assertTrue(all(row['device_id']=='test-device' for row in rows))
+        uploader.request_flush.assert_called_once()
+        uploader.stop.assert_called_once()
+
+    def test_stable_app_seals_at_upload_boundary(self):
+        rows,_=self.simulate(lambda t:'Code')
+        self.assertEqual([row['duration_seconds'] for row in rows],[30,4])
+
+    def test_paused_time_is_not_attributed_to_an_app(self):
+        rows,_=self.simulate(lambda t:'Code',lambda t:5 <= t < 10,seconds=15)
+        self.assertEqual([row['duration_seconds'] for row in rows],[4,4])
+
+    def test_lookup_failure_does_not_guess_app_during_unknown_gap(self):
+        from main import AgentError
+        def app(t):
+            if t==5:
+                raise AgentError('lookup unavailable')
+            return 'Code'
+        rows,_=self.simulate(app,seconds=10)
+        self.assertEqual([row['duration_seconds'] for row in rows],[4,3])
+
+    def test_duration_does_not_round_up_into_next_segment(self):
+        from datetime import datetime, timedelta, timezone
+        start=datetime(2026,11,6,tzinfo=timezone.utc)
+        end=start+timedelta(seconds=1.06)
+        self.assertEqual(segment_payload('Code','WORK',start,end)['duration_seconds'],1.06)
+
+
+class UploadWorkerTests(unittest.TestCase):
+    def test_slow_network_does_not_hold_sampling_queue_lock(self):
+        import threading
+        from unittest.mock import Mock
+        from main import PendingUploader
+        entered, release = threading.Event(),threading.Event()
+        client=Mock()
+        def ingest(row):
+            entered.set()
+            release.wait(timeout=2)
+        client.ingest.side_effect=ingest
+        with TemporaryDirectory() as directory:
+            uploader=PendingUploader(client,Path(directory)/'pending.json')
+            uploader.append({'application':'Code'})
+            uploader.start()
+            try:
+                self.assertTrue(entered.wait(timeout=1))
+                # A sampler can persist another segment while HTTP is blocked.
+                self.assertTrue(uploader.lock.acquire(timeout=.2))
+                uploader.lock.release()
+                uploader.append({'application':'Safari'})
+            finally:
+                release.set()
+                uploader.stop()
+            self.assertEqual(client.ingest.call_count,2)
+
+    def test_offline_segments_survive_restart(self):
+        import json
+        from unittest.mock import Mock
+        from main import PendingUploader, AgentError
+        client=Mock()
+        client.ingest.side_effect=AgentError('offline')
+        with TemporaryDirectory() as directory:
+            path=Path(directory)/'pending.json'
+            uploader=PendingUploader(client,path)
+            uploader.append({'application':'Code'})
+            uploader.start()
+            uploader.stop()
+            self.assertEqual(json.loads(path.read_text()),[{'application':'Code'}])
+            self.assertEqual(PendingUploader(client,path).pending,[{'application':'Code'}])
+
+
+class PollConfigTests(unittest.TestCase):
+    def test_existing_config_defaults_to_one_second_and_rejects_invalid_poll(self):
+        import json
+        from main import load_config, AgentError
+        with TemporaryDirectory() as directory:
+            path=Path(directory)/'config.json'
+            config={'api_url':'http://localhost:8000','username':'worker'}
+            path.write_text(json.dumps(config))
+            loaded=load_config(path)
+            self.assertEqual(loaded['poll_interval_seconds'],1)
+            self.assertEqual(loaded['interval_seconds'],30)
+            for value in (0,-1,6,True,'one',float('nan')):
+                path.write_text(json.dumps({**config,'poll_interval_seconds':value}))
+                with self.assertRaises(AgentError):
+                    load_config(path)

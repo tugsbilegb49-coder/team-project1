@@ -2,6 +2,7 @@
   "api_url": "http://127.0.0.1:8000",
   "username": "employee_username",
   "interval_seconds": 30,
+  "poll_interval_seconds": 1,
   "idle_threshold_seconds": 300,
   "productive_apps": [
     "Visual Studio Code",
