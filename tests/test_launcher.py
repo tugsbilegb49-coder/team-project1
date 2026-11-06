@@ -63,6 +63,6 @@ class LauncherTests(unittest.TestCase):
                  patch.object(worktrack.time,'sleep',side_effect=KeyboardInterrupt), \
                  patch.object(worktrack,'stop_process') as stop:
                 worktrack.main()
-            self.assertEqual(launch.call_args.args[0],['/test/python','-u','manage.py','run_score_scheduler'])
+            self.assertEqual([call.args[0][-1] for call in launch.call_args_list],['run_score_scheduler','run_backup_scheduler'])
             agent.assert_not_called()
-            stop.assert_called_once_with(process)
+            self.assertEqual(stop.call_count,2)

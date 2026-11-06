@@ -12,6 +12,9 @@ load_dotenv(BASE_DIR / ".env")
 # Override in deployment with a long, private environment variable.
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-change-this-secret-key-before-deployment")
 DEBUG = os.environ.get("DJANGO_DEBUG", "true").lower() == "true"
+if not DEBUG and (len(SECRET_KEY) < 50 or SECRET_KEY.startswith(('dev-only-', 'replace-'))):
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured('Production requires a private random DJANGO_SECRET_KEY of at least 50 characters.')
 ALLOWED_HOSTS = [host for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if host]
 
 INSTALLED_APPS = [
@@ -131,3 +134,16 @@ PRODUCTIVE_APPLICATIONS = [name.strip() for name in os.environ.get(
     "PRODUCTIVE_APPLICATIONS",
     "Visual Studio Code,Code,PyCharm,Terminal,iTerm2,Microsoft Word,WINWORD,Microsoft Excel,EXCEL,Microsoft PowerPoint,POWERPNT,Numbers,Pages,Keynote,Figma,Notion",
 ).split(",") if name.strip()]
+
+TRUSTED_PROXY_NETWORKS = [value.strip() for value in os.environ.get('TRUSTED_PROXY_NETWORKS','').split(',') if value.strip()]
+if os.environ.get('DJANGO_CACHE_BACKEND') == 'database':
+    CACHES = {'default': {'BACKEND':'django.core.cache.backends.db.DatabaseCache','LOCATION':'worktrack_cache','OPTIONS':{'MAX_ENTRIES':100000}}}
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+if os.environ.get('TRUST_PROXY_HEADERS','false').lower() == 'true':
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO','https')
+LOGGING = {
+    'version':1,'disable_existing_loggers':False,
+    'handlers':{'console':{'class':'logging.StreamHandler'}},
+    'root':{'handlers':['console'],'level':os.environ.get('DJANGO_LOG_LEVEL','WARNING')},
+}

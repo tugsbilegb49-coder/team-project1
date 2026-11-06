@@ -169,6 +169,7 @@ def main():
         if not check_http(WEB):
             wait_ready(WEB, start('frontend', [npm, 'run', 'dev', '--', '--host', '127.0.0.1', '--port', '5173', '--strictPort']))
         start('scheduler', [str(python), '-u', 'manage.py', 'run_score_scheduler'])
+        start('backup', [str(python), '-u', 'manage.py', 'run_backup_scheduler'])
         if not args.web_only:
             if setup_agent():
                 start('agent', [str(python), '-u', 'agent/main.py'])

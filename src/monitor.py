@@ -7,6 +7,7 @@ activity state machine, and CSV logger into a runnable monitoring session.
 
 import cv2
 import json
+from datetime import datetime
 from pathlib import Path
 import yaml
 
@@ -53,7 +54,7 @@ class WorkerActivityMonitor:
                 max_queue_events=sync_config.get("max_queue_events", 10000),
                 max_queue_bytes=sync_config.get("max_queue_bytes", 10485760),
             )
-        self.tracker = ActivityTracker(on_transition=self._on_transition)
+        self.tracker = ActivityTracker(on_segment=self._on_transition, max_gap_seconds=config.get("max_camera_gap_seconds", 10))
 
         self.labels = config["labels"]
         self.detect_every_n = config.get("detect_every_n_frames", 5)
@@ -66,13 +67,14 @@ class WorkerActivityMonitor:
         except (OSError, json.JSONDecodeError, AttributeError):
             return False
 
-    def _on_transition(self, old_state: str, duration: float) -> None:
+    def _on_transition(self, old_state: str, duration: float, ended_at: float) -> None:
         if self._is_paused():
             return
-        self.logger.log(old_state, duration)
+        timestamp = datetime.fromtimestamp(ended_at).astimezone()
+        self.logger.log(old_state, duration, timestamp=timestamp)
         if self.api_uploader is not None:
             try:
-                self.api_uploader.log(old_state, duration)
+                self.api_uploader.log(old_state, duration, timestamp=timestamp)
             except CameraAPISyncError as exc:
                 # Do not discard the local CSV record if the API is unavailable.
                 print(f"Camera API sync skipped: {exc}")

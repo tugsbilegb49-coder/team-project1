@@ -25,7 +25,12 @@ def backup_path(output=None):
 
 
 def pg_command(tool, *args):
-    executable = shutil.which(tool)
+    configured = os.environ.get('POSTGRES_BIN_DIR')
+    executable = str(Path(configured) / tool) if configured else shutil.which(tool)
+    if not executable:
+        candidate = Path('/opt/homebrew/opt/postgresql@17/bin') / tool
+        if candidate.is_file():
+            executable = str(candidate)
     if not executable:
         raise CommandError(f'{tool} is required for PostgreSQL backup/restore.')
     db = connections['default'].settings_dict

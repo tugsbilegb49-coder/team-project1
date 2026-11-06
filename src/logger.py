@@ -31,8 +31,13 @@ class CSVActivityLogger:
                 header.insert(1, "person_id")
             self._writer.writerow(header)
 
-    def log(self, state: str, duration_seconds: float, person_id=None) -> None:
-        row = [datetime.now().isoformat(timespec="seconds")]
+    def log(self, state: str, duration_seconds: float, person_id=None, timestamp=None) -> None:
+        recorded = timestamp or datetime.now()
+        if recorded.tzinfo is not None:
+            # Existing local CSV files use naive local timestamps. Keep that
+            # format while the HTTP uploader retains its timezone-aware end.
+            recorded = recorded.astimezone().replace(tzinfo=None)
+        row = [recorded.isoformat(timespec="seconds")]
         if self.multi_person:
             row.append(person_id)
         row += [state, round(duration_seconds, 1)]

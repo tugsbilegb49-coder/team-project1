@@ -84,3 +84,41 @@ def test_tracker_no_transition_when_state_unchanged():
     fake_time[0] = 10.0
     tracker.update(STATE_IDLE)  # same state, should not trigger a transition
     assert tracker.state_start == 0.0
+
+
+def test_camera_sleep_preserves_observed_time_and_skips_gap():
+    clock=[0.0]
+    rows=[]
+    tracker=ActivityTracker(initial_state=STATE_WORKING,clock=lambda:clock[0],max_gap_seconds=10,
+        on_segment=lambda state,duration,end:rows.append((state,duration,end)))
+    clock[0]=5
+    tracker.update(STATE_WORKING)
+    clock[0]=100
+    tracker.update(STATE_WORKING)
+    clock[0]=105
+    tracker.finalize()
+    tracker.finalize()
+    assert rows==[(STATE_WORKING,5,5),(STATE_WORKING,5,105)]
+    assert tracker.summary()[STATE_WORKING]==10
+
+
+def test_camera_shutdown_after_sleep_never_counts_unobserved_time():
+    clock=[0.0]
+    tracker=ActivityTracker(initial_state=STATE_WORKING,clock=lambda:clock[0],max_gap_seconds=10)
+    clock[0]=5
+    tracker.update(STATE_WORKING)
+    clock[0]=100
+    tracker.finalize()
+    assert tracker.summary()[STATE_WORKING]==5
+
+
+def test_camera_multiple_backward_clock_changes_do_not_lower_recorded_watermark():
+    clock=[0.0]
+    rows=[]
+    tracker=ActivityTracker(initial_state=STATE_WORKING,clock=lambda:clock[0],max_gap_seconds=10,
+        on_segment=lambda state,duration,end:rows.append((duration,end)))
+    for value in (5,10,1,2,.5,3,11):
+        clock[0]=value
+        tracker.update(STATE_WORKING)
+    tracker.finalize()
+    assert rows==[(10,10),(1,11)]

@@ -35,7 +35,7 @@ python3 worktrack.py --web-only   # Зөвхөн веб систем
 python3 worktrack.py --camera     # Agent болон camera хамт
 ```
 
-Log-ууд `.runtime/backend.log`, `frontend.log`, `scheduler.log`, `agent.log`, `camera.log` дотор байна.
+Log-ууд `.runtime/backend.log`, `frontend.log`, `scheduler.log`, `backup.log`, `agent.log`, `camera.log` дотор байна.
 Launcher ажиллаж байхад agent-ийг өөр terminal эсвэл OS startup script-ээр давхар
 асаахгүй. macOS startup helper-ийн тохиргоо launcher-аас тусдаа хэвээр.
 
@@ -136,8 +136,9 @@ Wall clock болон monotonic clock зөрөх, цаг ухрах үед мө�
 Single-person camera uploader ч segment-ээ өдөр болон 3600 секундээр хуваана.
 Camera timestamp нь дууссан цаг тул яг 00:00-д дууссан хэсэг өмнөх өдөрт тоологдоно.
 Backend camera тайланд өмнө нь хадгалсан өдөр дамнасан мөрийн хугацааг мөн хоёр
-өдөрт хувааж харуулна; database-ийн хуучин мөрийг өөрчлөхгүй. Camera capture-ийн
-sleep хугацааг ялгах нь энэ үндсэн agent-ийн sampling-gap хамгаалалтад хамаарахгүй.
+өдөрт хувааж харуулна; database-ийн хуучин мөрийг өөрчлөхгүй. Camera tracker мөн `max_camera_gap_seconds` (default 10) хамгаалалттай. Single болон
+multi-person горимд урт observation gap-ийг тооцохгүй, өмнөх хугацааг сүүлийн frame
+ажигласан timestamp-тайгаар хадгална.
 
 ## Activity agent (өөр хувилбар)
 
@@ -180,7 +181,7 @@ camera identity integration хийгдээгүй. Raw зураг API руу ил
 
 SQLite default файл: `backend/db.sqlite3`. PostgreSQL-д `backend/.env` дахь
 `POSTGRES_*` утгуудыг тохируулаад migrate хийнэ. Хуучин root `db.sqlite3`-ийг өөрчлөхгүй;
-түүний `core` schema-г шинэ database руу автоматаар зөөхгүй. `core/` нь өмнөх
+түүний `core` schema-г шинэ database руу автоматаар зөөхгүй. `legacy/core/` нь өмнөх
 хэрэгжүүлэлтийн эх код бөгөөд үндсэн серверт ачаалагдахгүй. Доорх API заавар нь
 зөвхөн одоогийн `backend/` серверт хамаарна. Хуучин `core/` endpoint болон model-ууд
 одоогийн API-тай ижил биш; өмнөх эх код, зааврыг Git түүхээс харж болно.
@@ -281,7 +282,8 @@ Default файл нь `backend/backups/database-TIMESTAMP-RANDOM.sqlite3` (SQLit
 0600 permission-тэй бөгөөд `backups/`, `*.dump`, `*.sqlite3` нь Git-д орохгүй.
 Database дотор account/password hash, token blacklist, task болон activity байдаг тул
 backup-ийг хувийн, найдвартай хадгалалт руу өөрөө хуулна. Энэ команд backup-ийг
-автоматаар cloud руу upload хийхгүй, launcher автоматаар backup үүсгэдэг болоогүй.
+автоматаар cloud руу upload хийхгүй. Launcher одоо өдөр тутмын backup scheduler
+хамт асаана; доорх автомат backup хэсгийг үзнэ үү.
 
 SQLite нь online backup API ашиглаж WAL дахь committed өгөгдлийг хамруулна.
 PostgreSQL нь custom-format `pg_dump`, restore-д `pg_restore` ашиглана. Эдгээр CLI
@@ -344,6 +346,120 @@ Queue дүүрвэл **хамгийн шинэ бүртгэлүүдийг хад
 Queue нь UTF-8 файлд бичигдэх бодит хэмжээгээр хязгаарлагдана; temp файл бичих
 зуур дискэнд нэмэлт зай хэрэгтэй. Agent upload хийж байх үед queue дүүрсэн ч
 хараахан илгээгдээгүй шинэ мөрийг андуурч устгахгүй.
+
+## Үлдсэн ажлуудын нэмэлт хэрэгслүүд
+
+### Хуучин backend-ийн архив
+
+Өмнөх `core/` source нь `legacy/core/` дотор бүрэн хадгалагдсан. Үндсэн Django
+`INSTALLED_APPS`-д орохгүй, хуучин root database-ийг нүүлгээгүй. Өдөр тутмын өөрчлөлтөө
+`backend/` дээр хийнэ. `pytest.ini` нь root pytest-ийг `tests/` дээр ажиллуулж,
+архивын Django tests-ийг санамсаргүй импортлохоос хамгаална. Backend tests-ийг
+`python manage.py test users workforce activity scoring` гэж тусад нь ажиллуулна.
+
+### Хуучин activity шалгах, ангиллыг засах
+
+```bash
+python manage.py review_activity --limit 100           # Preview, database өөрчлөхгүй
+python manage.py review_activity --employee 2          # Нэг ажилтан
+python manage.py backup_database
+python manage.py review_activity --apply               # Зөвхөн aggregate category засна
+```
+
+Invalid duration, ирээдүйн болон давхардсан interval-ийг ID-тай нь мэдээлнэ.
+Зөвхөн `activity_agent` platform, `activity-agent-` device prefix-тэй aggregate
+record-ийн category-г server allowlist-аар засна. `Idle`, unknown хугацаа болон
+үндсэн agent-ийн ангиллыг өөрчлөхгүй. Буруу timestamp/duration-ийг тааж засахгүй,
+ямар ч мөр устгахгүй. Тэдгээрийг эх сурвалжтай тулгаж гараар шалгана. Ангилал
+зассан хуучин өдрүүдийн score-ийг тусад нь дахин тооцно.
+
+### Өдөр тутмын автомат backup
+
+Launcher нь score scheduler-ээс тусдаа `run_backup_scheduler` процесс асаадаг.
+Асаах үед болон цаг тутам шалгаж, Улаанбаатарын нэг өдөрт нэг `daily-*.sqlite3`
+эсвэл `daily-*.dump` үүсгэнэ. Default-аар **сүүлийн 7 daily backup** үлдээнэ.
+Гараар авсан `database-*`, restore-ийн safety backup, custom нэртэй файлуудыг
+retention устгахгүй. Backup байхгүй/эвдэрсэн эсвэл copy диск олдохгүй үед log-д
+алдаа мэдээлээд дараагийн цагт retry хийнэ; copy амжилтгүй бол local retention хийхгүй.
+
+```bash
+python manage.py run_backup_scheduler --once
+python manage.py backup_cycle --keep 14
+python manage.py backup_cycle --copy-dir /Volumes/MyBackup/WorkTrack --keep 7
+```
+
+Copy directory урьдчилж үүссэн, диск mount болсон байх ёстой. Хоёр дахь хуулбарыг
+SHA-256 checksum-аар шалгадаг. `BACKUP_KEEP`, `BACKUP_COPY_DIR` environment-оор
+scheduler-ийг тохируулна. Docker-д энэ disk path-ийг backup container дотор volume
+болгон тусад нь mount хийх шаардлагатай. External хуулбаруудыг автоматаар prune
+хийхгүй. Log: `.runtime/backup.log`. Launcher унтарсан үед автомат backup ажиллахгүй.
+
+### Олон төхөөрөмжийн урт HTTP soak ба camera үнэлгээ
+
+```bash
+python verify_soak.py --seconds 60 --devices 3
+python verify_soak.py --seconds 28800 --devices 10     # 8 цагийн synthetic HTTP soak
+```
+
+Үргэлжлэх хугацааг хурдасгахгүй: 28800 нь бодит 8 цаг ажиллана. Түр SQLite test
+DB, бодит Django HTTP сервер дээр synthetic device-ууд сегмент илгээж, replay,
+JWT refresh, saved login дахин ашиглах, нийт record count-ийг шалгана. Үндсэн
+user/database, camera болон foreground app capture ашиглахгүй. Report нь
+`.runtime/soak-report.json`. Process тасарвал report-ийг амжилттай гэж бичихгүй.
+
+60 секунд / 3 device туршилт: 180 segment, дундаж HTTP ~8 ms, max ~50 ms,
+давхар record үүсээгүй. Энэ нь 8 цагийн бодит төхөөрөмжийн баталгаа биш;
+8 цагийн run болон олон бодит workstation-ийн тестийг хараахан ажиллуулаагүй.
+
+Camera-ийн accuracy-д хүний баталгаажуулсан label хэрэгтэй. CSV-ийн жишээ:
+
+```csv
+expected,predicted
+WORKING,WORKING
+PHONE,IDLE
+```
+
+```bash
+python evaluate_camera.py /path/to/manually-labeled.csv
+```
+
+Accuracy, state бүрийн precision/recall, confusion matrix гаргана. Label байхгүй
+state-ийн metric нь null; бодит annotation байхгүй үед accuracy-г зохиож мэдээлэхгүй.
+Нэг frame inference болон fake-clock gap тест нь accuracy судалгаа биш.
+
+### Локал deployment бэлтгэл
+
+`compose.production.yml` нь **backend API**-д зориулсан template; React build
+оруулдаггүй. PostgreSQL 17, multi-worker Gunicorn, Caddy HTTPS proxy, score болон
+backup scheduler агуулна. Backend/database host port нээхгүй; proxy л 80/443 нээнэ.
+Database cache нь worker-уудын login throttle state-ийг хуваалцана; entrypoint
+`createcachetable` ажиллуулдаг. `/api/health/` нь DB/cache round-trip шалгаж 200/503
+буцаана. Process crash үед restart policy үйлчилнэ; unhealthy төлөв нь өөрөө
+container restart хийх баталгаа биш. JSON logs нь 10 MiB × 3 файлаар эргэнэ.
+
+```bash
+cp deploy/production.env.example deploy/production.env
+# Domain, private secret, password, CORS origin-оо өөрийн утгаар засна.
+docker compose --env-file deploy/production.env -f compose.production.yml config
+docker compose --env-file deploy/production.env -f compose.production.yml up -d --build
+docker compose --env-file deploy/production.env -f compose.production.yml logs --tail=100 backend scheduler backup proxy
+```
+
+Бодит HTTPS-д domain DNS сервер рүү заасан, 80/443 хүрдэг байх шаардлагатай.
+`DJANGO_DEBUG=false` үед placeholder/богино SECRET_KEY-г сервер хүлээн авахгүй.
+`TRUST_PROXY_HEADERS` зөвхөн backend шууд интернетэд нээлтгүй үед хэрэглэнэ.
+Trusted proxy IP нь template-ийн `172.30.0.2`; subnet өөрчилбөл IP ба trusted setting-ээ
+хамт өөрчилнө. Caddy хэрэглэгчийн forwarded IP header-ийг overwrite хийдэг.
+`CORS_ALLOWED_ORIGINS`-д зөвхөн зөвшөөрсөн frontend origin-уудыг бичнэ.
+Production env болон backup-ууд image/Git-д орохгүй.
+
+Энэ Mac дээр YAML/config, health/proxy tests, бодит 2-worker Gunicorn болон
+PostgreSQL shared cache-ийг шалгасан. Docker/Caddy container build, бодит domain-ийн
+TLS certificate, public deployment, external monitoring/alert-ийг ажиллуулаагүй.
+Энэ хэсэг хэрэглэгчийн сонгосон **локал бэлтгэл**, public deployment биш.
+
+Тохиргооны лавлагаа: [Django database cache](https://docs.djangoproject.com/en/5.2/topics/cache/#database-caching),
+[Caddy reverse proxy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy).
 
 ## Шалгах
 
@@ -452,7 +568,7 @@ Admin бүх ажилтанд, manager өөрийн хэлтэст, employee ө�
 | Primary agent offline → recovery | Бодит TCP connection-refused үед queue хадгалж, Django HTTP сервер сэргэхэд илгээсэн; replay давхар хугацаа үүсгээгүй |
 | Tracker/association/gaze | 17 unit тест амжилттай; энэ нь бодит detection accuracy-ийн үнэлгээ биш |
 | Sleep/resume | Хэрэглэгч Mac-аа унтуулаад сэрээсэн; 10.17 секундийн observation gap илэрч app time-д ороогүй |
-| PostgreSQL 17.11 | Migration болон 63 backend тест амжилттай |
+| PostgreSQL 17.11 | Migration, shared cache, 2-worker Gunicorn болон 70 backend test case шалгасан; opt-in soak 1 case тусдаа ажилласан |
 | PostgreSQL concurrency | Давхардсан хоёр хүсэлтээс нэг нь 201, нөгөө нь 400; ижил replay нь 201/200, нэг мөр хадгалсан |
 | PostgreSQL backup/restore | `pg_dump` → өөрчлөлт оруулах → `pg_restore` → өөрчлөлт буцсан; safety dump-ийг өөр database-д мөн сэргээсэн |
 

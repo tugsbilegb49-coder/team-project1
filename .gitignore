@@ -69,3 +69,4 @@ activity_agent/data/
 # Database backups contain private account/activity data
 backups/
 *.dump
+deploy/production.env
