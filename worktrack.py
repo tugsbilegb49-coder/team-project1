@@ -131,7 +131,7 @@ def stop_process(process):
 
 def main():
     parser = argparse.ArgumentParser(description='WorkTrack: backend + frontend + agent нэг дор асаах')
-    parser.add_argument('--web-only', action='store_true', help='Зөвхөн backend/frontend асаах')
+    parser.add_argument('--web-only', action='store_true', help='Backend/frontend болон онооны scheduler асаах; agent/camera асаахгүй')
     parser.add_argument('--camera', action='store_true', help='Camera monitor мөн асаах')
     args = parser.parse_args()
     def interrupted(signum, frame):
@@ -168,6 +168,7 @@ def main():
             wait_ready(API + '/api/users/me/', start('backend', [str(python), 'manage.py', 'runserver', '127.0.0.1:8000', '--noreload']))
         if not check_http(WEB):
             wait_ready(WEB, start('frontend', [npm, 'run', 'dev', '--', '--host', '127.0.0.1', '--port', '5173', '--strictPort']))
+        start('scheduler', [str(python), '-u', 'manage.py', 'run_score_scheduler'])
         if not args.web_only:
             if setup_agent():
                 start('agent', [str(python), '-u', 'agent/main.py'])
@@ -178,7 +179,7 @@ def main():
                         print('Camera dependency-уудыг суулгаж байна…', flush=True)
                         subprocess.run([str(python), '-m', 'pip', 'install', '-r', 'requirements.txt'], cwd=ROOT, check=True)
                     start('camera', [str(python), '-u', 'main.py'])
-        print(f'\nWorkTrack: {WEB}\nЗогсоох: энэ цонхонд Ctrl+C. Log: .runtime/\nЦонхоо нээлттэй байлгана уу.', flush=True)
+        print(f'\nWorkTrack: {WEB}\nЗогсоох: энэ цонхонд Ctrl+C. Оноо автоматаар 60 секунд тутам шинэчлэгдэнэ.\nLog: .runtime/\nЦонхоо нээлттэй байлгана уу.', flush=True)
         webbrowser.open(WEB)
         while True:
             for name, process in processes:

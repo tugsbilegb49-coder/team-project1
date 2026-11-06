@@ -1,6 +1,7 @@
 from datetime import date
 
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from django.core.management.base import BaseCommand, CommandError
 
 from scoring.services import calculate_daily_score, ScoreNotReady
@@ -10,7 +11,7 @@ class Command(BaseCommand):
     help = "Calculate or refresh daily productivity scores for active employees."
 
     def add_arguments(self, parser):
-        parser.add_argument("--date", default=date.today().isoformat(), help="ISO date (YYYY-MM-DD)")
+        parser.add_argument("--date", default=timezone.localdate().isoformat(), help="ISO date (YYYY-MM-DD)")
         parser.add_argument("--employee", help="Optional username to calculate for one employee")
 
     def handle(self, *args, **options):

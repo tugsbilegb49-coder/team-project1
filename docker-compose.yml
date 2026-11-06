@@ -36,10 +36,12 @@ services:
     environment:
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
-    command: python manage.py run_score_scheduler --hour 23 --minute 55
+    command: python -u manage.py run_score_scheduler --interval 60
     depends_on:
       db:
         condition: service_healthy
+      backend:
+        condition: service_started
 
 volumes:
   postgres_data:

@@ -8,7 +8,7 @@ React frontend, Django API, computer activity agent болон camera monitor н
 
 Finder-ээс төслийн хавтас дахь **Start WorkTrack.command** файлыг давхар дарна.
 Энэ нь Python environment, backend dependency, npm dependency-ийг шаардлагатай үед
-бэлдэж, migration хийгээд backend, frontend, computer agent-ийг хамт асаана.
+бэлдэж, migration хийгээд backend, frontend, онооны scheduler, computer agent-ийг хамт асаана.
 Серверүүд өмнө нь ажиллаж байвал дахин асаахгүй. Browser автоматаар нээгдэнэ.
 Анх удаа Python 3 болон Node.js/npm суусан байх шаардлагатай.
 
@@ -35,7 +35,7 @@ python3 worktrack.py --web-only   # Зөвхөн веб систем
 python3 worktrack.py --camera     # Agent болон camera хамт
 ```
 
-Log-ууд `.runtime/backend.log`, `frontend.log`, `agent.log`, `camera.log` дотор байна.
+Log-ууд `.runtime/backend.log`, `frontend.log`, `scheduler.log`, `agent.log`, `camera.log` дотор байна.
 Launcher ажиллаж байхад agent-ийг өөр terminal эсвэл OS startup script-ээр давхар
 асаахгүй. macOS startup helper-ийн тохиргоо launcher-аас тусдаа хэвээр.
 
@@ -229,6 +229,43 @@ App нэрийн том/жижиг үсэг, `.exe`, `.app` өргөтгөлий
 allowlist өөрчлөгдсөн байсан ч өмнөх category хадгалагдана. Хуучин `OTHER` мөрүүдийг
 дахин ангилах migration энэ өөрчлөлтөд ороогүй. Шинэ дүрмээр оноогоо харахын тулд
 өгөгдөл/чанарын үнэлгээгээ шалгаад score-оо дахин тооцно.
+
+## Оноо автоматаар шинэчлэх
+
+`Start WorkTrack.command` launcher нь backend/frontend-тэй хамт score scheduler
+асаана. `--web-only` горимд ч scheduler ажиллана. Асаах үед болон дараа нь
+**60 секунд тутам**, `Asia/Ulaanbaatar` timezone-оор **өнөөдөр ба өчигдрийн**
+идэвхтэй хэрэглэгчдийн оноог дахин тооцно. Ингэснээр agent-ийн шинэ activity,
+шөнө дунд дамнасан бүртгэл, хоцорч ирсэн queue, нөхөж оруулсан quality үнэлгээ
+дараагийн мөчлөгт тусна. Ижил employee/date score-ийг шинэчилнэ, давхар score үүсгэхгүй.
+
+Чанарын үнэлгээ дутуу ажилтныг log-д мэдээлээд алгасна; бусдыг үргэлжлүүлнэ.
+Дараагийн мөчлөгт дахин шалгана. Database түр завгүй эсвэл бэлэн биш үед алдааг
+log-д бичээд дараагийн мөчлөгт дахин оролдоно. Log: `.runtime/scheduler.log`.
+Launcher-ийг Ctrl+C-ээр зогсооход өөрийн асаасан scheduler мөн зогсоно.
+
+Гараар серверүүдээ асаадаг бол scheduler-ийг тусдаа terminal-д ажиллуулна:
+
+```bash
+python manage.py run_score_scheduler                 # Default: 60 секунд
+python manage.py run_score_scheduler --interval 120  # 120 секунд тутам
+python manage.py run_score_scheduler --once          # Хоёр өдрийг нэг удаа тооцоод гарах
+```
+
+Docker Compose-ийн scheduler мөн `--interval 60` ашиглана. Хуучин `--hour` болон
+`--minute` сонголтыг шинэчилж `--interval` болгосон. Давтамж 10–3600 секунд байна.
+
+Хоёроос олон хоногийн өмнөх өгөгдөл өөрчлөгдвөл тухайн өдрийг тусад нь дахин тооцно:
+
+```bash
+python manage.py calculate_daily_scores --date 2026-11-01
+```
+
+Компьютер унтарсан эсвэл launcher зогссон үед локал scheduler ажиллахгүй. Дахин
+асаахад зөвхөн өнөөдөр/өчигдрийг нөхөж тооцно; бүх хуучин өдрийг автоматаар нөхөхгүй.
+Вебийн нээлттэй хуудас автоматаар дахин хүсэлт явуулдаг болоогүй: шинэ оноог харахдаа
+Dashboard-ийн «Шинэчлэх» дарна. «Оноо тооцох / шинэчлэх» товч гараар шууд тооцох
+боломж хэвээр байна.
 
 ## Шалгах
 
