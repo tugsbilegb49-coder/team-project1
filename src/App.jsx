@@ -273,74 +273,136 @@ function App() {
               </div>
             </section>
             <section className="task-section">
+
               <h2>Өдрийн activity ба бүтээмж</h2>
-              <select
-                value={employee}
-                onChange={(e) => setEmployee(e.target.value)}
-              >
-                {members.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                required
-              />
-              <button
-                disabled={busy || !date}
-                onClick={() =>
-                  run(async () => {
-                    await api("/api/scores/calculate/", {
-                      method: "POST",
-                      body: JSON.stringify({
-                        employee_id: Number(employee),
-                        date,
-                      }),
-                    });
-                    setReport(
-                      await api(
-                        `/api/scores/dashboard/?employee_id=${employee}&date=${date}`,
-                      ),
-                    );
-                  })
-                }
-              >
-                Оноо тооцох / шинэчлэх
-              </button>
+
+              <div className="activity-controls">
+                <select
+                  value={employee}
+                  onChange={(e) => setEmployee(e.target.value)}
+                >
+                  {members.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  required
+                />
+
+                <button
+                  disabled={busy || !date}
+                  onClick={() =>
+                    run(async () => {
+                      await api("/api/scores/calculate/", {
+                        method: "POST",
+                        body: JSON.stringify({
+                          employee_id: Number(employee),
+                          date,
+                        }),
+                      });
+                      setReport(
+                        await api(
+                          `/api/scores/dashboard/?employee_id=${employee}&date=${date}`,
+                        ),
+                      );
+                    })
+                  }
+                >
+                  Оноо тооцох / шинэчлэх
+                </button>
+              </div>
+
               {report && (
-                <>
-                  <p>
-                    Оноо:{" "}
-                    {report.score
-                      ? `${report.score.score} (${report.score.category})`
-                      : "Тооцоолоогүй"}
-                  </p>
-                  <h3>Application</h3>
-                  {report.applications.length ? (
-                    report.applications.map((row) => (
-                      <p key={row.application + row.category}>
-                        {row.application} · {row.category}:{" "}
-                        {(row.seconds / 60).toFixed(1)} мин
-                      </p>
+                <div className="activity-dashboard">
+                  <div className="activity-score-card">
+                    <p>Өдрийн бүтээмжийн оноо</p>
+                    <h3>
+                      {report.score
+                        ? report.score.score
+                        : "—"}
+                    </h3>
+                    <span>
+                      {report.score
+                        ? report.score.category
+                        : "Тооцоолоогүй"}
+                    </span>
+                  </div>
+                  <div className="activity-detail-card">
+                  <h3>Application categories</h3>
+
+                  {report.application_categories?.length ? (
+                    report.application_categories.map((row) => (
+                      <div className="activity-row" key={row.category}>
+                        <span>{row.category}</span>
+                        <strong>{(row.seconds / 60).toFixed(1)} мин</strong>
+                      </div>
                     ))
+                  ) : (
+                    <p>Ангиллын мэдээлэл бүртгэгдээгүй.</p>
+                  )}
+                </div>
+                 <div className="activity-detail-card">
+                  <h3>Application activity</h3>
+
+                  {report.applications.length ? (
+                    <div className="activity-chart">
+                      {report.applications.map((row) => {
+                        const minutes = row.seconds / 60;
+                        const maxMinutes = Math.max(
+                          ...report.applications.map((item) => item.seconds / 60),
+                          1
+                        );
+
+                        return (
+                          <div
+                            className="chart-item"
+                            key={row.application + row.category}
+                          >
+                            <div className="chart-value">
+                              {minutes.toFixed(1)} мин
+                            </div>
+
+                            <div className="chart-bar-bg">
+                              <div
+                                className="chart-bar-fill"
+                                style={{
+                                  width: `${(minutes / maxMinutes) * 100}%`,
+                                }}
+                              />
+                            </div>
+
+                            <div className="chart-label">
+                              {row.application}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   ) : (
                     <p>Activity бүртгэгдээгүй.</p>
                   )}
-                  <h3>Camera</h3>
-                  {report.camera.length ? (
-                    report.camera.map((row) => (
-                      <p key={row.state}>
-                        {row.state}: {(row.seconds / 60).toFixed(1)} мин
-                      </p>
-                    ))
-                  ) : (
-                    <p>Camera мэдээлэл бүртгэгдээгүй.</p>
-                  )}
-                </>
+                </div>
+
+                  <div className="activity-detail-card">
+                    <h3>Camera activity</h3>
+                    {report.camera.length ? (
+                      report.camera.map((row) => (
+                        <div className="activity-row" key={row.state}>
+                          <span>{row.state}</span>
+                          <strong>{(row.seconds / 60).toFixed(1)} мин</strong>
+                        </div>
+                      ))
+                    ) : (
+                      <p>Camera мэдээлэл бүртгэгдээгүй.</p>
+                    )}
+                  </div>
+                </div>
               )}
             </section>
           </section>
