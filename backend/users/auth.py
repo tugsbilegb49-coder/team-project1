@@ -1,5 +1,7 @@
 """Login throttling and authenticated refresh-token revocation."""
 import hashlib
+import ipaddress
+from django.conf import settings
 
 from rest_framework import serializers, status
 from rest_framework.exceptions import PermissionDenied
@@ -20,6 +22,13 @@ class LoginIPThrottle(SimpleRateThrottle):
         # Do not trust a user-supplied X-Forwarded-For header. Configure a trusted
         # reverse proxy before adapting this for deployment behind one.
         identity = request.META.get('REMOTE_ADDR', 'unknown')
+        try:
+            remote=ipaddress.ip_address(identity)
+            if any(remote in ipaddress.ip_network(network) for network in settings.TRUSTED_PROXY_NETWORKS):
+                forwarded=request.META.get('HTTP_X_FORWARDED_FOR','').split(',')[-1].strip()
+                identity=str(ipaddress.ip_address(forwarded))
+        except ValueError:
+            pass
         return self.cache_format % {'scope': self.scope, 'ident': identity}
 
 

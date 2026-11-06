@@ -9,6 +9,7 @@ rather than a single dedicated workstation.
 """
 
 import cv2
+from datetime import datetime
 
 from src.detector import ObjectDetector
 from src.person_tracker import PersonTracker
@@ -48,7 +49,9 @@ class MultiPersonMonitor:
     def _get_tracker(self, track_id: int) -> ActivityTracker:
         if track_id not in self.trackers:
             self.trackers[track_id] = ActivityTracker(
-                on_transition=lambda state, duration, tid=track_id: self.logger.log(state, duration, person_id=tid)
+                on_segment=lambda state, duration, end, tid=track_id: self.logger.log(
+                    state, duration, person_id=tid, timestamp=datetime.fromtimestamp(end).astimezone()),
+                max_gap_seconds=self.config.get("max_camera_gap_seconds", 10)
             )
         return self.trackers[track_id]
 

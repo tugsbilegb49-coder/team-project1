@@ -1,5 +1,6 @@
 # Worker Activity Monitor configuration
 
+max_camera_gap_seconds: 10
 camera_index: 0
 model_name: yolov8n.pt          # YOLOv8 nano — fast, good enough for this task
 confidence_threshold: 0.45
