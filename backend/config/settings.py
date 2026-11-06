@@ -7,6 +7,9 @@ from dotenv import load_dotenv
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+from .identity import source_digest, workspace_id
+BACKEND_SOURCE_DIGEST = source_digest(BASE_DIR)
+BACKEND_WORKSPACE_ID = workspace_id(BASE_DIR)
 load_dotenv(BASE_DIR / ".env")
 
 # Override in deployment with a long, private environment variable.

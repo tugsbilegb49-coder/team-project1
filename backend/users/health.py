@@ -1,5 +1,6 @@
 import logging
 from django.core.cache import cache
+from django.conf import settings
 from django.db import connection
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -23,4 +24,4 @@ class HealthView(APIView):
         except Exception:
             log.exception('Readiness check failed')
             return Response({'status':'unavailable'},status=503)
-        return Response({'status':'ok'})
+        return Response({'status':'ok','service':'worktrack-api','protocol':1,'source_digest':settings.BACKEND_SOURCE_DIGEST,'workspace_id':settings.BACKEND_WORKSPACE_ID})

@@ -70,3 +70,8 @@ activity_agent/data/
 backups/
 *.dump
 deploy/production.env
+
+# Shared login locks/temporary files and rejected-event quarantine
+agent/.agent_tokens.*
+agent/.pending_events*.json
+data/.pending_camera_events*.json

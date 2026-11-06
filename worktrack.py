@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Interactive local launcher for the WorkTrack web app and monitoring agent."""
 import argparse
+import errno
 import json
 import os
 from pathlib import Path
@@ -29,6 +30,30 @@ def check_http(url):
         return exc.code == 401 and exc.headers.get('Content-Type', '').startswith('application/json')
     except (URLError, TimeoutError, OSError):
         return False
+
+
+def backend_is_current():
+    from backend.config.identity import source_digest, workspace_id
+    expected=source_digest(ROOT/'backend')
+    try:
+        with urlopen(API+'/api/health/',timeout=3) as response:
+            data=json.load(response)
+    except HTTPError as exc:
+        exc.close()
+        raise RuntimeError('8000 порт дээр backend байгаа боловч health/version шалгалт амжилтгүй. Хуучин backend/launcher цонхыг Ctrl+C-ээр зогсоогоод дахин асаана уу.') from exc
+    except URLError as exc:
+        if isinstance(exc.reason, ConnectionRefusedError) or getattr(exc.reason, 'errno', None) == errno.ECONNREFUSED:
+            return False
+        raise RuntimeError('Backend порт хариу өгөхгүй байна. Хоёр дахь сервер асаахгүй; өмнөх process болон логийг шалгана уу.') from exc
+    except (TimeoutError,OSError) as exc:
+        if isinstance(exc, ConnectionRefusedError) or getattr(exc, 'errno', None) == errno.ECONNREFUSED:
+            return False
+        raise RuntimeError('Backend шалгалтын timeout/сүлжээний алдаа. Өмнөх process-ийг шалгана уу.') from exc
+    except (ValueError,TypeError) as exc:
+        raise RuntimeError('8000 порт дээр танигдаагүй сервер байна. Өөр process-ийг автоматаар зогсоохгүй.') from exc
+    if not isinstance(data,dict) or data.get('service')!='worktrack-api' or data.get('protocol')!=1 or data.get('source_digest')!=expected or data.get('workspace_id')!=workspace_id(ROOT/'backend'):
+        raise RuntimeError('Ажиллаж буй backend хуучин эсвэл өөр project-ийнх байна. Тэр backend/launcher цонхыг Ctrl+C-ээр зогсоогоод Start WorkTrack.command-ийг дахин нээнэ үү.')
+    return True
 
 
 def wait_ready(url, process, timeout=30):
@@ -150,7 +175,10 @@ def main():
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             print('WorkTrack launcher аль хэдийн ажиллаж байна.')
-            webbrowser.open(WEB)
+            if backend_is_current():
+                webbrowser.open(WEB)
+            else:
+                print('Backend асаж дуустал хүлээнэ үү.')
             return
     processes, logs = [], []
 
@@ -163,9 +191,12 @@ def main():
         return process
 
     try:
+        existing_backend = backend_is_current()  # Refuse stale servers before running migrations.
         python, npm = bootstrap()
-        if not check_http(API + '/api/users/me/'):
-            wait_ready(API + '/api/users/me/', start('backend', [str(python), 'manage.py', 'runserver', '127.0.0.1:8000', '--noreload']))
+        if not existing_backend:
+            wait_ready(API + '/api/health/', start('backend', [str(python), 'manage.py', 'runserver', '127.0.0.1:8000', '--noreload']))
+            if not backend_is_current():
+                raise RuntimeError('Backend readiness/version шалгалт амжилтгүй.')
         if not check_http(WEB):
             wait_ready(WEB, start('frontend', [npm, 'run', 'dev', '--', '--host', '127.0.0.1', '--port', '5173', '--strictPort']))
         start('scheduler', [str(python), '-u', 'manage.py', 'run_score_scheduler'])

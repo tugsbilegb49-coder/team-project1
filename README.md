@@ -9,7 +9,11 @@ React frontend, Django API, computer activity agent болон camera monitor н
 Finder-ээс төслийн хавтас дахь **Start WorkTrack.command** файлыг давхар дарна.
 Энэ нь Python environment, backend dependency, npm dependency-ийг шаардлагатай үед
 бэлдэж, migration хийгээд backend, frontend, онооны scheduler, computer agent-ийг хамт асаана.
-Серверүүд өмнө нь ажиллаж байвал дахин асаахгүй. Browser автоматаар нээгдэнэ.
+Ижил төслийн одоогийн кодтой backend өмнө нь ажиллаж байвал дахин асаахгүй.
+Browser автоматаар нээгдэнэ. Хуучин кодтой backend (`--noreload` орно) эсвэл өөр
+төслийн сервер 8000 порт дээр байвал migration хийхээс өмнө алдаа мэдээлнэ.
+Өмнөх backend/launcher цонхонд Ctrl+C дараад дахин нээнэ; өөр process-ийг
+автоматаар зогсоохгүй.
 Анх удаа Python 3 болон Node.js/npm суусан байх шаардлагатай.
 
 - Admin account байхгүй бол terminal дотор үүсгэх алхам гарна.
@@ -347,6 +351,23 @@ Queue дүүрвэл **хамгийн шинэ бүртгэлүүдийг хад
 Queue нь UTF-8 файлд бичигдэх бодит хэмжээгээр хязгаарлагдана; temp файл бичих
 зуур дискэнд нэмэлт зай хэрэгтэй. Agent upload хийж байх үед queue дүүрсэн ч
 хараахан илгээгдээгүй шинэ мөрийг андуурч устгахгүй.
+
+Үндсэн agent болон camera uploader-ийн event endpoint 400/409/413/422 буцаавал
+тухайн мөрийг queue-тай ижил хавтасны `*.rejected.json` файлд тусгаарлаж,
+дараагийн мөрийг илгээнэ. Тусгаарласан файл хамгийн сүүлийн 1000 мөр, 1 MiB
+хязгаартай; timestamp, HTTP status, event хадгална. Түүнийг шалгаж өгөгдлийн
+шалтгааныг засна. Auth/refresh алдаа, 404, 408, 429, 5xx болон сүлжээний алдаанд
+queue-г хадгалж дараа дахин оролдоно. Тусгаарласан файлыг бичиж чадахгүй бол
+эх мөрийг queue-д үлдээнэ.
+
+Camera segment-ийг эхлээд дискэнд хадгалж, HTTP upload-ийг тусдаа thread хийнэ.
+Backend удаашрахад frame loop сүлжээ хүлээхгүй. Зогсоохдоо upload-д 5 секунд
+хүлээж, үлдсэнийг дараагийн асаалтад илгээнэ. Python integration-д
+`uploader.flush(timeout=5)`-аар хүлээж, `uploader.close()`-оор worker-ийг хаана.
+
+Үндсэн agent, camera, alternative agent нь JWT файлыг process хоорондын lock,
+давтагдахгүй temp файл, atomic replace ашиглан бичнэ. Refresh-ийн хариу хожуу
+ирэхэд шинэ login-ийг дарах эсвэл logout хийсэн login-ийг сэргээхгүй.
 
 ## Үлдсэн ажлуудын нэмэлт хэрэгслүүд
 

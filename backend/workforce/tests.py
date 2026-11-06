@@ -91,6 +91,47 @@ class UnifiedFlowTests(TestCase):
 @override_settings(REQUIRE_MONITORING_CONSENT=False)
 class LiveUploaderTests(LiveServerTestCase):
     """Exercise the real HTTP uploaders against Django, not the mock API."""
+    def test_launcher_recognizes_current_backend_over_http(self):
+        import sys
+        from pathlib import Path
+        from unittest.mock import patch
+        sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
+        import worktrack
+        with patch.object(worktrack,'API',self.live_server_url):
+            self.assertTrue(worktrack.backend_is_current())
+            # The running server retains the digest captured at startup.
+            with patch('backend.config.identity.source_digest',return_value='new-local-code'):
+                with self.assertRaisesRegex(RuntimeError,'хуучин'):
+                    worktrack.backend_is_current()
+
+    def test_invalid_head_does_not_block_valid_http_upload(self):
+        import json
+        import sys
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from django.core.cache import cache
+        cache.clear()
+        sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
+        from agent.main import ApiClient, PendingUploader
+        user=User.objects.create_user('queue-worker',password='test-pass-very-long-123')
+        client=APIClient()
+        tokens=client.post('/api/auth/login/',{'username':user.username,'password':'test-pass-very-long-123'},format='json').data
+        with TemporaryDirectory() as directory:
+            path=Path(directory)
+            (path/'tokens.json').write_text(json.dumps(tokens))
+            uploader=PendingUploader(ApiClient(self.live_server_url,path/'tokens.json'),path/'pending.json')
+            payload={'started_at':(timezone.now()-timedelta(seconds=60)).isoformat(),'duration_seconds':30,'application':'Code','category':'WORK'}
+            uploader.append_many([{**payload,'duration_seconds':-1},payload])
+            try:
+                self.assertTrue(uploader.flush(3))
+            finally:
+                uploader.stop()
+            self.assertEqual(json.loads((path/'pending.json').read_text()),[])
+            rejected=json.loads((path/'pending.rejected.json').read_text())
+            self.assertEqual(rejected[0]['status'],400)
+            self.assertEqual(rejected[0]['event']['duration_seconds'],-1)
+            self.assertEqual(ComputerActivity.objects.filter(employee=user).count(),1)
+
     def test_batch_and_camera_upload_with_refresh(self):
         import json
         import sys
@@ -119,7 +160,11 @@ class LiveUploaderTests(LiveServerTestCase):
             self.assertEqual(ComputerActivity.objects.filter(employee=user).count(),2)
             tokens=json.loads(token_path.read_text());tokens['access']='expired-again';token_path.write_text(json.dumps(tokens))
             camera=CameraEventUploader(self.live_server_url,str(token_path),str(Path(directory)/'device.json'),str(Path(directory)/'camera.json'))
-            camera.log('WORKING',30,now)
+            try:
+                camera.log('WORKING',30,now)
+                self.assertTrue(camera.flush(3))
+            finally:
+                camera.close()
             client.force_authenticate(user)
             report=client.get('/api/scores/dashboard/',{'date':timezone.localdate(now).isoformat()})
             self.assertEqual(report.data['applications'][0]['seconds'],40)

@@ -119,6 +119,8 @@ class WorkerActivityMonitor:
             self.tracker.finalize()
             self.cap.release()
             cv2.destroyAllWindows()
+            if self.api_uploader is not None:
+                self.api_uploader.close()
             self.logger.close()
             if self.gaze is not None:
                 self.gaze.close()

@@ -26,9 +26,13 @@ from typing import Any
 if __package__:
     from .intervals import split_interval
     from .queue_limits import bounded_queue
+    from .token_store import atomic_json_write, read_tokens, save_tokens, remove_tokens, StaleTokenError
+    from .upload_support import quarantine_event, PERMANENT_EVENT_STATUSES
 else:
     from intervals import split_interval
     from queue_limits import bounded_queue
+    from token_store import atomic_json_write, read_tokens, save_tokens, remove_tokens, StaleTokenError
+    from upload_support import quarantine_event, PERMANENT_EVENT_STATUSES
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -66,9 +70,10 @@ class AgentError(RuntimeError):
 
 
 class ApiError(AgentError):
-    def __init__(self, status: int, message: str):
+    def __init__(self, status: int, message: str, route=None):
         super().__init__(message)
         self.status = status
+        self.route = route
 
 
 def load_config(path: Path) -> dict[str, Any]:
@@ -128,11 +133,7 @@ def _read_json_list(path: Path) -> list[dict[str, Any]]:
 
 
 def _write_json_list(path: Path, items: list[dict[str, Any]]) -> None:
-    temporary_path = path.with_suffix(".tmp")
-    with temporary_path.open("w", encoding="utf-8") as stream:
-        os.chmod(temporary_path, 0o600)
-        json.dump(items, stream, ensure_ascii=False)
-    temporary_path.replace(path)
+    atomic_json_write(path, items)
 
 
 def is_paused(path: Path = DEFAULT_CONTROL_PATH) -> bool:
@@ -319,27 +320,29 @@ class ApiClient:
                 return json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
-            raise ApiError(exc.code, f"API request failed ({exc.code}): {body}") from exc
-        except (URLError, TimeoutError) as exc:
+            exc.close()
+            raise ApiError(exc.code, f"API request failed ({exc.code}): {body}", route=route) from exc
+        except json.JSONDecodeError as exc:
+            raise AgentError("The API returned a non-JSON response; retaining queued activity.") from exc
+        except (URLError, TimeoutError, ConnectionError) as exc:
             raise AgentError(f"Could not reach Django API at {self.api_url}: {exc}") from exc
 
     def _read_tokens(self) -> dict[str, str]:
         if not self.token_path.is_file():
             raise AgentError("No desktop-agent login found. Run: python3 agent/main.py --login")
         try:
-            tokens = json.loads(self.token_path.read_text(encoding="utf-8"))
+            tokens = read_tokens(self.token_path)
             if not tokens.get("access") or not tokens.get("refresh"):
                 raise ValueError("missing access or refresh token")
             return tokens
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             raise AgentError("The saved desktop-agent login is invalid. Run --login again.") from exc
 
-    def _write_tokens(self, tokens: dict[str, str]) -> None:
-        temporary_path = self.token_path.with_suffix(".tmp")
-        temporary_path.write_text(json.dumps(tokens), encoding="utf-8")
-        os.chmod(temporary_path, 0o600)
-        temporary_path.replace(self.token_path)
-        os.chmod(self.token_path, 0o600)
+    def _write_tokens(self, tokens: dict[str, str], expected_refresh=None) -> None:
+        try:
+            save_tokens(self.token_path, tokens, expected_refresh)
+        except StaleTokenError as exc:
+            raise AgentError(str(exc)) from exc
 
     def login(self, username: str, password: str) -> None:
         tokens = self._post_json("/api/auth/login/", {"username": username, "password": password})
@@ -350,14 +353,17 @@ class ApiClient:
     def logout(self) -> None:
         tokens = self._read_tokens()
         self._authenticated_post("/api/auth/logout/", {"refresh": tokens["refresh"]})
-        self.token_path.unlink(missing_ok=True)
+        try:
+            remove_tokens(self.token_path, tokens["refresh"])
+        except StaleTokenError as exc:
+            raise AgentError(str(exc)) from exc
 
     def _refresh_access_token(self, tokens: dict[str, str]) -> dict[str, str]:
         refreshed = self._post_json("/api/auth/refresh/", {"refresh": tokens["refresh"]})
         if not refreshed.get("access"):
             raise AgentError("The saved login has expired. Run --login again.")
         tokens["access"] = refreshed["access"]
-        self._write_tokens(tokens)
+        self._write_tokens(tokens, expected_refresh=tokens["refresh"])
         return tokens
 
     def _authenticated_post(self, route: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -398,25 +404,35 @@ def segment_payload(application: str, category: str, started_at: datetime, ended
 class PendingUploader:
     """Persist segments immediately; perform slow network I/O off the sampling loop."""
 
-    def __init__(self, client: ApiClient, path: Path = DEFAULT_QUEUE_PATH, max_events=10000, max_bytes=10 * 1024 * 1024):
+    def __init__(self, client: ApiClient, path: Path = DEFAULT_QUEUE_PATH, max_events=10000, max_bytes=10 * 1024 * 1024, event_route="/api/computer-activity/ingest/"):
         self.client, self.path = client, path
+        self.event_route = event_route
         self.max_events, self.max_bytes = max_events, max_bytes
         self.pending, dropped = bounded_queue(_read_json_list(path), max_events, max_bytes)
         if dropped:
             print(f"Queue limit: discarded {dropped} oldest/oversized events.", file=sys.stderr)
             _write_json_list(path, self.pending)
         self.lock = threading.Lock()
+        self.completed = threading.Condition(self.lock)
+        self.cycles = 0
+        self.started = False
         self.ready = threading.Event()
         self.stopping = threading.Event()
         self.thread = threading.Thread(target=self._run, name="activity-upload", daemon=True)
 
     def start(self):
+        if self.started:
+            return
+        self.started = True
         self.thread.start()
         self.request_flush()  # Retry any queue left by the previous run.
 
     def append(self, payload):
+        self.append_many([payload])
+
+    def append_many(self, payloads):
         with self.lock:
-            self.pending, dropped = bounded_queue(self.pending + [payload], self.max_events, self.max_bytes)
+            self.pending, dropped = bounded_queue(self.pending + list(payloads), self.max_events, self.max_bytes)
             if dropped:
                 print(f"Queue limit: discarded {dropped} oldest/oversized events.", file=sys.stderr)
             _write_json_list(self.path, self.pending)
@@ -434,22 +450,47 @@ class PendingUploader:
                         payload = self.pending[0] if self.pending else None
                     if payload is None:
                         break
-                    self.client.ingest(payload)
+                    try:
+                        self.client.ingest(payload)
+                    except ApiError as exc:
+                        if exc.status not in PERMANENT_EVENT_STATUSES or exc.route not in (None, self.event_route):
+                            raise
+                        with self.lock:
+                            rejected = quarantine_event(self.path, payload, exc.status)
+                            if self.pending and self.pending[0] is payload:
+                                self.pending.pop(0)
+                            _write_json_list(self.path, self.pending)
+                        print(f"Rejected event moved to {rejected.name}; continuing queue.", file=sys.stderr)
+                        continue
                     with self.lock:
                         # A full queue may have evicted this in-flight row.
                         if self.pending and self.pending[0] is payload:
                             self.pending.pop(0)
                         _write_json_list(self.path, self.pending)
-            except (AgentError, OSError) as exc:
+            except (AgentError, OSError, ValueError) as exc:
                 print(f"Upload paused; queue retained: {exc}", file=sys.stderr)
+            with self.completed:
+                self.cycles += 1
+                self.completed.notify_all()
             if self.stopping.is_set():
                 return
 
+    def flush(self, timeout=5):
+        self.start()
+        with self.completed:
+            cycle = self.cycles
+            self.ready.set()
+            finished = self.completed.wait_for(lambda: self.cycles > cycle, timeout=timeout)
+            return bool(finished and not self.pending)
+
     def stop(self):
+        if not self.started:
+            return True
         self.stopping.set()
         self.ready.set()
         self.thread.join(timeout=5)
         # Any in-flight request is replay-safe; unsent rows remain on disk.
+        return not self.thread.is_alive()
 
 
 def _now():

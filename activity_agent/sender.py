@@ -7,6 +7,11 @@
 import json
 import logging
 import os
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent"))
+from token_store import read_tokens, save_tokens, StaleTokenError
 import urllib.error
 import urllib.request
 
@@ -31,27 +36,23 @@ class BatchSender:
     def _token(self, refresh=False):
         if not self.token_file:
             return self.api_token
-        with open(self.token_file, encoding="utf-8") as handle:
-            tokens = json.load(handle)
+        tokens = read_tokens(self.token_file)
         if refresh:
+            expected_refresh = tokens["refresh"]
             base = self.api_url.split("/api/")[0]
             request = urllib.request.Request(base + "/api/auth/refresh/",
                 data=json.dumps({"refresh":tokens["refresh"]}).encode(),
                 headers={"Content-Type":"application/json"}, method="POST")
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 tokens.update(json.load(response))
-            temp = self.token_file + ".batch.tmp"
-            with open(temp, "w", encoding="utf-8") as handle:
-                os.chmod(temp, 0o600)
-                json.dump(tokens, handle)
-            os.replace(temp, self.token_file)
+            save_tokens(self.token_file, tokens, expected_refresh=expected_refresh)
         return tokens["access"]
 
     def post(self, batch, retry=True):
         """True: сервер хүлээж авсан эсвэл буцаагдсан (дахин илгээх утгагүй). False: дахин оролдоно."""
         try:
             token = self._token()
-        except (OSError, ValueError, KeyError) as exc:
+        except (OSError, ValueError, KeyError, StaleTokenError) as exc:
             log.error("Login required; retaining batch: %s", exc)
             return False
         body = json.dumps(batch).encode("utf-8")
@@ -66,7 +67,7 @@ class BatchSender:
             if e.code == 401 and self.token_file and retry:
                 try:
                     self._token(refresh=True)
-                except (OSError, ValueError, KeyError) as exc:
+                except (OSError, ValueError, KeyError, StaleTokenError) as exc:
                     log.error("Login refresh failed; retaining batch: %s", exc)
                     return False
                 return self.post(batch, retry=False)

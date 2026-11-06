@@ -222,12 +222,15 @@ class IntervalSplitTests(unittest.TestCase):
             end=datetime(2026,11,5,16,0,10,tzinfo=timezone.utc)
             with patch.object(uploader,'_send') as send:
                 uploader.log('WORKING',20,end)
+                self.assertTrue(uploader.flush(1))
                 self.assertEqual([call.args[0]['duration_seconds'] for call in send.call_args_list],[10,10])
                 self.assertEqual(send.call_args_list[0].args[0]['timestamp'],'2026-11-05T16:00:00+00:00')
                 send.reset_mock()
                 uploader.log('WORKING',7200,end+timedelta(days=1))
+                self.assertTrue(uploader.flush(1))
                 self.assertEqual(sum(call.args[0]['duration_seconds'] for call in send.call_args_list),7200)
                 self.assertTrue(all(call.args[0]['duration_seconds']<=3600 for call in send.call_args_list))
+                uploader.close()
 
 
 class LogoutTests(unittest.TestCase):
@@ -324,6 +327,7 @@ class QueueLimitTests(unittest.TestCase):
             uploader=CameraEventUploader('http://localhost',str(Path(directory)/'tokens'),queue_file=str(Path(directory)/'camera.json'),max_queue_events=2)
             with patch.object(uploader,'_send',side_effect=CameraAPISyncError('offline')):
                 for number in range(3):
-                    with self.assertRaises(CameraAPISyncError):
-                        uploader.log('WORKING',1,datetime(2026,11,6,tzinfo=timezone.utc)+timedelta(seconds=number))
+                    uploader.log('WORKING',1,datetime(2026,11,6,tzinfo=timezone.utc)+timedelta(seconds=number))
+                    self.assertFalse(uploader.flush(1))
+                uploader.close()
             self.assertEqual(len(uploader._read_queue()),2)
