@@ -25,8 +25,10 @@ from typing import Any
 
 if __package__:
     from .intervals import split_interval
+    from .queue_limits import bounded_queue
 else:
     from intervals import split_interval
+    from queue_limits import bounded_queue
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -101,6 +103,11 @@ def load_config(path: Path) -> dict[str, Any]:
     if not isinstance(idle_threshold, (int, float)) or idle_threshold < 30:
         raise AgentError("idle_threshold_seconds must be a number of at least 30 seconds.")
     config["idle_threshold_seconds"] = float(idle_threshold)
+    for key, default, minimum in (("max_queue_events", 10000, 1), ("max_queue_bytes", 10 * 1024 * 1024, 1024)):
+        value = config.get(key, default)
+        if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+            raise AgentError(f"{key} must be an integer of at least {minimum}.")
+        config[key] = value
     config["productive_apps"] = config.get("productive_apps", [])
     return config
 
@@ -122,7 +129,9 @@ def _read_json_list(path: Path) -> list[dict[str, Any]]:
 
 def _write_json_list(path: Path, items: list[dict[str, Any]]) -> None:
     temporary_path = path.with_suffix(".tmp")
-    temporary_path.write_text(json.dumps(items), encoding="utf-8")
+    with temporary_path.open("w", encoding="utf-8") as stream:
+        os.chmod(temporary_path, 0o600)
+        json.dump(items, stream, ensure_ascii=False)
     temporary_path.replace(path)
 
 
@@ -389,9 +398,13 @@ def segment_payload(application: str, category: str, started_at: datetime, ended
 class PendingUploader:
     """Persist segments immediately; perform slow network I/O off the sampling loop."""
 
-    def __init__(self, client: ApiClient, path: Path = DEFAULT_QUEUE_PATH):
+    def __init__(self, client: ApiClient, path: Path = DEFAULT_QUEUE_PATH, max_events=10000, max_bytes=10 * 1024 * 1024):
         self.client, self.path = client, path
-        self.pending = _read_json_list(path)
+        self.max_events, self.max_bytes = max_events, max_bytes
+        self.pending, dropped = bounded_queue(_read_json_list(path), max_events, max_bytes)
+        if dropped:
+            print(f"Queue limit: discarded {dropped} oldest/oversized events.", file=sys.stderr)
+            _write_json_list(path, self.pending)
         self.lock = threading.Lock()
         self.ready = threading.Event()
         self.stopping = threading.Event()
@@ -403,7 +416,9 @@ class PendingUploader:
 
     def append(self, payload):
         with self.lock:
-            self.pending.append(payload)
+            self.pending, dropped = bounded_queue(self.pending + [payload], self.max_events, self.max_bytes)
+            if dropped:
+                print(f"Queue limit: discarded {dropped} oldest/oversized events.", file=sys.stderr)
             _write_json_list(self.path, self.pending)
 
     def request_flush(self):
@@ -421,7 +436,9 @@ class PendingUploader:
                         break
                     self.client.ingest(payload)
                     with self.lock:
-                        self.pending.pop(0)
+                        # A full queue may have evicted this in-flight row.
+                        if self.pending and self.pending[0] is payload:
+                            self.pending.pop(0)
                         _write_json_list(self.path, self.pending)
             except (AgentError, OSError) as exc:
                 print(f"Upload paused; queue retained: {exc}", file=sys.stderr)
@@ -445,7 +462,7 @@ def run_agent(config: dict[str, Any], client: ApiClient) -> None:
     last_observed_at = None
     last_observed_tick = None
     recorded_until = None
-    uploader = PendingUploader(client)
+    uploader = PendingUploader(client, max_events=config.get("max_queue_events", 10000), max_bytes=config.get("max_queue_bytes", 10 * 1024 * 1024))
     uploader.start()
     last_upload = time.monotonic()
     poll_interval = config.get("poll_interval_seconds", 1)

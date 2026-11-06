@@ -4,6 +4,8 @@
   "interval_seconds": 30,
   "poll_interval_seconds": 1,
   "max_sample_gap_seconds": 10,
+  "max_queue_events": 10000,
+  "max_queue_bytes": 10485760,
   "idle_threshold_seconds": 300,
   "productive_apps": [
     "Visual Studio Code",

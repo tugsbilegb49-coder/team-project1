@@ -266,3 +266,64 @@ class LogoutTests(unittest.TestCase):
         with patch('main.urlopen',return_value=response):
             self.assertEqual(ApiClient('http://localhost:8000',Path('unused'))._post_json('/api/auth/logout/',{}),{})
         response.read.assert_not_called()
+
+
+class QueueLimitTests(unittest.TestCase):
+    def test_count_limit_keeps_newest_and_persists_across_restart(self):
+        from unittest.mock import Mock
+        from main import PendingUploader
+        with TemporaryDirectory() as directory:
+            path=Path(directory)/'queue.json'
+            uploader=PendingUploader(Mock(),path,max_events=2)
+            for number in range(3):
+                uploader.append({'number':number})
+            self.assertEqual(uploader.pending,[{'number':1},{'number':2}])
+            self.assertEqual(PendingUploader(Mock(),path,max_events=2).pending,uploader.pending)
+
+    def test_byte_limit_counts_utf8_and_skips_oversized_rows(self):
+        import json
+        from queue_limits import bounded_queue
+        items=[{'text':'монгол'*60,'id':n} for n in range(4)]
+        kept,dropped=bounded_queue(items,max_bytes=1024)
+        self.assertLessEqual(len(json.dumps(kept,ensure_ascii=False).encode()),1024)
+        self.assertGreater(dropped,0)
+        self.assertEqual(kept[-1]['id'],3)
+        kept,_=bounded_queue([{'ok':True},{'oversized':'x'*2000}],max_bytes=1024)
+        self.assertEqual(kept,[{'ok':True}])
+
+    def test_eviction_during_http_request_does_not_remove_an_unsent_newer_row(self):
+        import threading
+        from unittest.mock import Mock
+        from main import PendingUploader, AgentError
+        entered,release=threading.Event(),threading.Event()
+        client=Mock()
+        def ingest(row):
+            if row['id']==1:
+                entered.set()
+                release.wait(timeout=2)
+            else:
+                raise AgentError('offline')
+        client.ingest.side_effect=ingest
+        with TemporaryDirectory() as directory:
+            uploader=PendingUploader(client,Path(directory)/'queue.json',max_events=1)
+            uploader.append({'id':1})
+            uploader.start()
+            try:
+                self.assertTrue(entered.wait(timeout=1))
+                uploader.append({'id':2})
+            finally:
+                release.set()
+                uploader.stop()
+            self.assertEqual(uploader.pending,[{'id':2}])
+
+    def test_camera_queue_is_bounded_when_offline(self):
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import patch
+        from src.api_logger import CameraEventUploader, CameraAPISyncError
+        with TemporaryDirectory() as directory:
+            uploader=CameraEventUploader('http://localhost',str(Path(directory)/'tokens'),queue_file=str(Path(directory)/'camera.json'),max_queue_events=2)
+            with patch.object(uploader,'_send',side_effect=CameraAPISyncError('offline')):
+                for number in range(3):
+                    with self.assertRaises(CameraAPISyncError):
+                        uploader.log('WORKING',1,datetime(2026,11,6,tzinfo=timezone.utc)+timedelta(seconds=number))
+            self.assertEqual(len(uploader._read_queue()),2)

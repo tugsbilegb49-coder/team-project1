@@ -267,6 +267,84 @@ python manage.py calculate_daily_scores --date 2026-11-01
 Dashboard-ийн «Шинэчлэх» дарна. «Оноо тооцох / шинэчлэх» товч гараар шууд тооцох
 боломж хэвээр байна.
 
+## Backup, restore болон хадгалалтын хязгаар
+
+### Database backup
+
+```bash
+python manage.py backup_database
+python manage.py backup_database --output backend/backups/my-backup.sqlite3
+```
+
+Default файл нь `backend/backups/database-TIMESTAMP-RANDOM.sqlite3` (SQLite)
+эсвэл `.dump` (PostgreSQL). Existing output файлыг дарж бичихгүй. Backup файл
+0600 permission-тэй бөгөөд `backups/`, `*.dump`, `*.sqlite3` нь Git-д орохгүй.
+Database дотор account/password hash, token blacklist, task болон activity байдаг тул
+backup-ийг хувийн, найдвартай хадгалалт руу өөрөө хуулна. Энэ команд backup-ийг
+автоматаар cloud руу upload хийхгүй, launcher автоматаар backup үүсгэдэг болоогүй.
+
+SQLite нь online backup API ашиглаж WAL дахь committed өгөгдлийг хамруулна.
+PostgreSQL нь custom-format `pg_dump`, restore-д `pg_restore` ашиглана. Эдгээр CLI
+суусан, server-тэй нийцэх хувилбартай байх ёстой. Нууц үгийг command argument-д
+бичихгүй; subprocess environment-оор дамжуулна. PostgreSQL server дээр бодит
+backup/restore integration тест хийгдээгүй.
+
+### Restore
+
+Эхлээд файлыг өөрчлөлтгүй шалгана:
+
+```bash
+python manage.py restore_database backend/backups/my-backup.sqlite3
+```
+
+Жинхэнэ restore хийхийн **өмнө launcher, тусдаа backend/scheduler, agent/camera-аа
+зогсооно**. Ижил project/schema-гийн backup ашиглана. Дараа нь:
+
+```bash
+python manage.py restore_database backend/backups/my-backup.sqlite3 --apply --confirm-stopped
+```
+
+`--confirm-stopped` нь process-уудыг автоматаар унтраахгүй; өөрөө зогсоосныг
+баталж өгч буй flag. Restore-оос өмнө одоогийн database-ийн safety backup-ийг
+`backend/backups/` дотор үүсгэнэ. SQLite integrity/schema шалгалт хийж, live database
+файлыг өөрт нь restore хийхийг хориглоно. PostgreSQL restore нь single transaction
+ашиглана. Restore амжилттай бол launcher-аа дахин асаана; сэргээгдсэн account,
+password, token төлөв backup авсан үеийнх болно. Локал agent queue нь тусдаа файл
+тул database restore түүнийг буцааж сэргээхгүй.
+
+### Хуучин activity цэвэрлэх
+
+```bash
+python manage.py cleanup_activity --days 90          # Зөвхөн тоо, cutoff харуулна
+python manage.py backup_database                     # Эхлээд backup авна
+python manage.py cleanup_activity --days 90 --apply  # Жинхэнэ устгал
+```
+
+Default хадгалалт 90 хоног, minimum 1 хоног. Camera-ийн дууссан timestamp,
+computer interval-ийн дууссан цагаар cutoff-оос бүхэлдээ өмнөх мөрийг сонгоно.
+Cutoff дамнасан segment-ийг хадгална. User, task, consent, device болон хадгалсан
+score-уудыг устгахгүй. Cleanup автомат биш, `--apply` байхгүй үед юу ч устгахгүй.
+SQLite файл logical delete хийсний дараа шууд жижигрэх албагүй.
+
+Цэвэрлэсэн хуучин өдрийн score-ийг дараа нь дахин тооцвол activity өгөгдөл нь
+байхгүй тул W өөрчлөгдөж болно. Хуучин тайлангаа дахин тооцох шаардлагатай бол
+retention хугацаагаа уртасгах эсвэл backup-аас тусдаа орчинд шалгана.
+
+### Offline queue хязгаар
+
+Үндсэн agent: `agent/config.json` дахь `max_queue_events` (default 10000),
+`max_queue_bytes` (default 10485760 буюу 10 MiB). Camera-д ижил утгууд
+`config.yaml`-ийн `api_sync` дотор байна. Alternative agent-ийн config нь
+`max_spool_batches=10000`, `max_spool_bytes=10485760` ашиглана.
+
+Queue дүүрвэл **хамгийн шинэ бүртгэлүүдийг хадгалж, хуучин бүртгэлүүдийг хасна**;
+ганц мөр нь byte хязгаараас том бол тэр мөрийг алгасна. Хасагдсан тоог log-д
+мэдээлнэ. Хязгаараас хэтэрсэн offline хугацааны бүх өгөгдөл хадгалагдана гэсэн
+баталгаа байхгүй. Хязгаарыг нэмэх эсвэл backend холболтоо сэргээх шаардлагатай.
+Queue нь UTF-8 файлд бичигдэх бодит хэмжээгээр хязгаарлагдана; temp файл бичих
+зуур дискэнд нэмэлт зай хэрэгтэй. Agent upload хийж байх үед queue дүүрсэн ч
+хараахан илгээгдээгүй шинэ мөрийг андуурч устгахгүй.
+
 ## Шалгах
 
 ```bash

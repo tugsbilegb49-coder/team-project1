@@ -50,6 +50,8 @@ class WorkerActivityMonitor:
                 token_file=sync_config.get("token_file", "agent/.agent_tokens.json"),
                 device_config_file=sync_config.get("device_config_file", "agent/config.json"),
                 queue_file=sync_config.get("queue_file", "data/.pending_camera_events.json"),
+                max_queue_events=sync_config.get("max_queue_events", 10000),
+                max_queue_bytes=sync_config.get("max_queue_bytes", 10485760),
             )
         self.tracker = ActivityTracker(on_transition=self._on_transition)
 

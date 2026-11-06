@@ -57,6 +57,7 @@ def make_sender(config):
         config["api_url"], config["api_token"], config["spool_file"],
         timeout=config["request_timeout_seconds"], max_spool_batches=config["max_spool_batches"],
         token_file=config.get("token_file"),
+        max_spool_bytes=config.get("max_spool_bytes", 10485760),
     )
 
 

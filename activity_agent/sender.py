@@ -14,7 +14,12 @@ log = logging.getLogger("agent.sender")
 
 
 class BatchSender:
-    def __init__(self, api_url, api_token, spool_file, timeout=10, max_spool_batches=10000, token_file=None):
+    def __init__(self, api_url, api_token, spool_file, timeout=10, max_spool_batches=10000, token_file=None, max_spool_bytes=10 * 1024 * 1024):
+        if isinstance(max_spool_batches, bool) or not isinstance(max_spool_batches, int) or max_spool_batches < 1:
+            raise ValueError("max_spool_batches must be a positive integer")
+        if isinstance(max_spool_bytes, bool) or not isinstance(max_spool_bytes, int) or max_spool_bytes < 1024:
+            raise ValueError("max_spool_bytes must be at least 1024")
+        self.max_spool_bytes = max_spool_bytes
         self.token_file = token_file
         self.api_url = api_url
         self.api_token = api_token
@@ -90,15 +95,14 @@ class BatchSender:
         if len(remaining) > self.max_spool_batches:
             log.warning("Spool full, dropping %d oldest batches", len(remaining) - self.max_spool_batches)
             remaining = remaining[-self.max_spool_batches:]
-        self._write_spool(remaining)
-        if remaining:
-            log.info("Sent %d batch(es), %d waiting in spool", sent, len(remaining))
-        return sent, len(remaining)
+        retained = self._write_spool(remaining)
+        if retained:
+            log.info("Sent %d batch(es), %d waiting in spool", sent, retained)
+        return sent, retained
 
     def spool_only(self, batch):
         """Унтрах үед: сүлжээ хүлээхгүйгээр batch-ийг spool руу бичнэ."""
-        with open(self.spool_file, "a", encoding="utf-8") as f:
-            f.write(json.dumps(batch) + "\n")
+        self._write_spool(self._read_spool() + [batch])
 
     def _read_spool(self):
         if not os.path.exists(self.spool_file):
@@ -116,8 +120,23 @@ class BatchSender:
         return items
 
     def _write_spool(self, items):
+        lines, total = [], 0
+        for item in reversed(items):
+            line = json.dumps(item, ensure_ascii=False) + "\n"
+            size = len(line.encode("utf-8"))
+            if size > self.max_spool_bytes:
+                continue
+            if len(lines) >= self.max_spool_batches or total + size > self.max_spool_bytes:
+                break
+            lines.append(line)
+            total += size
+        dropped = len(items) - len(lines)
+        if dropped:
+            log.warning("Spool limit: dropped %d oldest/oversized batches", dropped)
         tmp = self.spool_file + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
-            for item in items:
-                f.write(json.dumps(item) + "\n")
+            os.chmod(tmp, 0o600)
+            for line in reversed(lines):
+                f.write(line)
         os.replace(tmp, self.spool_file)
+        return len(lines)
