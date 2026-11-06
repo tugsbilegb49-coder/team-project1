@@ -1,5 +1,5 @@
 from datetime import timedelta
-from django.test import TestCase, LiveServerTestCase
+from django.test import TestCase, LiveServerTestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 from users.models import User
@@ -7,6 +7,7 @@ from activity.models import ComputerActivity
 from .models import Task
 
 
+@override_settings(REQUIRE_MONITORING_CONSENT=False)
 class UnifiedFlowTests(TestCase):
     def setUp(self):
         self.admin = User.objects.create_superuser('admin', password='test-pass-very-long-123')
@@ -30,7 +31,7 @@ class UnifiedFlowTests(TestCase):
         device = self.client.post('/api/devices/enroll/', {'name':'Laptop','platform':'test'}, format='json').data['id']
         self.client.post('/api/consents/grant/', {'policy_version':'2026-11'}, format='json')
         now = timezone.now()
-        app = self.client.post('/api/computer-activity/ingest/', {'device_id':device,'started_at':now.isoformat(),'duration_seconds':30,'application':'Code','category':'WORK'}, format='json')
+        app = self.client.post('/api/computer-activity/ingest/', {'device_id':device,'started_at':(now-timedelta(seconds=30)).isoformat(),'duration_seconds':30,'application':'Code','category':'WORK'}, format='json')
         self.assertEqual(app.status_code, 201)
         camera = self.client.post('/api/activity-events/ingest/', {'device_id':device,'timestamp':now.isoformat(),'duration_seconds':30,'state':'WORKING'}, format='json')
         self.assertEqual(camera.status_code, 201)
@@ -85,6 +86,7 @@ class UnifiedFlowTests(TestCase):
         self.assertEqual(self.client.get('/api/scores/dashboard/', {'employee_id':self.employee.pk}).status_code,403)
 
 
+@override_settings(REQUIRE_MONITORING_CONSENT=False)
 class LiveUploaderTests(LiveServerTestCase):
     """Exercise the real HTTP uploaders against Django, not the mock API."""
     def test_batch_and_camera_upload_with_refresh(self):

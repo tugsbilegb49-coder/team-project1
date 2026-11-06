@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .models import ActivityEvent, ComputerActivity
+from .validation import save_segment
 from .serializers import (
     ActivityEventIngestSerializer,
     ActivityEventSerializer,
@@ -64,12 +65,7 @@ class ActivityEventViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         data = dict(serializer.validated_data)
         device = _resolve_device(request, data)
-        activity, created = ActivityEvent.objects.get_or_create(
-            employee=request.user,
-            source_person_id="",
-            defaults={"device": device},
-            **data,
-        )
+        activity, created = save_segment(ActivityEvent, request.user, {"source_person_id": "", **data}, device)
         return Response(
             ActivityEventSerializer(activity).data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
@@ -102,11 +98,7 @@ class ComputerActivityViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         data = dict(serializer.validated_data)
         device = _resolve_device(request, data)
-        activity, created = ComputerActivity.objects.get_or_create(
-            employee=request.user,
-            defaults={"device": device},
-            **data,
-        )
+        activity, created = save_segment(ComputerActivity, request.user, data, device)
         return Response(
             ComputerActivitySerializer(activity).data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,

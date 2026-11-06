@@ -236,6 +236,25 @@ Camera state: `WORKING`, `PHONE`, `IDLE`, `AWAY`. Хоёр ingest endpoint-д en
 Admin бүх ажилтанд, manager өөрийн хэлтэст, employee өөртөө оноо тооцож болно.
 Ирээдүйн өдрийн оноо тооцохгүй. Өгөгдөл өөрчлөгдвөл дахин тооцно.
 
+## Activity хугацааны API шалгалт
+
+Computer/camera ingest болон API-аар admin үүсгэх, засах хүсэлтэд дараах дүрэм үйлчилнэ:
+
+- `duration_seconds` нь finite тоо, 0-ээс их, хамгийн ихдээ 3600 секунд байна.
+- Computer event-ийн `started_at + duration_seconds` нь ирээдүйд байж болохгүй.
+- Camera-ийн `timestamp` нь segment-ийн **дууссан цаг**; эхэлсэн цаг нь
+  `timestamp - duration_seconds`. Дууссан цаг ирээдүйд байж болохгүй.
+- Нэг ажилтны computer event-үүд төхөөрөмжөөс үл хамааран давхцахгүй.
+  Camera нь тусдаа stream тул computer event-тэй зэрэг бүртгэгдэж болно.
+- Camera uploader хугацааг 0.1 секундээр тоймлодог тул camera event хоорондын
+  0.1 секунд хүртэлх rounding зөрүүг зөвшөөрнө. Computer stream-д энэ зөрүүг зөвшөөрөхгүй.
+- Яг ижил event дахин ирвэл 200 буцааж, давхар мөр үүсгэхгүй. Залгаа interval-ууд зөвшөөрөгдөнө.
+- Batch-ийн хугацаа ирээдүйд байж болохгүй. Нэг мөр давхцвал batch-ийн бүх шинэ мөр,
+  тухайн хүсэлтээр үүсгэсэн device хамт rollback хийгдэнэ. Алдаа нь 400 байна.
+
+Энэ шалгалт өмнө нь хадгалсан өгөгдлийг автоматаар цэвэрлэхгүй. Django admin сайт
+болон CSV import нь API-аас тусдаа зам тул дээрх API шалгалтаар хамгаалагдахгүй.
+
 ## Activity agent-ийн contract ба найдвартай байдал
 
 `activity_agent/` дотор `collector.py` нь хугацаа болон app-ийг цуглуулж,

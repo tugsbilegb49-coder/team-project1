@@ -2,6 +2,8 @@
 from datetime import timedelta
 import hashlib
 from django.db import transaction
+from django.utils import timezone
+from .validation import save_segment, lock_employee
 from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -32,6 +34,10 @@ class BatchSerializer(serializers.Serializer):
         duration = (data['period_end'] - data['period_start']).total_seconds()
         if duration <= 0 or duration > 3600:
             raise serializers.ValidationError('Batch length must be between 0 and 3600 seconds.')
+        if data['period_end'] > timezone.now():
+            raise serializers.ValidationError('Batch cannot finish in the future.')
+        if sum(app['seconds'] for app in data['apps']) > duration:
+            raise serializers.ValidationError('Application seconds exceed the period.')
         if data['active_seconds'] + data['idle_seconds'] > duration + 2:
             raise serializers.ValidationError('Activity exceeds the batch duration.')
         if sum(app['seconds'] for app in data['apps']) > data['active_seconds'] + 2:
@@ -53,6 +59,7 @@ class ActivityBatchView(APIView):
         # Keep this legacy device namespace separate from enrolled UUID workstations.
         device_name = 'activity-agent-' + hashlib.sha256(data['device_id'].encode()).hexdigest()[:32]
         with transaction.atomic():
+            lock_employee(request.user)
             device, _ = Device.objects.get_or_create(employee=request.user, name=device_name, defaults={'platform':'activity_agent'})
             if not device.enabled:
                 from rest_framework.exceptions import PermissionDenied
@@ -64,8 +71,8 @@ class ActivityBatchView(APIView):
             for app in sorted(data['apps'], key=lambda row: (row['name'], row['seconds'])):
                 if not app['seconds']:
                     continue
-                _, new = ComputerActivity.objects.get_or_create(employee=request.user, defaults={'device': device},
-                    started_at=cursor, duration_seconds=app['seconds'], application=app['name'], category='OTHER')
+                _, new = save_segment(ComputerActivity, request.user, {
+                    'started_at':cursor, 'duration_seconds':app['seconds'], 'application':app['name'], 'category':'OTHER'}, device)
                 created += int(new)
                 cursor += timedelta(seconds=app['seconds'])
         return Response({'created':created}, status=201 if created else 200)
