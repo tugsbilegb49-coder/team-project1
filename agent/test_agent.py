@@ -228,3 +228,41 @@ class IntervalSplitTests(unittest.TestCase):
                 uploader.log('WORKING',7200,end+timedelta(days=1))
                 self.assertEqual(sum(call.args[0]['duration_seconds'] for call in send.call_args_list),7200)
                 self.assertTrue(all(call.args[0]['duration_seconds']<=3600 for call in send.call_args_list))
+
+
+class LogoutTests(unittest.TestCase):
+    def test_logout_revokes_before_removing_local_credentials(self):
+        import json
+        from unittest.mock import patch
+        from main import ApiClient
+        with TemporaryDirectory() as directory:
+            path=Path(directory)/'tokens.json'
+            path.write_text(json.dumps({'access':'access','refresh':'refresh'}))
+            client=ApiClient('http://localhost:8000',path)
+            with patch.object(client,'_authenticated_post',return_value={}) as post:
+                client.logout()
+            post.assert_called_once_with('/api/auth/logout/',{'refresh':'refresh'})
+            self.assertFalse(path.exists())
+
+    def test_failed_logout_keeps_tokens_for_revocation_retry(self):
+        import json
+        from unittest.mock import patch
+        from main import ApiClient, AgentError
+        with TemporaryDirectory() as directory:
+            path=Path(directory)/'tokens.json'
+            path.write_text(json.dumps({'access':'access','refresh':'refresh'}))
+            client=ApiClient('http://localhost:8000',path)
+            with patch.object(client,'_authenticated_post',side_effect=AgentError('offline')):
+                with self.assertRaises(AgentError):
+                    client.logout()
+            self.assertTrue(path.exists())
+
+    def test_http_204_logout_response_does_not_require_json_body(self):
+        from unittest.mock import Mock,patch
+        from main import ApiClient
+        response=Mock(status=204)
+        response.__enter__=Mock(return_value=response)
+        response.__exit__=Mock(return_value=False)
+        with patch('main.urlopen',return_value=response):
+            self.assertEqual(ApiClient('http://localhost:8000',Path('unused'))._post_json('/api/auth/logout/',{}),{})
+        response.read.assert_not_called()

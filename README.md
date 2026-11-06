@@ -295,6 +295,7 @@ refresh token 1 өдөр хүчинтэй. Agent-ууд refresh token ашигл
 | --- | --- | --- |
 | `/api/auth/login/` | POST | Username, password-аар access/refresh авах |
 | `/api/auth/refresh/` | POST | Refresh token-оор access шинэчлэх |
+| `/api/auth/logout/` | POST | Өөрийн refresh token-ийг хүчингүй болгох; access authentication шаардлагатай |
 | `/api/users/`, `/api/users/{id}/` | GET, POST / GET, PUT, PATCH, DELETE | User удирдах; өөрчлөх эрх зөвхөн admin |
 | `/api/users/me/` | GET | Одоогийн хэрэглэгч |
 | `/api/departments/`, `/api/departments/{id}/` | GET, POST / GET, PUT, PATCH, DELETE | Хэлтэс; өөрчлөх эрх зөвхөн admin |
@@ -359,6 +360,54 @@ Camera state: `WORKING`, `PHONE`, `IDLE`, `AWAY`. Хоёр ingest endpoint-д en
 
 Admin бүх ажилтанд, manager өөрийн хэлтэст, employee өөртөө оноо тооцож болно.
 Ирээдүйн өдрийн оноо тооцохгүй. Өгөгдөл өөрчлөгдвөл дахин тооцно.
+
+## Login хамгаалалт ба logout
+
+`POST /api/auth/login/` нь амжилттай болон амжилтгүй оролдлогыг хамтад нь хязгаарлана:
+
+- Нэг IP хаягаас **10 оролдлого/минут**.
+- Нэг username-д бүх IP нийлээд **20 оролдлого/минут**.
+- Хязгаар давбал **429** болон хэдэн секунд хүлээхийг заасан `Retry-After` header буцаана.
+  Энэ нь account-ийг байнга lock хийхгүй; цонх өнгөрөхөд дахин нэвтэрч болно.
+
+Username cache key-д plain text-ээр хадгалагдахгүй. Хэрэглэгчийн илгээсэн
+`X-Forwarded-For`-д шууд итгэхгүй; local deployment `REMOTE_ADDR` ашиглана.
+Default Django cache нь process-local тул олон worker/server дээр shared cache
+болон trusted reverse proxy-ийн IP тохиргоо шаардлагатай. DRF throttle нь local
+түвшний хамгаалалт; зэрэгцсэн request-ийн яг атомик hard limit биш.
+
+Logout хүсэлтэд өөрийн access token-ийг Authorization header-т, refresh token-ийг JSON-д өгнө:
+
+```json
+{"refresh":"YOUR_REFRESH_TOKEN"}
+```
+
+Амжилттай бол **204**. Refresh token blacklist-д орж, дахин refresh хийхэд 401 болно.
+Өөр хэрэглэгчийн refresh-ийг хүчингүй болгох хүсэлт 403. Logout нь тухайн нэг
+refresh token-д үйлчилнэ; бусад төхөөрөмжийн өөр login session-ийг автоматаар хаахгүй.
+Өмнө олгосон **access token 30 минутын хугацаагаа дуустал хүчинтэй** хэвээр байна.
+Refresh rotation-ийг асаагаагүй: agent/camera нэг refresh файл ашигладаг урсгалыг хадгалсан.
+
+Үндсэн agent-аас logout хийх:
+
+```bash
+python agent/main.py --logout
+```
+
+Энэ нь collection-ийг pause хийж, сервер дээр refresh-ийг revoke хийгээд локал token
+файлыг устгана. Сервер хүрэхгүй бол collection paused хэвээр, token файлыг retry-д
+хадгална. Logout хийсний дараа camera болон alternative agent мөн shared login-гүй
+болно. Дахин ашиглахдаа `--login`, дараа нь `--resume` хийнэ; offline queue-г устгахгүй.
+
+Шинэ blacklist хүснэгтүүдийг үүсгэхийн тулд `python manage.py migrate` ажиллуулна
+(launcher үүнийг өөрөө хийдэг). Хугацаа дууссан token бүртгэлийг цэвэрлэх команд:
+
+```bash
+python manage.py flushexpiredtokens
+```
+
+Frontend-ийн «Гарах» товчийг энэ өөрчлөлтөд засварлаагүй: тэр нь одоогоор зөвхөн
+browser-ийн local login session-ийг цэвэрлэдэг, шинэ logout API-г дууддаггүй.
 
 ## Activity хугацааны API шалгалт
 

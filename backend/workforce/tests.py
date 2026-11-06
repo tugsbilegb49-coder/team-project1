@@ -10,6 +10,8 @@ from .models import Task
 @override_settings(REQUIRE_MONITORING_CONSENT=False)
 class UnifiedFlowTests(TestCase):
     def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
         self.admin = User.objects.create_superuser('admin', password='test-pass-very-long-123')
         self.employee = User.objects.create_user('worker', password='test-pass-very-long-123')
         self.client = APIClient()
@@ -97,6 +99,8 @@ class LiveUploaderTests(LiveServerTestCase):
         sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
         from activity_agent.sender import BatchSender
         from src.api_logger import CameraEventUploader
+        from django.core.cache import cache
+        cache.clear()
         user = User.objects.create_user('live-worker',password='test-pass-very-long-123')
         client = APIClient()
         tokens = client.post('/api/auth/login/',{'username':user.username,'password':'test-pass-very-long-123'},format='json').data
@@ -120,3 +124,22 @@ class LiveUploaderTests(LiveServerTestCase):
             report=client.get('/api/scores/dashboard/',{'date':timezone.localdate(now).isoformat()})
             self.assertEqual(report.data['applications'][0]['seconds'],40)
             self.assertEqual(report.data['camera'][0]['seconds'],30)
+
+    def test_real_agent_logout_revokes_saved_refresh(self):
+        import json
+        import sys
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from django.core.cache import cache
+        cache.clear()
+        sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
+        from agent.main import ApiClient
+        user=User.objects.create_user('logout-worker',password='test-pass-very-long-123')
+        client=APIClient()
+        tokens=client.post('/api/auth/login/',{'username':user.username,'password':'test-pass-very-long-123'},format='json').data
+        with TemporaryDirectory() as directory:
+            path=Path(directory)/'tokens.json'
+            path.write_text(json.dumps(tokens))
+            ApiClient(self.live_server_url,path).logout()
+            self.assertFalse(path.exists())
+        self.assertEqual(client.post('/api/auth/refresh/',{'refresh':tokens['refresh']},format='json').status_code,401)

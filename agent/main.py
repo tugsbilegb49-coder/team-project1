@@ -305,6 +305,8 @@ class ApiClient:
         )
         try:
             with urlopen(request, timeout=15) as response:
+                if response.status == 204:
+                    return {}
                 return json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
@@ -335,6 +337,11 @@ class ApiClient:
         if not tokens.get("access") or not tokens.get("refresh"):
             raise AgentError("Login response did not contain JWT tokens.")
         self._write_tokens(tokens)
+
+    def logout(self) -> None:
+        tokens = self._read_tokens()
+        self._authenticated_post("/api/auth/logout/", {"refresh": tokens["refresh"]})
+        self.token_path.unlink(missing_ok=True)
 
     def _refresh_access_token(self, tokens: dict[str, str]) -> dict[str, str]:
         refreshed = self._post_json("/api/auth/refresh/", {"refresh": tokens["refresh"]})
@@ -519,6 +526,7 @@ def main() -> None:
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH, help="Path to agent config JSON")
     parser.add_argument("--login", action="store_true", help="Prompt for password and save the local JWT login")
     controls = parser.add_mutually_exclusive_group()
+    controls.add_argument("--logout", action="store_true", help="Revoke the saved refresh token and pause local collection")
     controls.add_argument("--pause", action="store_true", help="Stop collecting and uploading new activity locally")
     controls.add_argument("--resume", action="store_true", help="Resume local collection and uploading")
     controls.add_argument("--status", action="store_true", help="Show local pause and offline-queue status")
@@ -540,6 +548,11 @@ def main() -> None:
             return
         config = load_config(args.config)
         client = ApiClient(config["api_url"], DEFAULT_TOKEN_PATH)
+        if args.logout:
+            set_paused(True)
+            client.logout()
+            print("Logged out. Refresh token revoked, saved login removed, local collection paused.")
+            return
         if args.grant_consent:
             client.grant_consent(args.grant_consent)
             print(f"Consent granted for policy version {args.grant_consent}.")
