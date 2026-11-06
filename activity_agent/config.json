@@ -1,7 +1,7 @@
 {
   "api_url": "http://127.0.0.1:8000/api/v1/activity",
   "api_token": "",
-  "employee_id": "YOUR_USERNAME",
+  "employee_id": "1",
   "batch_interval_seconds": 60,
   "idle_threshold_seconds": 60,
   "tick_seconds": 1,
