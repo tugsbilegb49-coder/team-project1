@@ -449,14 +449,36 @@ function App() {
 
                   <div className="activity-detail-card">
                     <h3>Camera activity</h3>
-                    {report.camera.length ? (
+                    {report.presence?.samples > 0 && (
+                      <div aria-label="Camera presence">
+                        <div className="activity-row">
+                          <span>Хүн илэрсэн / нийт ажиглалт</span>
+                          <strong>{report.presence.present_samples} / {report.presence.samples}</strong>
+                        </div>
+                        <div className="activity-row">
+                          <span>Хүн илрээгүй ажиглалт</span>
+                          <strong>{report.presence.absent_samples}</strong>
+                        </div>
+                        <div className="activity-row">
+                          <span>Сүүлийн ажиглалт</span>
+                          <strong>{report.presence.latest_present ? "Хүн илэрсэн" : "Хүн илрээгүй"}</strong>
+                        </div>
+                        <div className="activity-row">
+                          <span>Илрүүлэлтийн confidence</span>
+                          <strong>{(report.presence.latest_confidence * 100).toFixed(1)}%</strong>
+                        </div>
+                        <p>Эдгээр нь камерын ажиглалтын тоо; ажилласан минутыг илэрхийлэхгүй.</p>
+                      </div>
+                    )}
+                    {report.camera.length > 0 && (
                       report.camera.map((row) => (
                         <div className="activity-row" key={row.state}>
                           <span>{row.state}</span>
                           <strong>{(row.seconds / 60).toFixed(1)} мин</strong>
                         </div>
                       ))
-                    ) : (
+                    )}
+                    {!report.camera.length && !report.presence?.samples && (
                       <p>Camera мэдээлэл бүртгэгдээгүй.</p>
                     )}
                   </div>

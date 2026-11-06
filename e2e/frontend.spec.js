@@ -53,6 +53,7 @@ async function mockApp(page) {
     patches: [],
     score: "42.00",
     appName: "Visual Studio Code",
+    presence: null,
   };
   await page.addInitScript(
     (tokens) =>
@@ -113,11 +114,30 @@ async function mockApp(page) {
         ],
         application_categories: [{ category: "WORK", seconds: 600 }],
         camera: [],
+        presence: state.presence,
       });
     return respond({ detail: `Unexpected request: ${method} ${path}` }, 500);
   });
   return state;
 }
+
+test("camera presence observations appear without being shown as worked minutes", async ({page}) => {
+  const state = await mockApp(page);
+  state.presence = {samples: 5, present_samples: 3, absent_samples: 2,
+    latest_present: false, latest_confidence: 0, present_percent: 60};
+  await page.goto("/");
+  const presence = page.getByLabel("Camera presence", {exact: true});
+  await expect(presence).toBeVisible();
+  await expect(presence).toContainText("3 / 5");
+  await expect(presence).toContainText("Хүн илрээгүй");
+  await expect(presence).toContainText("0.0%");
+  await expect(presence).toContainText("ажилласан минутыг илэрхийлэхгүй");
+  state.presence = {samples: 1, present_samples: 1, absent_samples: 0,
+    latest_present: true, latest_confidence: .81, present_percent: 100};
+  await page.reload();
+  await expect(presence).toContainText("1 / 1");
+  await expect(presence).toContainText("81.0%");
+});
 
 test("saving an existing task preserves an unfinished creation draft", async ({
   page,

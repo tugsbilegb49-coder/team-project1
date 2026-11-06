@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -51,7 +52,10 @@ class ConsentRecordViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset.filter(employee=user)
 
     @action(detail=False, methods=["post"])
+    @transaction.atomic
     def grant(self, request):
+        from activity.validation import lock_employee
+        lock_employee(request.user)
         policy_version = request.data.get("policy_version")
         if not isinstance(policy_version, str) or not policy_version.strip():
             raise ValidationError({"policy_version": "A policy version is required."})
@@ -63,7 +67,10 @@ class ConsentRecordViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(self.get_serializer(record).data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=["post"])
+    @transaction.atomic
     def revoke(self, request):
+        from activity.validation import lock_employee
+        lock_employee(request.user)
         active_records = ConsentRecord.objects.filter(employee=request.user, granted=True, revoked_at__isnull=True)
         revoked = active_records.update(revoked_at=timezone.now())
         return Response({"revoked": revoked})

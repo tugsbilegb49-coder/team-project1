@@ -164,6 +164,51 @@ class CameraEventUploader:
 class PresenceEventUploader(CameraEventUploader):
     event_route = "/api/camera-presence/ingest/"
 
+    def __init__(self, *args, **kwargs):
+        from src.consent import ConsentGuard
+        self.consent_guard = ConsentGuard(self._check_consent)
+        super().__init__(*args, **kwargs)
+
+    def _get_consent(self, access):
+        request = Request(self.api_url+'/api/consents/status/',
+                          headers={'Authorization': 'Bearer '+access})
+        try:
+            with urlopen(request, timeout=2) as response:
+                data = json.load(response)
+        except HTTPError as exc:
+            code = exc.code
+            exc.close()
+            error = CameraAPISyncError(f'Consent check returned HTTP {code}.')
+            error.status = code
+            raise error from exc
+        except (URLError, TimeoutError, ConnectionError, ValueError) as exc:
+            raise CameraAPISyncError('Consent could not be verified; camera paused.') from exc
+        if not isinstance(data, dict) or not isinstance(data.get('active'), bool):
+            raise CameraAPISyncError('Invalid consent response; camera paused.')
+        return data['active']
+
+    def _check_consent(self):
+        tokens = self._read_tokens()
+        try:
+            return self._get_consent(tokens['access'])
+        except CameraAPISyncError as exc:
+            if getattr(exc, 'status', None) != 401:
+                raise
+            tokens = self._refresh(tokens)
+            return self._get_consent(tokens['access'])
+
+    def _send(self, payload):
+        try:
+            return super()._send(payload)
+        except CameraAPISyncError as exc:
+            if getattr(exc, 'status', None) in {401, 403}:
+                self.consent_guard.invalidate()
+            raise
+
+    def close(self):
+        guard_stopped = self.consent_guard.stop()
+        return super().close() and guard_stopped
+
     def log(self, present, confidence, timestamp=None):
         from src.presence import validate_presence
         validate_presence(present, confidence)

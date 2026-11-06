@@ -118,7 +118,11 @@ class LiveUploaderTests(LiveServerTestCase):
                 uploader.log(True,.81,timestamp)
                 self.assertTrue(uploader.flush(3))
                 self.assertEqual(CameraPresence.objects.filter(employee=user).count(),1)
+                uploader.consent_guard.refresh()
+                self.assertTrue(uploader.consent_guard.allowed())
                 consent.revoked_at=timezone.now();consent.save(update_fields=['revoked_at'])
+                uploader.consent_guard.refresh()
+                self.assertFalse(uploader.consent_guard.allowed())
                 uploader.log(False,0,timezone.now()-timedelta(milliseconds=10))
                 self.assertFalse(uploader.flush(3))
             finally:

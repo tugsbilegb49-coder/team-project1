@@ -60,15 +60,15 @@ class CameraPresenceViewSet(viewsets.ReadOnlyModelViewSet):
         from rest_framework.exceptions import ValidationError
         from .validation import lock_employee
         # Camera presence always requires consent, including local development.
-        if not ConsentRecord.objects.filter(employee=request.user, granted=True, revoked_at__isnull=True).exists():
-            from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied('Active monitoring consent is required for camera presence.')
         serializer = CameraPresenceIngestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = dict(serializer.validated_data)
         device = _resolve_device(request, data)
         with transaction.atomic():
             lock_employee(request.user)
+            if not ConsentRecord.objects.filter(employee=request.user, granted=True, revoked_at__isnull=True).exists():
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('Active monitoring consent is required for camera presence.')
             event, created = CameraPresence.objects.get_or_create(employee=request.user, timestamp=data['timestamp'],
                 defaults={'present': data['present'], 'confidence': data['confidence'], 'device': device})
             if not created and (event.present != data['present'] or event.confidence != data['confidence'] or event.device_id != (device.pk if device else None)):

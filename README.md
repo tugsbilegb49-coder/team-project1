@@ -214,6 +214,11 @@ Default camera mode нь frame-ийг RAM-д боловсруулна. YOLO-д `
 хэмжилтийн тайланд хамт тэмдэглэж, test set дээр тааруулж өндөр metric гаргахгүй.
 
 Local CSV: `data/presence.csv`, баганууд `timestamp,present,confidence`.
+`presence_log_max_bytes` default 5 MiB; хэмжээ хүрэхэд эсвэл Улаанбаатарын өдөр
+солигдоход шинэ CSV нээнэ. `presence_log_backups: 3` нь хамгийн ихдээ 3 дугаарласан
+backup, `presence_log_retention_days: 7` нь хуучин generated CSV-г цэвэрлэнэ.
+Хуучин файл аль хэдийн хязгаараас том байвал хамгийн сүүлийн бүтэн мөрүүдийг
+үлдээж atomic rewrite хийнэ. Өөр нэртэй manual archive-д хүрэхгүй.
 Offline queue: `data/.pending_presence_events.json`; upload нь тусдаа thread,
 bounded queue, retry/quarantine болон shared token lock ашиглана. API дээр employee
 нь JWT-ээс, device нь тухайн хэрэглэгчийн enroll-оос тогтоно. Зураг/video зэрэг
@@ -222,14 +227,22 @@ bounded queue, retry/quarantine болон shared token lock ашиглана. A
 
 Session camera consent-ийг `python main.py` асууна. Launcher-ийн camera `y` сонголт
 нь тухайн camera session-ийн зөвшөөрөл болно. `python agent/main.py --pause` эсвэл
-`--revoke-consent` нь local camera sampling-ийг pause хийнэ. Server consent цуцалбал
-API шинэ upload-ийг 403 буцаана; local capture-ийг мөн зогсоохдоо pause/Ctrl+C хэрэглэнэ.
+`--revoke-consent` нь local camera sampling-ийг pause хийнэ. API sync асаалттай үед
+camera нээхээс өмнө server consent-ийг background шалгалтаар баталгаажуулна.
+Шалгалт 1 секунд тутам; баталгаа 3 секундээс хуучирвал эсвэл шалгалт алдахад
+camera pause болж, preview харлаж, local CSV-д шинэ sample бичихгүй. Серверийн
+401/403 upload denial мөн зөвшөөрлийг шууд invalidate хийнэ. Inference дундуур
+зөвшөөрөл өөрчлөгдвөл тухайн sample-ийг хаяж, дараагийн loop дээр camera-г суллана.
+Pause болон consent хүлээх үед ч `q` ажиллана. Consent дахин баталгаажиж, local
+pause тайлагдвал collection үргэлжилнэ. API sync унтраасан standalone demo нь
+тухайн session-ийн explicit local consent ашиглана.
 Зөвшөөрлийг бодит хүний өмнөөс автоматаар олгохгүй. 5 checklist account нь зөвхөн
 Django-ийн түр test database-д үүснэ; бодит database-д user/consent нэмэхгүй.
 Real label цуглуулахын өмнө оролцогч сайн дураар зөвшөөрч, хүрээг тайлбарлуулсан байна.
 
 Presence metadata нь `cleanup_activity --days 90` preview болон `--apply` retention-д
-хамрагдана. Local CSV/label файлуудыг хэрэгцээ дуусмагц оператор устгана; Git-д
+хамрагдана. Local presence CSV дээр дээрх rotation/retention үйлчилнэ; manually
+цуглуулсан label файлуудыг хэрэгцээ дуусмагц оператор устгана. Эдгээрийг Git-д
 оруулахгүй. QA artifact-д scalar aggregate, fictional fixture л оруулна.
 
 ### ERD / API review
@@ -263,6 +276,11 @@ present нь JSON boolean. Backend migration: `0004_camerapresence`.
 scope болон бодит HTTP upload + JWT refresh мөн тесттэй.
 
 ### Random Forest experiment
+
+Dashboard API нь сонгосон ажилтан/Улаанбаатарын өдрийн `presence` summary-г буцаана:
+нийт, present/absent sample count, present хувь, сүүлийн timestamp/boolean/confidence.
+Frontend-ийн Camera activity хэсэг эдгээрийг харуулна. Sample count-ийг ажилласан
+минут гэж хөрвүүлэхгүй; official score-д presence boolean-ийг шууд ашиглахгүй.
 
 ```bash
 pip install -r requirements-ai.txt

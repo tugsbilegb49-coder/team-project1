@@ -1,11 +1,11 @@
-from datetime import timedelta
+from datetime import date, datetime, time, timedelta
 from django.core.cache import cache
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .models import CameraPresence
-from users.models import User, Department, Device
+from users.models import User, Department, Device, ConsentRecord
 
 
 class CameraPresenceTests(TestCase):
@@ -69,3 +69,40 @@ class CameraPresenceTests(TestCase):
         response = self.client.get('/api/camera-presence/').data
         rows = response['results'] if isinstance(response, dict) else response
         self.assertEqual([row['employee'] for row in rows], [managed.pk])
+
+    def test_dashboard_presence_is_scoped_to_employee_and_ulanbaatar_day(self):
+        user = User.objects.create_user('dashboard-presence-owner')
+        other = User.objects.create_user('dashboard-presence-other')
+        day = date(2026, 11, 5)
+        start = timezone.make_aware(datetime.combine(day, time.min))
+        for stamp, present, confidence in [(start, True, .9), (start+timedelta(hours=1), False, 0),
+                                           (start-timedelta(seconds=1), True, .8), (start+timedelta(days=1), True, .8)]:
+            CameraPresence.objects.create(employee=user, timestamp=stamp, present=present, confidence=confidence)
+        CameraPresence.objects.create(employee=other, timestamp=start, present=True, confidence=.99)
+        self.client.force_authenticate(user)
+        response = self.client.get('/api/scores/dashboard/', {'date': str(day)})
+        self.assertEqual(response.status_code, 200)
+        summary = response.data['presence']
+        self.assertEqual(summary['samples'], 2)
+        self.assertEqual(summary['present_samples'], 1)
+        self.assertEqual(summary['absent_samples'], 1)
+        self.assertEqual(summary['present_percent'], 50)
+        self.assertIs(summary['latest_present'], False)
+        self.assertEqual(summary['latest_confidence'], 0)
+        self.assertEqual(self.client.get('/api/scores/dashboard/', {'date': str(day), 'employee_id': other.pk}).status_code, 403)
+        empty = self.client.get('/api/scores/dashboard/', {'date': '2026-11-03'}).data['presence']
+        self.assertEqual(empty['samples'], 0)
+        self.assertIsNone(empty['present_percent'])
+        self.assertIsNone(empty['latest_present'])
+
+    def test_consent_is_rechecked_after_the_employee_write_lock(self):
+        from unittest.mock import patch
+        user = User.objects.create_user('concurrent-revoke-owner')
+        self.client.force_authenticate(user)
+        self.grant()
+        def revoked_while_waiting(employee):
+            ConsentRecord.objects.filter(employee=employee).update(revoked_at=timezone.now())
+        with patch('activity.validation.lock_employee', side_effect=revoked_while_waiting):
+            response = self.client.post('/api/camera-presence/ingest/', self.payload, format='json')
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(CameraPresence.objects.exists())

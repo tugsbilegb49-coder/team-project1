@@ -19,10 +19,10 @@
     {
       "id": "QA-03",
       "type": "team_process",
-      "status": "open",
-      "title": "Team PR evidence and remote CI need future updates",
-      "impact": "Issue/milestone board is published; code and CI workflow have not yet been pushed",
-      "next": "Link every implementation PR and CI artifact on its task issue; board https://github.com/tugsbilegb49-coder/team-project1/issues/9"
+      "status": "ongoing_team_process",
+      "title": "Keep team PR and CI evidence current",
+      "impact": "psutil is declared in QA requirements and the clean-environment QA passed. Source-level dependency fix is complete.",
+      "next": "Use the commit-linked CI run on GitHub board #9 for current remote status; link each future team PR and artifact."
     },
     {
       "id": "QA-04",
@@ -31,6 +31,44 @@
       "title": "Defense rehearsal requires presenter",
       "impact": "Automated QA cannot certify that a human presentation was rehearsed",
       "next": "Follow the README demo script and update qa/rehearsal.json with actual observations"
+    }
+  ],
+  "resolved_implementation_issues": [
+    {
+      "id": "FIX-01",
+      "status": "fixed",
+      "title": "CI psutil dependency",
+      "evidence": "requirements-qa.txt; .github/workflows/qa.yml"
+    },
+    {
+      "id": "FIX-02",
+      "status": "fixed",
+      "title": "Local camera presence migration applied after a database backup",
+      "evidence": "activity.0004_camerapresence; local database verified"
+    },
+    {
+      "id": "FIX-03",
+      "status": "fixed",
+      "title": "Server consent lease gates camera capture and local CSV",
+      "evidence": "src/consent.py; src/api_logger.py; tests/test_presence.py"
+    },
+    {
+      "id": "FIX-04",
+      "status": "fixed",
+      "title": "Presence summary connected to dashboard without inventing duration",
+      "evidence": "backend/activity/reporting.py; src/App.jsx; e2e/live.spec.js"
+    },
+    {
+      "id": "FIX-05",
+      "status": "fixed",
+      "title": "Quit key works while paused or awaiting consent",
+      "evidence": "src/presence.py; tests/test_presence.py"
+    },
+    {
+      "id": "FIX-06",
+      "status": "fixed",
+      "title": "Presence CSV rotates by size/day and prunes old generated files",
+      "evidence": "src/presence.py; config.yaml; tests/test_presence.py"
     }
   ]
 }

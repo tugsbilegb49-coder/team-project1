@@ -33,6 +33,7 @@ env/
 
 # runtime artifacts
 data/*.csv
+data/*.csv.[0-9]*
 *.pt
 backend/db.sqlite3
 backend/.env

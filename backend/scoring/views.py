@@ -14,7 +14,7 @@ from .models import ProductivityScore
 from .serializers import ProductivityScoreSerializer
 from .services import calculate_daily_score, ScoreNotReady
 from activity.models import ComputerActivity
-from activity.reporting import camera_totals_for_day
+from activity.reporting import camera_totals_for_day, presence_summary_for_day
 
 
 User = get_user_model()
@@ -94,6 +94,7 @@ class ProductivityScoreViewSet(viewsets.ReadOnlyModelViewSet):
             "date": report_date.isoformat(),
             "score": self.get_serializer(score).data if score else None,
             "camera": list(camera_rows),
+            'presence': presence_summary_for_day(employee, report_date),
             "applications": list(app_rows),
             "application_categories": list(category_rows),
         })

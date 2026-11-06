@@ -81,6 +81,19 @@ test("real Django login → department/manager → task/quality → inactive fil
   const tokens = JSON.parse(
     await page.evaluate(() => sessionStorage.getItem("worktrack-auth")),
   );
+  const authenticated = {Authorization: `Bearer ${tokens.access}`};
+  const grant = await request.post(`${process.env.VITE_API_URL}/api/consents/grant/`, {
+    headers: authenticated, data: {policy_version: "camera-presence-v1"},
+  });
+  expect(grant.status()).toBe(201);
+  const present = await request.post(`${process.env.VITE_API_URL}/api/camera-presence/ingest/`, {
+    headers: authenticated,
+    data: {timestamp: new Date(Date.now()-2000).toISOString(), present: true, confidence: .83},
+  });
+  expect(present.status()).toBe(201);
+  await page.reload();
+  await expect(page.getByLabel("Camera presence", {exact: true})).toContainText("1 / 1");
+  await expect(page.getByLabel("Camera presence", {exact: true})).toContainText("83.0%");
   await page.getByRole("button", { name: "Гарах", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "WorkTrack — Нэвтрэх" }),
