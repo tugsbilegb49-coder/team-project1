@@ -198,3 +198,17 @@ class LiveUploaderTests(LiveServerTestCase):
             client.force_authenticate(user)
             report=client.get('/api/scores/dashboard/',{'date':timezone.localdate(start).isoformat()})
             self.assertEqual(report.data['applications'][0]['seconds'],30)
+
+
+class ActiveTaskAssigneeTests(TestCase):
+    def test_inactive_user_cannot_receive_new_or_reassigned_task(self):
+        admin=User.objects.create_user('assignment-admin',role='ADMIN')
+        active=User.objects.create_user('active-assignee')
+        inactive=User.objects.create_user('inactive-assignee',is_active=False)
+        client=APIClient();client.force_authenticate(admin)
+        response=client.post('/api/tasks/',{'employee':inactive.pk,'title':'Invalid assignment'},format='json')
+        self.assertEqual(response.status_code,400)
+        task=Task.objects.create(employee=active,title='Existing')
+        self.assertEqual(client.patch(f'/api/tasks/{task.pk}/',{'employee':inactive.pk},format='json').status_code,400)
+        historical=Task.objects.create(employee=inactive,title='Historical')
+        self.assertEqual(client.patch(f'/api/tasks/{historical.pk}/',{'status':'DONE','quality_score':80},format='json').status_code,200)

@@ -30,6 +30,11 @@ class UserSerializer(serializers.ModelSerializer):
                 validate_password(attrs["password"], self.instance or User(username=attrs.get("username", "")))
             except ValidationError as exc:
                 raise serializers.ValidationError({"password": exc.messages})
+        role = attrs.get("role", getattr(self.instance, "role", User.Role.EMPLOYEE))
+        department = attrs.get("department", getattr(self.instance, "department", None))
+        active = attrs.get("is_active", getattr(self.instance, "is_active", True))
+        if active and role == User.Role.MANAGER and department is None:
+            raise serializers.ValidationError({"department": "An active manager must belong to a department."})
         return attrs
 
     def create(self, validated_data):

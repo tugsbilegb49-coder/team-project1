@@ -138,3 +138,19 @@ class LoginProtectionTests(TestCase):
             self.assertEqual(self.login().status_code,429)
         with patch.object(LoginIPThrottle,'rate','1/min',create=True), patch.object(LoginIPThrottle,'timer',return_value=161):
             self.assertEqual(self.login().status_code,200)
+
+
+class ManagerDepartmentValidationTests(TestCase):
+    def test_active_manager_requires_department_but_can_be_deactivated_without_one(self):
+        admin=User.objects.create_user('department-admin',role=User.Role.ADMIN)
+        client=APIClient();client.force_authenticate(admin)
+        payload={'username':'new-manager','password':'A-long-manager-password-2026!','role':'MANAGER'}
+        invalid=client.post('/api/users/',payload,format='json')
+        self.assertEqual(invalid.status_code,400)
+        self.assertIn('department',invalid.data)
+        department=Department.objects.create(name='Manager department')
+        valid=client.post('/api/users/',{**payload,'department':department.pk},format='json')
+        self.assertEqual(valid.status_code,201)
+        self.assertEqual(valid.data['department'],department.pk)
+        legacy=User.objects.create_user('legacy-manager',role='MANAGER')
+        self.assertEqual(client.patch(f'/api/users/{legacy.pk}/',{'is_active':False},format='json').status_code,200)

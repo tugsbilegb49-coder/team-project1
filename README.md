@@ -71,8 +71,9 @@ http://127.0.0.1:8000 руу дамжуулна. Production build-д ижил or
 ## Хэрэглэх дараалал
 
 1. Багийн гишүүд хэсэгт username, нэр, нууц үгтэй employee үүсгэнэ.
-   Department, manager тохиргоог http://127.0.0.1:8000/admin/ дээр хийнэ.
-2. Даалгавар хэсэгт ажилтанд task хуваарилж, deadline, status, чанарын үнэлгээг оруулна.
+   Хэлтсээ вебийн «Багийн гишүүд» хэсэгт үүсгэж сонгоно. Manager-д хэлтэс заавал байна.
+2. Даалгавар хэсэгт идэвхтэй ажилтанд task хуваарилж, deadline, status оруулна.
+   Чанарын үнэлгээг 0–100, хоёр орны нарийвчлалтай оруулаад «Үнэлгээ хадгалах» дарна.
 3. Ажилтан өөрийн account-аар agent-д нэвтэрч, monitoring consent олгоно.
 4. Agent/camera өгөгдөл ирсний дараа Dashboard дээр ажилтан, өдөр сонгож
    «Оноо тооцох / шинэчлэх» дарна. Application, camera, score нь database-аас уншигдана.
@@ -555,6 +556,30 @@ Camera state: `WORKING`, `PHONE`, `IDLE`, `AWAY`. Хоёр ingest endpoint-д en
 Admin бүх ажилтанд, manager өөрийн хэлтэст, employee өөртөө оноо тооцож болно.
 Ирээдүйн өдрийн оноо тооцохгүй. Өгөгдөл өөрчлөгдвөл дахин тооцно.
 
+## Frontend-ийн regression шалгалт
+
+```bash
+npm run test                         # API/session unit tests
+npm run lint
+npm run build
+npx playwright install chromium      # Browser test runtime, нэг удаа
+npm run test:e2e                      # Mock API-тай бодит browser regression
+python verify_frontend.py            # Шинэ түр DB + бодит Django + browser smoke
+```
+
+Browser regression нь хадгалалтын үеийн task draft, manager-ийн хэлтэс,
+идэвхгүй assignee, quality validation/save, report selection болон late response,
+server logout, offline startup/retry, expired session, 320px chart overflow-ийг
+шалгана. Playwright нь тусдаа Vite порт ашиглаж, үндсэн backend руу test өгөгдөл
+бичихгүй. `verify_frontend.py` нь түр SQLite DB/server үүсгэж login → department →
+manager → task → quality → deactivate → logout/refresh revocation урсгалыг
+бодитоор ажиллуулаад бүх түр process/file-аа цэвэрлэнэ.
+
+Default browser suite-д live smoke case алгасагдана; түүнийг `verify_frontend.py`-аар
+ажиллуулна. Test artifact нь `.runtime/frontend-e2e/` дотор, Git-д орохгүй.
+Өөр ажилтан/өдөр сонгоход хуучин тайлан шууд нуугдаж, шинэ хүсэлтийн хариуг л харуулна.
+Хадгалалтын үед task form нуухгүй, талбаруудыг disable хийж draft-ийг хадгална.
+
 ## Бодит орчны шалгалт
 
 2026-11-06-нд энэ Mac дээр хийсэн шалгалтууд:
@@ -669,8 +694,13 @@ python agent/main.py --logout
 python manage.py flushexpiredtokens
 ```
 
-Frontend-ийн «Гарах» товчийг энэ өөрчлөлтөд засварлаагүй: тэр нь одоогоор зөвхөн
-browser-ийн local login session-ийг цэвэрлэдэг, шинэ logout API-г дууддаггүй.
+Frontend-ийн «Гарах» товч одоо logout API-г дуудаж refresh token-ийг revoke хийсний
+дараа browser-ийн session-ийг цэвэрлэнэ. Серверийн түр алдаанд session-ийг хадгалж,
+алдаа харуулан retry хийх боломж үлдээнэ. Refresh 400/401 үед login руу буцна;
+refresh 500/503, network failure үед token-ийг устгахгүй. Logout дээр refresh нь
+аль хэдийн хүчингүй/хугацаа дууссан гэсэн 400 ирвэл local session-оос гарна. Зэрэгцсэн expired
+хүсэлтүүд нэг refresh хүсэлт хуваалцана. Logout-ийн өмнөх data/login/refresh
+хариу шинэ session эсвэл UI-г сэргээхгүй.
 
 ## Activity хугацааны API шалгалт
 

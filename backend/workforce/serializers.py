@@ -24,3 +24,9 @@ class TaskSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "assigned_by", "completed_at", "created_at", "updated_at"]
 
+
+    def validate_employee(self, employee):
+        assigning = self.instance is None or employee.pk != self.instance.employee_id
+        if assigning and not employee.is_active:
+            raise serializers.ValidationError("Tasks can only be assigned to active users.")
+        return employee

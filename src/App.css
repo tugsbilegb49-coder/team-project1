@@ -397,3 +397,40 @@
   font-size: 14px;
   font-weight: 500;
 }
+/* Keep forms mounted while saving, and support narrow screens/keyboard use. */
+.task-form fieldset {
+  border: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+button:disabled { cursor: wait; opacity: .6; }
+.sidebar nav button {
+  background: transparent;
+  color: #84928d;
+  text-align: left;
+  width: 100%;
+}
+.sidebar nav button:hover { background: #eaf7f2; color: #159b80; }
+.sidebar nav button.active { background: #20b99a; color: white; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid #159b80;
+  outline-offset: 3px;
+}
+.quality-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; }
+.quality-form label, .quality-form [role="alert"] { flex-basis: 100%; }
+.quality-form input { width: 110px; }
+[role="alert"] { color: #a62e2e; overflow-wrap: anywhere; }
+.chart-item { grid-template-columns: 70px minmax(0, 1fr) minmax(0, 120px); min-width: 0; }
+.chart-label, .activity-row span, .task-item h3, .task-item p { overflow-wrap: anywhere; min-width: 0; }
+.task-form input, .task-form select, .task-form textarea { max-width: 100%; min-width: 0; }
+@media (max-width: 650px) {
+  .chart-item { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .chart-label { grid-row: 1; grid-column: 1; }
+  .chart-value { grid-row: 1; grid-column: 2; white-space: nowrap; }
+  .chart-bar-bg { grid-row: 2; grid-column: 1 / -1; }
+  .activity-score-card, .activity-detail-card { padding: 16px; min-width: 0; }
+  .activity-controls > * { max-width: 100%; min-width: 0; }
+  .sidebar nav button { width: auto; }
+}

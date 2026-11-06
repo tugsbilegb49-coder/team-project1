@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import "./Tasks.css";
 
 function Tasks({
@@ -9,7 +9,9 @@ function Tasks({
   onDelete,
   onQuality,
   canManage,
+  busy,
 }) {
+  const activeMembers = members.filter((member) => member.is_active);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [deadline, setDeadline] = useState("");
@@ -24,7 +26,8 @@ function Tasks({
       return;
     }
 
-    if (!assignedTo) return alert("Гишүүн сонгоно уу.");
+    if (!activeMembers.some((member) => String(member.id) === assignedTo))
+      return alert("Идэвхтэй гишүүн сонгоно уу.");
     const ok = await onCreate({
       title,
       description,
@@ -62,43 +65,56 @@ function Tasks({
         <form className="task-form" onSubmit={addTask}>
           <h2>Шинэ даалгавар нэмэх</h2>
 
-          <label>Даалгаврын нэр</label>
-          <input
-            type="text"
-            placeholder="Даалгаврын нэрээ бичнэ үү"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
+          <fieldset disabled={busy}>
+            <label htmlFor="task-title">Даалгаврын нэр</label>
+            <input
+              type="text"
+              id="task-title"
+              required
+              maxLength={200}
+              placeholder="Даалгаврын нэрээ бичнэ үү"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
 
-          <label>Тайлбар</label>
-          <textarea
-            placeholder="Даалгаврын тайлбар"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
+            <label htmlFor="task-description">Тайлбар</label>
+            <textarea
+              id="task-description"
+              placeholder="Даалгаврын тайлбар"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
 
-          <label>Дуусах хугацаа</label>
-          <input
-            type="date"
-            value={deadline}
-            onChange={(e) => setDeadline(e.target.value)}
-          />
+            <label htmlFor="task-deadline">Дуусах хугацаа</label>
+            <input
+              id="task-deadline"
+              type="date"
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+            />
 
-          <label>Хариуцах гишүүн</label>
-          <select
-            value={assignedTo}
-            onChange={(e) => setAssignedTo(e.target.value)}
-          >
-            <option value="">Гишүүн сонгох</option>
+            <label htmlFor="task-employee">Хариуцах гишүүн</label>
+            <select
+              id="task-employee"
+              required
+              value={
+                activeMembers.some((member) => String(member.id) === assignedTo)
+                  ? assignedTo
+                  : ""
+              }
+              onChange={(e) => setAssignedTo(e.target.value)}
+            >
+              <option value="">Гишүүн сонгох</option>
 
-            {members.map((member) => (
-              <option key={member.id ?? member.name} value={member.id}>
-                {member.name}
-              </option>
-            ))}
-          </select>
+              {activeMembers.map((member) => (
+                <option key={member.id ?? member.name} value={member.id}>
+                  {member.name}
+                </option>
+              ))}
+            </select>
 
-          <button type="submit">+ Даалгавар нэмэх</button>
+            <button type="submit">+ Даалгавар нэмэх</button>
+          </fieldset>
         </form>
       )}
 
@@ -147,33 +163,17 @@ function Tasks({
                 {task.assignedTo && <p>Хариуцах гишүүн: {task.assignedTo}</p>}
 
                 {canManage && (
-                  <label>
-                    Чанарын үнэлгээ (0–100)
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      defaultValue={task.quality_score ?? ""}
-                      key={`${task.id}-${task.quality_score}`}
-                      onBlur={(e) => {
-                        const value =
-                          e.target.value === "" ? null : Number(e.target.value);
-                        if (
-                          value !==
-                            (task.quality_score === null
-                              ? null
-                              : Number(task.quality_score)) &&
-                          (value === null || (value >= 0 && value <= 100))
-                        )
-                          onQuality(task.id, value);
-                      }}
-                    />
-                  </label>
+                  <QualityEditor
+                    key={`${task.id}:${task.quality_score ?? ""}`}
+                    task={task}
+                    onSave={onQuality}
+                    disabled={busy}
+                  />
                 )}
-                <label>Төлөв</label>
+                <label htmlFor={`task-status-${task.id}`}>Төлөв</label>
                 <select
-                  disabled={!canManage}
+                  id={`task-status-${task.id}`}
+                  disabled={!canManage || busy}
                   value={task.status}
                   onChange={(e) => changeStatus(task.id, e.target.value)}
                 >
@@ -186,7 +186,7 @@ function Tasks({
               <div className="task-actions">
                 <button
                   type="button"
-                  disabled={!canManage}
+                  disabled={!canManage || busy}
                   className="delete-button"
                   onClick={() => deleteTask(task.id)}
                 >
@@ -202,3 +202,76 @@ function Tasks({
 }
 
 export default Tasks;
+
+function QualityEditor({ task, onSave, disabled }) {
+  const stored = task.quality_score == null ? "" : String(task.quality_score);
+  const inputRef = useRef(null);
+  const [value, setValue] = useState(stored);
+  const [saved, setSaved] = useState(stored);
+  const [error, setError] = useState("");
+  const changed =
+    value === "" || saved === ""
+      ? value !== saved
+      : Number(value) !== Number(saved);
+  function validate() {
+    if (inputRef.current?.validity.badInput) {
+      setError("Тоон үнэлгээ оруулна уу.");
+      return false;
+    }
+    const number = Number(value);
+    if (
+      value !== "" &&
+      (!Number.isFinite(number) ||
+        number < 0 ||
+        number > 100 ||
+        Math.abs(number * 100 - Math.round(number * 100)) > 1e-7)
+    ) {
+      setError(
+        "0–100 хооронд, хамгийн ихдээ 2 орны нарийвчлалтай үнэлгээ оруулна уу.",
+      );
+      return false;
+    }
+    setError("");
+    return true;
+  }
+  return (
+    <form
+      className="quality-form"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        if (disabled || !changed || !validate()) return;
+        const ok = await onSave(task.id, value === "" ? null : Number(value));
+        if (ok) {
+          setSaved(value);
+          setError("");
+        } else
+          setError("Үнэлгээ хадгалагдсангүй. Алдааг засаж дахин оролдоно уу.");
+      }}
+      noValidate
+    >
+      <label htmlFor={`quality-${task.id}`}>Чанарын үнэлгээ (0–100)</label>
+      <input
+        id={`quality-${task.id}`}
+        ref={inputRef}
+        type="number"
+        min="0"
+        max="100"
+        step="0.01"
+        value={value}
+        disabled={disabled}
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? `quality-error-${task.id}` : undefined}
+        onChange={(event) => setValue(event.target.value)}
+        onBlur={validate}
+      />
+      <button type="submit" disabled={disabled || !changed}>
+        Үнэлгээ хадгалах
+      </button>
+      {error && (
+        <p id={`quality-error-${task.id}`} role="alert">
+          {error}
+        </p>
+      )}
+    </form>
+  );
+}
