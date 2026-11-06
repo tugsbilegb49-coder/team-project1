@@ -6,6 +6,7 @@ from django.db.models import Avg, Sum
 from django.utils import timezone
 
 from activity.models import ActivityEvent, ComputerActivity
+from activity.reporting import camera_totals_for_day
 from workforce.models import Task
 from .models import ProductivityScore
 
@@ -68,12 +69,7 @@ def calculate_daily_score(employee, score_date):
         )
         work_process = _percentage(productive_seconds, computer_seconds)
     else:
-        state_totals = {
-            row["state"]: row["seconds"] or 0
-            for row in ActivityEvent.objects.filter(employee=employee, timestamp__date=score_date)
-            .values("state")
-            .annotate(seconds=Sum("duration_seconds"))
-        }
+        state_totals = camera_totals_for_day(employee, score_date)
         all_activity_seconds = sum(state_totals.values())
         work_process = _percentage(state_totals.get(ActivityEvent.State.WORKING, 0), all_activity_seconds)
 

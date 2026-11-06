@@ -49,7 +49,7 @@ def bootstrap():
         subprocess.run([sys.executable, '-m', 'venv', str(ROOT / '.venv')], check=True)
     if Path(sys.prefix).resolve() != (ROOT / '.venv').resolve():
         os.execv(str(python), [str(python), str(Path(__file__).resolve()), *sys.argv[1:]])
-    probe = subprocess.run([str(python), '-c', 'import django, rest_framework, corsheaders, dotenv, rest_framework_simplejwt'], capture_output=True)
+    probe = subprocess.run([str(python), '-c', 'import django, rest_framework, corsheaders, dotenv, rest_framework_simplejwt; from zoneinfo import ZoneInfo; ZoneInfo("Asia/Ulaanbaatar")'], capture_output=True)
     if probe.returncode:
         subprocess.run([str(python), '-m', 'pip', 'install', '-r', 'backend/requirements.txt'], cwd=ROOT, check=True)
     npm = shutil.which('npm')

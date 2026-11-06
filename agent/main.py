@@ -22,6 +22,11 @@ import time
 import math
 import threading
 from typing import Any
+
+if __package__:
+    from .intervals import split_interval
+else:
+    from intervals import split_interval
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -85,6 +90,10 @@ def load_config(path: Path) -> dict[str, Any]:
     poll = config.get("poll_interval_seconds", 1)
     if isinstance(poll, bool) or not isinstance(poll, (int, float)) or not math.isfinite(poll) or not 0.1 <= poll <= 5:
         raise AgentError("poll_interval_seconds must be between 0.1 and 5 seconds.")
+    gap = config.get("max_sample_gap_seconds", 10)
+    if isinstance(gap, bool) or not isinstance(gap, (int, float)) or not math.isfinite(gap) or not poll < gap <= 300:
+        raise AgentError("max_sample_gap_seconds must exceed poll_interval_seconds and be at most 300.")
+    config["max_sample_gap_seconds"] = float(gap)
     config["poll_interval_seconds"] = float(poll)
     config["api_url"] = config["api_url"].rstrip("/")
     config["interval_seconds"] = float(interval)
@@ -427,22 +436,27 @@ def run_agent(config: dict[str, Any], client: ApiClient) -> None:
     current_application = None
     segment_started_at = None
     last_observed_at = None
+    last_observed_tick = None
+    recorded_until = None
     uploader = PendingUploader(client)
     uploader.start()
     last_upload = time.monotonic()
     poll_interval = config.get("poll_interval_seconds", 1)
+    max_gap = config.get("max_sample_gap_seconds", 10)
     print(f"Desktop agent started: sample every {poll_interval}s, upload every {config['interval_seconds']}s.")
     print("Only application name, category and duration are sent. Ctrl+C stops collection.")
 
     def close_segment(end):
+        nonlocal recorded_until
         if current_application is None or segment_started_at is None:
             return
-        payload = segment_payload(current_application,
-            category_for(current_application, config["productive_apps"]), segment_started_at, end)
-        if payload:
+        for start, finish in split_interval(segment_started_at, end):
+            payload = segment_payload(current_application,
+                category_for(current_application, config["productive_apps"]), start, finish)
             if config.get("device_id"):
                 payload["device_id"] = config["device_id"]
             uploader.append(payload)
+            recorded_until = finish
 
     try:
         while True:
@@ -450,13 +464,26 @@ def run_agent(config: dict[str, Any], client: ApiClient) -> None:
             if is_paused():
                 if last_observed_at is not None:
                     close_segment(last_observed_at)
-                current_application = segment_started_at = last_observed_at = None
+                current_application = segment_started_at = last_observed_at = last_observed_tick = None
                 # Retry previously recorded segments without collecting paused time.
             else:
                 try:
                     next_application = application_for_idle_state(
                         foreground_application(), idle_seconds(), config["idle_threshold_seconds"])
                     observed_at = _now()
+                    observed_tick = time.monotonic()
+                    if last_observed_at is not None:
+                        wall_gap = (observed_at - last_observed_at).total_seconds()
+                        monotonic_gap = observed_tick - last_observed_tick
+                        if wall_gap <= 0 or wall_gap > max_gap or monotonic_gap > max_gap or abs(wall_gap - monotonic_gap) > 2:
+                            close_segment(last_observed_at)
+                            current_application = segment_started_at = last_observed_at = last_observed_tick = None
+                            print("Sleep/clock gap skipped; starting a new observation.")
+                    # A backwards clock must catch up with already persisted rows.
+                    if recorded_until is not None and observed_at < recorded_until:
+                        current_application = segment_started_at = last_observed_at = last_observed_tick = None
+                        time.sleep(poll_interval)
+                        continue
                     if current_application is None:
                         segment_started_at = observed_at
                     elif next_application != current_application:
@@ -464,10 +491,11 @@ def run_agent(config: dict[str, Any], client: ApiClient) -> None:
                         segment_started_at = observed_at
                     current_application = next_application
                     last_observed_at = observed_at
+                    last_observed_tick = observed_tick
                 except AgentError as exc:
                     if last_observed_at is not None:
                         close_segment(last_observed_at)
-                    current_application = segment_started_at = last_observed_at = None
+                    current_application = segment_started_at = last_observed_at = last_observed_tick = None
                     print(f"Active-app lookup failed; unobserved time skipped: {exc}", file=sys.stderr)
 
             if time.monotonic() - last_upload >= config["interval_seconds"]:

@@ -13,7 +13,8 @@ from rest_framework.response import Response
 from .models import ProductivityScore
 from .serializers import ProductivityScoreSerializer
 from .services import calculate_daily_score
-from activity.models import ActivityEvent, ComputerActivity
+from activity.models import ComputerActivity
+from activity.reporting import camera_totals_for_day
 
 
 User = get_user_model()
@@ -68,12 +69,10 @@ class ProductivityScoreViewSet(viewsets.ReadOnlyModelViewSet):
         except ValueError as exc:
             raise ValidationError({"date": "Use ISO format: YYYY-MM-DD."}) from exc
 
-        camera_rows = (
-            ActivityEvent.objects.filter(employee=employee, timestamp__date=report_date)
-            .values("state")
-            .annotate(seconds=Sum("duration_seconds"))
-            .order_by("state")
-        )
+        camera_rows = [
+            {"state": state, "seconds": seconds}
+            for state, seconds in sorted(camera_totals_for_day(employee, report_date).items())
+        ]
         app_rows = (
             ComputerActivity.objects.filter(employee=employee, started_at__date=report_date)
             .values("application", "category")

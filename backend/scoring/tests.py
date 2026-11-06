@@ -87,3 +87,33 @@ class DailyScoreTests(TestCase):
         self.assertEqual(response.data["score"]["score"], "59.00")
         self.assertEqual(response.data["camera"][0]["state"], "IDLE")
 
+
+
+class CameraMidnightTests(TestCase):
+    def setUp(self):
+        from datetime import timedelta
+        self.employee=User.objects.create_user('midnight-worker')
+        self.day=timezone.localdate()-timedelta(days=2)
+        self.midnight=timezone.make_aware(datetime.combine(self.day+timedelta(days=1),time.min))
+
+    def test_event_ending_at_midnight_belongs_to_previous_day(self):
+        from datetime import timedelta
+        from activity.reporting import camera_totals_for_day
+        ActivityEvent.objects.create(employee=self.employee,timestamp=self.midnight,state='WORKING',duration_seconds=10)
+        ActivityEvent.objects.create(employee=self.employee,timestamp=self.midnight+timedelta(seconds=10),state='IDLE',duration_seconds=10)
+        self.assertEqual(camera_totals_for_day(self.employee,self.day),{'WORKING':10})
+        self.assertEqual(camera_totals_for_day(self.employee,self.day+timedelta(days=1)),{'IDLE':10})
+        before=calculate_daily_score(self.employee,self.day)
+        after=calculate_daily_score(self.employee,self.day+timedelta(days=1))
+        self.assertEqual(float(before.work_process),100)
+        self.assertEqual(float(after.work_process),0)
+
+    def test_existing_unsplit_camera_row_is_apportioned_in_dashboard(self):
+        from datetime import timedelta
+        ActivityEvent.objects.create(employee=self.employee,timestamp=self.midnight+timedelta(seconds=10),state='WORKING',duration_seconds=20)
+        client=APIClient()
+        client.force_authenticate(self.employee)
+        for day in (self.day,self.day+timedelta(days=1)):
+            response=client.get('/api/scores/dashboard/',{'date':day.isoformat()})
+            self.assertEqual(response.status_code,200)
+            self.assertEqual(response.data['camera'],[{'state':'WORKING','seconds':10}])

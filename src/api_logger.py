@@ -7,13 +7,15 @@ never stores a password.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import os
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+from agent.intervals import split_interval
 
 
 class CameraAPISyncError(RuntimeError):
@@ -120,16 +122,21 @@ class CameraEventUploader:
 
     def log(self, state: str, duration_seconds: float, timestamp: datetime | None = None) -> None:
         """Queue then send a completed camera segment for the authenticated employee."""
-        payload: dict[str, Any] = {
-            "timestamp": (timestamp or datetime.now().astimezone()).isoformat(),
-            "state": state,
-            "duration_seconds": round(duration_seconds, 1),
-        }
+        if duration_seconds <= 0:
+            return
+        end = timestamp or datetime.now().astimezone()
+        start = end - timedelta(seconds=duration_seconds)
         device_id = self._device_id()
-        if device_id:
-            payload["device_id"] = device_id
         queue = self._read_queue()
-        queue.append(payload)
+        for beginning, finish in split_interval(start, end):
+            payload: dict[str, Any] = {
+                "timestamp": finish.isoformat(),
+                "state": state,
+                "duration_seconds": (finish - beginning).total_seconds(),
+            }
+            if device_id:
+                payload["device_id"] = device_id
+            queue.append(payload)
         self._write_queue(queue)
         while queue:
             self._send(queue[0])
