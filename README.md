@@ -286,8 +286,8 @@ backup-ийг хувийн, найдвартай хадгалалт руу өө�
 SQLite нь online backup API ашиглаж WAL дахь committed өгөгдлийг хамруулна.
 PostgreSQL нь custom-format `pg_dump`, restore-д `pg_restore` ашиглана. Эдгээр CLI
 суусан, server-тэй нийцэх хувилбартай байх ёстой. Нууц үгийг command argument-д
-бичихгүй; subprocess environment-оор дамжуулна. PostgreSQL server дээр бодит
-backup/restore integration тест хийгдээгүй.
+бичихгүй; subprocess environment-оор дамжуулна. 2026-11-06-нд PostgreSQL 17.11-ийн тусдаа түр cluster дээр бодит backup/restore,
+safety backup-ийг өөр database-д сэргээх туршилт амжилттай хийгдсэн.
 
 ### Restore
 
@@ -438,6 +438,75 @@ Camera state: `WORKING`, `PHONE`, `IDLE`, `AWAY`. Хоёр ingest endpoint-д en
 
 Admin бүх ажилтанд, manager өөрийн хэлтэст, employee өөртөө оноо тооцож болно.
 Ирээдүйн өдрийн оноо тооцохгүй. Өгөгдөл өөрчлөгдвөл дахин тооцно.
+
+## Бодит орчны шалгалт
+
+2026-11-06-нд энэ Mac дээр хийсэн шалгалтууд:
+
+| Шалгалт | Үр дүн |
+| --- | --- |
+| macOS foreground app | Safari → Code гэж бодитоор шилжүүлэхэд хоёул зөв танигдсан |
+| Idle timer | OS-оос idle секунд уншигдсан |
+| Camera capture | Webcam нээгдэж 1920×1080 frame ирсэн |
+| Camera → YOLO → state | Бодит нэг frame боловсруулж хүчинтэй state буцаасан; зураг хадгалаагүй/upload хийгээгүй |
+| Primary agent offline → recovery | Бодит TCP connection-refused үед queue хадгалж, Django HTTP сервер сэргэхэд илгээсэн; replay давхар хугацаа үүсгээгүй |
+| Tracker/association/gaze | 17 unit тест амжилттай; энэ нь бодит detection accuracy-ийн үнэлгээ биш |
+| Sleep/resume | Хэрэглэгч Mac-аа унтуулаад сэрээсэн; 10.17 секундийн observation gap илэрч app time-д ороогүй |
+| PostgreSQL 17.11 | Migration болон 63 backend тест амжилттай |
+| PostgreSQL concurrency | Давхардсан хоёр хүсэлтээс нэг нь 201, нөгөө нь 400; ижил replay нь 201/200, нэг мөр хадгалсан |
+| PostgreSQL backup/restore | `pg_dump` → өөрчлөлт оруулах → `pg_restore` → өөрчлөлт буцсан; safety dump-ийг өөр database-д мөн сэргээсэн |
+
+Offline/recovery туршилт нь **локал endpoint хүрэхгүй болох** нөхцөл үүсгэсэн;
+Mac-ийн Wi-Fi-г унтраагаагүй. Django-ийн түр test database ашигласан, үндсэн
+хэрэглэгчийн database руу test event нэмээгүй. YOLO-ийн стандарт `yolov8n.pt` weight
+локал татагдсан бөгөөд Git-д орохгүй.
+
+Дахин шалгах integration тест:
+
+```bash
+python manage.py test workforce.tests.LiveUploaderTests.test_primary_agent_offline_queue_recovers_against_real_django
+python -m pytest tests/test_activity_tracker.py tests/test_association.py tests/test_gaze.py -q
+```
+
+Sleep/resume-ийг өөрөө туршихдаа launcher-аа асааж, VS Code дээр хэдэн секунд
+ажиллаад Apple → Sleep сонгон 20 секундээс удаан хүлээнэ. Сэрээсний дараа дахин
+хэдэн секунд ажиллаад `.runtime/agent.log` дахь `Sleep/clock gap skipped` мөрийг
+шалгана. Dashboard-ийн нийт app хугацаанд унтсан 20 секунд нэмэгдээгүй байх ёстой.
+Туршилтын өмнөх/дараах хугацааг ялгаж үзнэ; нийт өмнөх бүртгэлийг нойртой андуурахгүй.
+
+PostgreSQL-ийн тестэд тусдаа тестийн server/database болон test database үүсгэх
+эрхтэй хэрэглэгч хэрэгтэй. `backend/.env`-ийн `POSTGRES_*`-ийг тухайн орчинд
+тохируулж `python manage.py test users workforce activity scoring` ажиллуулна.
+SQLite дээрх амжилт PostgreSQL row locking, migration, backup/restore-ийг дангаараа
+батлахгүй. Энэ Mac дээр PostgreSQL 17 суулгаж, зөвхөн private Unix socket ашигласан
+түр cluster дээр дээрх тестүүдийг хийсэн. Байнгын service асаагаагүй, үндсэн
+SQLite database болон `backend/.env`-ийг PostgreSQL рүү өөрчлөөгүй.
+
+Дахин тусгаарласан PostgreSQL шалгалт хийх:
+
+```bash
+python verify_postgresql.py
+# PATH-д PostgreSQL tool байхгүй бол:
+python verify_postgresql.py --pg-bin /opt/homebrew/opt/postgresql@17/bin
+```
+
+Энэ script нь түр cluster/database үүсгэж, migrations, нийт backend тест,
+concurrent ingest, backup/restore шалгаад серверээ зогсоож cluster-ээ устгана.
+Үндсэн database руу холбогдохгүй. macOS/Linux дээр локал PostgreSQL binary шаардана.
+Товч үр дүн `.runtime/postgresql-verification.json` файлд үлдэнэ.
+
+Бодит sleep хэмжилт хийх команд:
+
+```bash
+python verify_sleep.py
+```
+
+READY гарсны дараа Apple → Sleep сонгоод 20 секунд хүлээн сэрээнэ. Script нь
+үндсэн agent-ийн бодит sampler-ийг ашиглах боловч HTTP uploader-ийг diagnostic
+recorder-оор сольдог тул database руу бичихгүй. Сэрсний дараа 8 секунд ажиглаад
+дуусна. Default дээд хугацаа 300 секунд. Завсар илрээгүй бол **inconclusive**,
+илэрсэн завсрыг app time-д оруулаагүй бол **passed** гарна. Үр дүн
+`.runtime/sleep-resume-test.json` файлд үлдэнэ.
 
 ## Login хамгаалалт ба logout
 

@@ -143,3 +143,58 @@ class LiveUploaderTests(LiveServerTestCase):
             ApiClient(self.live_server_url,path).logout()
             self.assertFalse(path.exists())
         self.assertEqual(client.post('/api/auth/refresh/',{'refresh':tokens['refresh']},format='json').status_code,401)
+
+    def test_primary_agent_offline_queue_recovers_against_real_django(self):
+        import json
+        import socket
+        import sys
+        import threading
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from django.core.cache import cache
+        cache.clear()
+        sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
+        from agent.main import ApiClient, PendingUploader, AgentError
+        user=User.objects.create_user('offline-worker',password='test-pass-very-long-123')
+        client=APIClient()
+        tokens=client.post('/api/auth/login/',{'username':user.username,'password':'test-pass-very-long-123'},format='json').data
+        # Allocate then close a local endpoint so the first HTTP request gets
+        # a real connection-refused error (a bound non-listening port can time out on macOS).
+        failed,uploaded=threading.Event(),threading.Event()
+        with TemporaryDirectory() as directory, socket.socket() as unavailable:
+            unavailable.bind(('127.0.0.1',0))
+            token_path=Path(directory)/'tokens.json'
+            queue_path=Path(directory)/'queue.json'
+            token_path.write_text(json.dumps(tokens))
+            unavailable_port=unavailable.getsockname()[1]
+            unavailable.close()
+            http=ApiClient(f'http://127.0.0.1:{unavailable_port}',token_path)
+            class ObservedClient:
+                def ingest(self,payload):
+                    try:
+                        http.ingest(payload)
+                    except AgentError:
+                        failed.set()
+                        raise
+                    uploaded.set()
+            uploader=PendingUploader(ObservedClient(),queue_path)
+            start=timezone.now()-timedelta(seconds=60)
+            payload={'started_at':start.isoformat(),'duration_seconds':30,'application':'Code','category':'WORK'}
+            uploader.append(payload)
+            uploader.start()
+            try:
+                self.assertTrue(failed.wait(timeout=3))
+                self.assertEqual(json.loads(queue_path.read_text()),[payload])
+                http.api_url=self.live_server_url
+                uploader.request_flush()
+                self.assertTrue(uploaded.wait(timeout=3))
+            finally:
+                uploader.stop()
+            self.assertEqual(json.loads(queue_path.read_text()),[])
+            self.assertEqual(ComputerActivity.objects.filter(employee=user).count(),1)
+            # Replaying the acknowledged event must not double time totals.
+            http.ingest(payload)
+            self.assertEqual(ComputerActivity.objects.filter(employee=user).count(),1)
+            client.force_authenticate(user)
+            report=client.get('/api/scores/dashboard/',{'date':timezone.localdate(start).isoformat()})
+            self.assertEqual(report.data['applications'][0]['seconds'],30)
