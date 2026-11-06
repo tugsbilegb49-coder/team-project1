@@ -19,7 +19,16 @@ import re
 import subprocess
 import sys
 import time
+import math
+import threading
 from typing import Any
+
+if __package__:
+    from .intervals import split_interval
+    from .queue_limits import bounded_queue
+else:
+    from intervals import split_interval
+    from queue_limits import bounded_queue
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -78,14 +87,27 @@ def load_config(path: Path) -> dict[str, Any]:
     if not isinstance(config.get("username"), str) or not config["username"].strip():
         raise AgentError("config.json needs the employee username.")
     interval = config.get("interval_seconds", 30)
-    if not isinstance(interval, (int, float)) or interval < 5:
-        raise AgentError("interval_seconds must be a number of at least 5 seconds.")
+    if isinstance(interval, bool) or not isinstance(interval, (int, float)) or not math.isfinite(interval) or not 5 <= interval <= 3600:
+        raise AgentError("interval_seconds must be between 5 and 3600 seconds.")
+    poll = config.get("poll_interval_seconds", 1)
+    if isinstance(poll, bool) or not isinstance(poll, (int, float)) or not math.isfinite(poll) or not 0.1 <= poll <= 5:
+        raise AgentError("poll_interval_seconds must be between 0.1 and 5 seconds.")
+    gap = config.get("max_sample_gap_seconds", 10)
+    if isinstance(gap, bool) or not isinstance(gap, (int, float)) or not math.isfinite(gap) or not poll < gap <= 300:
+        raise AgentError("max_sample_gap_seconds must exceed poll_interval_seconds and be at most 300.")
+    config["max_sample_gap_seconds"] = float(gap)
+    config["poll_interval_seconds"] = float(poll)
     config["api_url"] = config["api_url"].rstrip("/")
     config["interval_seconds"] = float(interval)
     idle_threshold = config.get("idle_threshold_seconds", 300)
     if not isinstance(idle_threshold, (int, float)) or idle_threshold < 30:
         raise AgentError("idle_threshold_seconds must be a number of at least 30 seconds.")
     config["idle_threshold_seconds"] = float(idle_threshold)
+    for key, default, minimum in (("max_queue_events", 10000, 1), ("max_queue_bytes", 10 * 1024 * 1024, 1024)):
+        value = config.get(key, default)
+        if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+            raise AgentError(f"{key} must be an integer of at least {minimum}.")
+        config[key] = value
     config["productive_apps"] = config.get("productive_apps", [])
     return config
 
@@ -107,7 +129,9 @@ def _read_json_list(path: Path) -> list[dict[str, Any]]:
 
 def _write_json_list(path: Path, items: list[dict[str, Any]]) -> None:
     temporary_path = path.with_suffix(".tmp")
-    temporary_path.write_text(json.dumps(items), encoding="utf-8")
+    with temporary_path.open("w", encoding="utf-8") as stream:
+        os.chmod(temporary_path, 0o600)
+        json.dump(items, stream, ensure_ascii=False)
     temporary_path.replace(path)
 
 
@@ -290,6 +314,8 @@ class ApiClient:
         )
         try:
             with urlopen(request, timeout=15) as response:
+                if response.status == 204:
+                    return {}
                 return json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
@@ -320,6 +346,11 @@ class ApiClient:
         if not tokens.get("access") or not tokens.get("refresh"):
             raise AgentError("Login response did not contain JWT tokens.")
         self._write_tokens(tokens)
+
+    def logout(self) -> None:
+        tokens = self._read_tokens()
+        self._authenticated_post("/api/auth/logout/", {"refresh": tokens["refresh"]})
+        self.token_path.unlink(missing_ok=True)
 
     def _refresh_access_token(self, tokens: dict[str, str]) -> dict[str, str]:
         refreshed = self._post_json("/api/auth/refresh/", {"refresh": tokens["refresh"]})
@@ -353,7 +384,7 @@ class ApiClient:
 
 
 def segment_payload(application: str, category: str, started_at: datetime, ended_at: datetime) -> dict[str, Any] | None:
-    duration = round((ended_at - started_at).total_seconds(), 1)
+    duration = (ended_at - started_at).total_seconds()
     if duration <= 0:
         return None
     return {
@@ -364,88 +395,147 @@ def segment_payload(application: str, category: str, started_at: datetime, ended
     }
 
 
+class PendingUploader:
+    """Persist segments immediately; perform slow network I/O off the sampling loop."""
+
+    def __init__(self, client: ApiClient, path: Path = DEFAULT_QUEUE_PATH, max_events=10000, max_bytes=10 * 1024 * 1024):
+        self.client, self.path = client, path
+        self.max_events, self.max_bytes = max_events, max_bytes
+        self.pending, dropped = bounded_queue(_read_json_list(path), max_events, max_bytes)
+        if dropped:
+            print(f"Queue limit: discarded {dropped} oldest/oversized events.", file=sys.stderr)
+            _write_json_list(path, self.pending)
+        self.lock = threading.Lock()
+        self.ready = threading.Event()
+        self.stopping = threading.Event()
+        self.thread = threading.Thread(target=self._run, name="activity-upload", daemon=True)
+
+    def start(self):
+        self.thread.start()
+        self.request_flush()  # Retry any queue left by the previous run.
+
+    def append(self, payload):
+        with self.lock:
+            self.pending, dropped = bounded_queue(self.pending + [payload], self.max_events, self.max_bytes)
+            if dropped:
+                print(f"Queue limit: discarded {dropped} oldest/oversized events.", file=sys.stderr)
+            _write_json_list(self.path, self.pending)
+
+    def request_flush(self):
+        self.ready.set()
+
+    def _run(self):
+        while True:
+            self.ready.wait()
+            self.ready.clear()
+            try:
+                while True:
+                    with self.lock:
+                        payload = self.pending[0] if self.pending else None
+                    if payload is None:
+                        break
+                    self.client.ingest(payload)
+                    with self.lock:
+                        # A full queue may have evicted this in-flight row.
+                        if self.pending and self.pending[0] is payload:
+                            self.pending.pop(0)
+                        _write_json_list(self.path, self.pending)
+            except (AgentError, OSError) as exc:
+                print(f"Upload paused; queue retained: {exc}", file=sys.stderr)
+            if self.stopping.is_set():
+                return
+
+    def stop(self):
+        self.stopping.set()
+        self.ready.set()
+        self.thread.join(timeout=5)
+        # Any in-flight request is replay-safe; unsent rows remain on disk.
+
+
+def _now():
+    return datetime.now().astimezone()
+
+
 def run_agent(config: dict[str, Any], client: ApiClient) -> None:
-    current_application: str | None = None
-    segment_started_at: datetime | None = None
-    pending = _read_json_list(DEFAULT_QUEUE_PATH)
+    current_application = None
+    segment_started_at = None
+    last_observed_at = None
+    last_observed_tick = None
+    recorded_until = None
+    uploader = PendingUploader(client, max_events=config.get("max_queue_events", 10000), max_bytes=config.get("max_queue_bytes", 10 * 1024 * 1024))
+    uploader.start()
+    last_upload = time.monotonic()
+    poll_interval = config.get("poll_interval_seconds", 1)
+    max_gap = config.get("max_sample_gap_seconds", 10)
+    print(f"Desktop agent started: sample every {poll_interval}s, upload every {config['interval_seconds']}s.")
+    print("Only application name, category and duration are sent. Ctrl+C stops collection.")
 
-    print("Desktop agent started. Press Ctrl+C to stop; use --pause or --resume for local control.")
-    print("Only application name, category and duration are sent to the API.")
-
-    def flush_pending() -> None:
-        while pending:
-            client.ingest(pending[0])
-            pending.pop(0)
-            _write_json_list(DEFAULT_QUEUE_PATH, pending)
+    def close_segment(end):
+        nonlocal recorded_until
+        if current_application is None or segment_started_at is None:
+            return
+        for start, finish in split_interval(segment_started_at, end):
+            payload = segment_payload(current_application,
+                category_for(current_application, config["productive_apps"]), start, finish)
+            if config.get("device_id"):
+                payload["device_id"] = config["device_id"]
+            uploader.append(payload)
+            recorded_until = finish
 
     try:
         while True:
+            tick_started = time.monotonic()
             if is_paused():
-                current_application = None
-                segment_started_at = None
-                time.sleep(config["interval_seconds"])
-                continue
-
-            if current_application is None:
+                if last_observed_at is not None:
+                    close_segment(last_observed_at)
+                current_application = segment_started_at = last_observed_at = last_observed_tick = None
+                # Retry previously recorded segments without collecting paused time.
+            else:
                 try:
-                    current_application = application_for_idle_state(
-                        foreground_application(), idle_seconds(), config["idle_threshold_seconds"]
-                    )
-                    segment_started_at = datetime.now().astimezone()
-                    flush_pending()
+                    next_application = application_for_idle_state(
+                        foreground_application(), idle_seconds(), config["idle_threshold_seconds"])
+                    observed_at = _now()
+                    observed_tick = time.monotonic()
+                    if last_observed_at is not None:
+                        wall_gap = (observed_at - last_observed_at).total_seconds()
+                        monotonic_gap = observed_tick - last_observed_tick
+                        if wall_gap <= 0 or wall_gap > max_gap or monotonic_gap > max_gap or abs(wall_gap - monotonic_gap) > 2:
+                            close_segment(last_observed_at)
+                            current_application = segment_started_at = last_observed_at = last_observed_tick = None
+                            print("Sleep/clock gap skipped; starting a new observation.")
+                    # A backwards clock must catch up with already persisted rows.
+                    if recorded_until is not None and observed_at < recorded_until:
+                        current_application = segment_started_at = last_observed_at = last_observed_tick = None
+                        time.sleep(poll_interval)
+                        continue
+                    if current_application is None:
+                        segment_started_at = observed_at
+                    elif next_application != current_application:
+                        close_segment(observed_at)
+                        segment_started_at = observed_at
+                    current_application = next_application
+                    last_observed_at = observed_at
+                    last_observed_tick = observed_tick
                 except AgentError as exc:
-                    print(f"Startup/upload paused: {exc}", file=sys.stderr)
-                time.sleep(config["interval_seconds"])
-                continue
+                    if last_observed_at is not None:
+                        close_segment(last_observed_at)
+                    current_application = segment_started_at = last_observed_at = last_observed_tick = None
+                    print(f"Active-app lookup failed; unobserved time skipped: {exc}", file=sys.stderr)
 
-            time.sleep(config["interval_seconds"])
-            ended_at = datetime.now().astimezone()
-            try:
-                next_application = application_for_idle_state(
-                    foreground_application(), idle_seconds(), config["idle_threshold_seconds"]
-                )
-            except AgentError as exc:
-                print(f"Active-app lookup failed: {exc}", file=sys.stderr)
-                continue
-
-            payload = segment_payload(
-                current_application,
-                category_for(current_application, config["productive_apps"]),
-                segment_started_at,
-                ended_at,
-            )
-            if payload:
-                if config.get("device_id"):
-                    payload["device_id"] = config["device_id"]
-                pending.append(payload)
-                _write_json_list(DEFAULT_QUEUE_PATH, pending)
-            try:
-                flush_pending()
-            except AgentError as exc:
-                print(f"Upload paused: {exc}", file=sys.stderr)
-
-            current_application = next_application
-            segment_started_at = ended_at
+            if time.monotonic() - last_upload >= config["interval_seconds"]:
+                if last_observed_at is not None:
+                    close_segment(last_observed_at)
+                    segment_started_at = last_observed_at
+                uploader.request_flush()
+                last_upload = time.monotonic()
+            time.sleep(max(0, poll_interval - (time.monotonic() - tick_started)))
     except KeyboardInterrupt:
-        ended_at = datetime.now().astimezone()
-        payload = None
-        if current_application is not None and segment_started_at is not None and not is_paused():
-            payload = segment_payload(
-                current_application,
-                category_for(current_application, config["productive_apps"]),
-                segment_started_at,
-                ended_at,
-            )
-        if payload:
-            if config.get("device_id"):
-                payload["device_id"] = config["device_id"]
-            pending.append(payload)
-            _write_json_list(DEFAULT_QUEUE_PATH, pending)
-        try:
-            flush_pending()
-        except AgentError as exc:
-            print(f"Final upload failed: {exc}", file=sys.stderr)
-        print("Desktop agent stopped.")
+        # Stop at the last actual sample instead of guessing the app after it.
+        if last_observed_at is not None and not is_paused():
+            close_segment(last_observed_at)
+    finally:
+        uploader.stop()
+        print("Desktop agent stopped. Unsent segments are retained locally.")
 
 
 def main() -> None:
@@ -453,6 +543,7 @@ def main() -> None:
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH, help="Path to agent config JSON")
     parser.add_argument("--login", action="store_true", help="Prompt for password and save the local JWT login")
     controls = parser.add_mutually_exclusive_group()
+    controls.add_argument("--logout", action="store_true", help="Revoke the saved refresh token and pause local collection")
     controls.add_argument("--pause", action="store_true", help="Stop collecting and uploading new activity locally")
     controls.add_argument("--resume", action="store_true", help="Resume local collection and uploading")
     controls.add_argument("--status", action="store_true", help="Show local pause and offline-queue status")
@@ -474,6 +565,11 @@ def main() -> None:
             return
         config = load_config(args.config)
         client = ApiClient(config["api_url"], DEFAULT_TOKEN_PATH)
+        if args.logout:
+            set_paused(True)
+            client.logout()
+            print("Logged out. Refresh token revoked, saved login removed, local collection paused.")
+            return
         if args.grant_consent:
             client.grant_consent(args.grant_consent)
             print(f"Consent granted for policy version {args.grant_consent}.")

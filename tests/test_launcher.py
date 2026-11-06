@@ -44,3 +44,25 @@ class LauncherTests(unittest.TestCase):
         with patch.object(worktrack.os, 'killpg') as kill:
             worktrack.stop_process(process)
         self.assertEqual(kill.call_args_list[1].args,(1234,signal.SIGKILL))
+
+    def test_web_only_launcher_also_starts_and_stops_scheduler(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        # Exercise orchestration without starting servers or collecting activity.
+        with TemporaryDirectory() as directory:
+            process=Mock()
+            process.poll.return_value=None
+            with patch.object(worktrack,'RUNTIME',Path(directory)), \
+                 patch.object(worktrack.sys,'argv',['worktrack.py','--web-only']), \
+                 patch.object(worktrack,'bootstrap',return_value=(Path('/test/python'),'npm')), \
+                 patch.object(worktrack,'check_http',return_value=True), \
+                 patch.object(worktrack.subprocess,'Popen',return_value=process) as launch, \
+                 patch.object(worktrack,'setup_agent') as agent, \
+                 patch.object(worktrack.webbrowser,'open'), \
+                 patch.object(worktrack.signal,'signal'), \
+                 patch.object(worktrack.time,'sleep',side_effect=KeyboardInterrupt), \
+                 patch.object(worktrack,'stop_process') as stop:
+                worktrack.main()
+            self.assertEqual(launch.call_args.args[0],['/test/python','-u','manage.py','run_score_scheduler'])
+            agent.assert_not_called()
+            stop.assert_called_once_with(process)

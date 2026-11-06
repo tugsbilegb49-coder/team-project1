@@ -8,6 +8,7 @@
   "request_timeout_seconds": 10,
   "spool_file": "data/spool.jsonl",
   "max_spool_batches": 10000,
+  "max_spool_bytes": 10485760,
   "log_file": "data/agent.log",
   "token_file": "../agent/.agent_tokens.json"
 }

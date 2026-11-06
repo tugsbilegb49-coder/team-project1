@@ -7,7 +7,7 @@ never stores a password.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import os
 from pathlib import Path
@@ -15,13 +15,18 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from agent.intervals import split_interval
+from agent.queue_limits import bounded_queue
+
 
 class CameraAPISyncError(RuntimeError):
     """The local camera monitor can continue safely after a sync error."""
 
 
 class CameraEventUploader:
-    def __init__(self, api_url: str, token_file: str, device_config_file: str = "agent/config.json", queue_file: str = "data/.pending_camera_events.json"):
+    def __init__(self, api_url: str, token_file: str, device_config_file: str = "agent/config.json", queue_file: str = "data/.pending_camera_events.json", max_queue_events: int = 10000, max_queue_bytes: int = 10 * 1024 * 1024):
+        bounded_queue([], max_queue_events, max_queue_bytes)
+        self.max_queue_events, self.max_queue_bytes = max_queue_events, max_queue_bytes
         self.api_url = api_url.rstrip("/")
         self.token_file = Path(token_file)
         self.device_config_file = Path(device_config_file)
@@ -45,7 +50,9 @@ class CameraEventUploader:
     def _write_queue(self, queue: list[dict[str, Any]]) -> None:
         self.queue_file.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.queue_file.with_suffix(".tmp")
-        temporary.write_text(json.dumps(queue), encoding="utf-8")
+        with temporary.open("w", encoding="utf-8") as stream:
+            os.chmod(temporary, 0o600)
+            json.dump(queue, stream, ensure_ascii=False)
         temporary.replace(self.queue_file)
 
     def _read_tokens(self) -> dict[str, str]:
@@ -120,16 +127,24 @@ class CameraEventUploader:
 
     def log(self, state: str, duration_seconds: float, timestamp: datetime | None = None) -> None:
         """Queue then send a completed camera segment for the authenticated employee."""
-        payload: dict[str, Any] = {
-            "timestamp": (timestamp or datetime.now().astimezone()).isoformat(),
-            "state": state,
-            "duration_seconds": round(duration_seconds, 1),
-        }
+        if duration_seconds <= 0:
+            return
+        end = timestamp or datetime.now().astimezone()
+        start = end - timedelta(seconds=duration_seconds)
         device_id = self._device_id()
-        if device_id:
-            payload["device_id"] = device_id
         queue = self._read_queue()
-        queue.append(payload)
+        for beginning, finish in split_interval(start, end):
+            payload: dict[str, Any] = {
+                "timestamp": finish.isoformat(),
+                "state": state,
+                "duration_seconds": (finish - beginning).total_seconds(),
+            }
+            if device_id:
+                payload["device_id"] = device_id
+            queue.append(payload)
+        queue, dropped = bounded_queue(queue, self.max_queue_events, self.max_queue_bytes)
+        if dropped:
+            print(f"Camera queue limit: discarded {dropped} oldest/oversized events.")
         self._write_queue(queue)
         while queue:
             self._send(queue[0])

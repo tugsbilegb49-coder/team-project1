@@ -12,8 +12,9 @@ from rest_framework.response import Response
 
 from .models import ProductivityScore
 from .serializers import ProductivityScoreSerializer
-from .services import calculate_daily_score
-from activity.models import ActivityEvent, ComputerActivity
+from .services import calculate_daily_score, ScoreNotReady
+from activity.models import ComputerActivity
+from activity.reporting import camera_totals_for_day
 
 
 User = get_user_model()
@@ -54,7 +55,10 @@ class ProductivityScoreViewSet(viewsets.ReadOnlyModelViewSet):
 
         if score_date > timezone.localdate():
             raise ValidationError({"date": "Future dates cannot be calculated."})
-        score = calculate_daily_score(employee, score_date)
+        try:
+            score = calculate_daily_score(employee, score_date)
+        except ScoreNotReady as exc:
+            raise ValidationError({'detail': str(exc), 'task_ids': exc.task_ids}) from exc
         return Response(self.get_serializer(score).data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=["get"])
@@ -68,12 +72,10 @@ class ProductivityScoreViewSet(viewsets.ReadOnlyModelViewSet):
         except ValueError as exc:
             raise ValidationError({"date": "Use ISO format: YYYY-MM-DD."}) from exc
 
-        camera_rows = (
-            ActivityEvent.objects.filter(employee=employee, timestamp__date=report_date)
-            .values("state")
-            .annotate(seconds=Sum("duration_seconds"))
-            .order_by("state")
-        )
+        camera_rows = [
+            {"state": state, "seconds": seconds}
+            for state, seconds in sorted(camera_totals_for_day(employee, report_date).items())
+        ]
         app_rows = (
             ComputerActivity.objects.filter(employee=employee, started_at__date=report_date)
             .values("application", "category")

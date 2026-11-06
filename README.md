@@ -8,7 +8,7 @@ React frontend, Django API, computer activity agent болон camera monitor н
 
 Finder-ээс төслийн хавтас дахь **Start WorkTrack.command** файлыг давхар дарна.
 Энэ нь Python environment, backend dependency, npm dependency-ийг шаардлагатай үед
-бэлдэж, migration хийгээд backend, frontend, computer agent-ийг хамт асаана.
+бэлдэж, migration хийгээд backend, frontend, онооны scheduler, computer agent-ийг хамт асаана.
 Серверүүд өмнө нь ажиллаж байвал дахин асаахгүй. Browser автоматаар нээгдэнэ.
 Анх удаа Python 3 болон Node.js/npm суусан байх шаардлагатай.
 
@@ -35,7 +35,7 @@ python3 worktrack.py --web-only   # Зөвхөн веб систем
 python3 worktrack.py --camera     # Agent болон camera хамт
 ```
 
-Log-ууд `.runtime/backend.log`, `frontend.log`, `agent.log`, `camera.log` дотор байна.
+Log-ууд `.runtime/backend.log`, `frontend.log`, `scheduler.log`, `agent.log`, `camera.log` дотор байна.
 Launcher ажиллаж байхад agent-ийг өөр terminal эсвэл OS startup script-ээр давхар
 асаахгүй. macOS startup helper-ийн тохиргоо launcher-аас тусдаа хэвээр.
 
@@ -96,6 +96,49 @@ Agent нь device enroll, JWT refresh, offline queue ашиглана. OS-specif
 `agent/` доторх script-үүдээс харна. Давхар хугацаа бүртгэхээс сэргийлж нэг компьютер
 дээр хоёр computer agent зэрэг ажиллуулахгүй.
 
+### Үндсэн agent-ийн хугацааны нарийвчлал
+
+`agent/config.json` дахь `poll_interval_seconds` нь идэвхтэй апп шалгах давтамж
+(default **1 секунд**), `interval_seconds` нь сервер рүү хуримтлагдсан segment-үүдийг
+илгээх давтамж (default **30 секунд**) юм. Хуучин config-д шинэ түлхүүр байхгүй байсан
+ч 1 секундийн default автоматаар хэрэглэгдэнэ.
+
+VS Code → Safari → VS Code гэж 30 секунд дотор солигдсон ч segment бүр тусдаа
+хадгалагдана. Апп хэвээр байсан ч 30 секунд тутам segment-ийг тасалж илгээнэ.
+Upload нь тусдаа thread дээр ажилладаг тул сүлжээ удаашрахад sampler-ийг хүлээлгэхгүй.
+Segment хаагдах бүрд offline queue-д хадгална; retry нь дараагийн upload мөчлөгт хийгдэнэ.
+Ctrl+C үед сүүлийн ажигласан цаг хүртэлх segment-ийг хадгалж, queue илгээхэд
+хамгийн ихдээ 5 секунд хүлээнэ. Үлдсэн өгөгдөл дараагийн асаалтанд дахин илгээгдэнэ.
+
+Энэ нь polling тул 1 секундээс богино апп шилжилт алдагдаж болно; OS lookup удах үед
+бодит sample хоорондын хугацаа уртсаж болно. Апп таних алдаа гарвал танигдаагүй
+завсрыг өмнөх аппад таамгаар нэмэхгүй. Pause үед шинэ хугацаа цуглуулахгүй.
+Энэ өөрчлөлт alternative `activity_agent/`-ийн collector-т хамаарахгүй.
+
+### Өдөр солигдох, sleep/resume
+
+Үндсэн agent-ийн interval-ийг `Asia/Ulaanbaatar`-ын 00:00 заагаар хуваана.
+Жишээ нь 23:59:50–00:00:10 хооронд Code ашиглавал хоёр өдөрт тус бүр 10 секунд
+хадгална. OS timezone өөр байсан ч тайлангийн өдөр Улаанбаатараар тооцогдоно.
+API-ийн 3600 секундийн хязгаарыг давах урт segment мөн жижиглэгдэнэ.
+
+`max_sample_gap_seconds` нь default **10 секунд**. Хоёр observation хооронд
+үүнээс урт завсар гарвал үндсэн agent өмнөх segment-ийг сүүлийн баталгаатай
+observation дээр дуусгаж, сэрсний дараа шинээр эхлүүлнэ. Sleep болон удаан гацсан
+завсрыг ашигласан хугацаанд тооцохгүй. Энэ нь OS sleep event биш, sampling gap-д
+суурилсан хамгаалалт учраас 10 секундээс богино sleep-ийг ялгахгүй.
+
+Wall clock болон monotonic clock зөрөх, цаг ухрах үед мөн interval тасална.
+Цаг ухарвал өмнө хадгалсан дууссан цагт хүрэх хүртэл шинэ хугацаа бүртгэхгүй,
+ингэснээр давхардсан мөр үүсгэхгүй. Компьютерийн цаг серверээс ихээр түрүүлсэн бол
+серверийн future-time validation хүсэлтийг буцааж болох тул OS цагийг зөв тохируулна.
+
+Single-person camera uploader ч segment-ээ өдөр болон 3600 секундээр хуваана.
+Camera timestamp нь дууссан цаг тул яг 00:00-д дууссан хэсэг өмнөх өдөрт тоологдоно.
+Backend camera тайланд өмнө нь хадгалсан өдөр дамнасан мөрийн хугацааг мөн хоёр
+өдөрт хувааж харуулна; database-ийн хуучин мөрийг өөрчлөхгүй. Camera capture-ийн
+sleep хугацааг ялгах нь энэ үндсэн agent-ийн sampling-gap хамгаалалтад хамаарахгүй.
+
 ## Activity agent (өөр хувилбар)
 
 ```bash
@@ -114,8 +157,11 @@ python activity_agent/agent.py run
 `POST /api/v1/activity` compatibility endpoint нь batch-ийг ижил Django database-д
 хадгалж, retry хийхэд ижил мөрийг дахин үүсгэхгүй. Aggregate app хугацаанд дарааллын
 мэдээлэл байдаггүй тул хадгалсан цагийн offset нь бодит foreground дараалал биш.
-Энэ contract-д app-ийн work ангилал байхгүй учраас `OTHER` ангиллаар хадгална;
-keyboard/mouse event тоонуудыг database-д хадгалахгүй. Mock server нь зөвхөн тусдаа
+Энэ contract-ийн аппуудыг серверийн `PRODUCTIVE_APPLICATIONS` жагсаалтаар
+`WORK`, browser нэрээр `BROWSER`, харилцааны аппын нэрээр `COMMUNICATION`, бусдыг
+`OTHER` гэж ангилна. Idle хугацааг `Idle/OTHER`, апп нь тодорхойгүй active хугацааг
+`Unattributed activity/OTHER` segment болгон хадгалж, W-ийн нийт хугацаанд оруулна.
+Keyboard/mouse event тоонуудыг database-д хадгалахгүй. Mock server нь зөвхөн тусдаа
 тестийн хэрэгсэл; үндсэн системд асаах шаардлагагүй.
 
 ## Camera
@@ -142,6 +188,162 @@ SQLite default файл: `backend/db.sqlite3`. PostgreSQL-д `backend/.env` да
 Оноо нь `backend/scoring/services.py`-ийн дүрмийг ашиглана: T/Q/D нь task-аас,
 W нь computer activity-ийн WORK харьцаанаас; computer data байхгүй үед camera
 WORKING харьцаанаас гарна. Энэ дүрэм хуучин `core`-ийн дүрмээс ялгаатай.
+
+## Онооны тодорхой дүрэм
+
+| Үзүүлэлт | Тооцоолол |
+| --- | --- |
+| T | Тухайн өдөр due болсон task-уудаас тэр өдрийн эцэс гэхэд DONE болсон хувь |
+| Q | Дээрх completed task бүрийн `quality_score`-ийн дундаж |
+| D | Тухайн өдөр due болсон нийт task-аас deadline өдрөөсөө оройтохгүй дууссан хувь |
+| W | WORK секунд / нийт computer activity секунд × 100; idle, browser, unknown хугацаа нийтэд орно |
+| P | `0.4T + 0.3Q + 0.2D + 0.1W` |
+
+Computer data байхгүй бол W нь camera-ийн WORKING / нийт camera секунд болно.
+Camera fallback байгаа нь аппын W-тэй ижил хэмжигдэхүүн биш бөгөөд онооны энэ
+хувилбарын сонгосон дүрэм юм. T/Q/D-д task байхгүй бол 0, activity байхгүй бол W=0.
+Өгөгдөлгүй өдрийн 0 нь баталгаатай муу гүйцэтгэл гэсэн дүгнэлт биш.
+P-г 0–100-д хязгаарлаж 2 оронд тоймлоно. LOW: P < 65, MEDIUM: 65 ≤ P < 85,
+HIGH: P ≥ 85. Энэ нь дүрэмд суурилсан тооцоо; AI таамаглал биш.
+
+Дууссан task-ийн completion timestamp эсвэл Q үнэлгээ дутуу бол шинэ оноо
+хадгалахгүй. API 400 болон асуудалтай `task_ids` буцаана. 0 гэсэн чанарын үнэлгээ
+бол зөв утга; null-аас ялгаатай. Хэрэв өмнөх score байсан бол түүнийг өөрчлөхгүй;
+өмнөх `calculated_at`-тай тооцоо хэвээр үлдэнэ. Үнэлгээг нөхөөд дахин тооцно.
+Дараагийн өдөр дууссан task нь өмнөх өдрийн T/Q/D-г буцааж нэмэгдүүлэхгүй.
+Өдрийн CLI/scheduler нь үнэлгээ дутуу ажилтныг log-д мэдээлээд бусдын тооцоог үргэлжлүүлнэ.
+
+Alternative agent-ийн server allowlist-ийг `backend/.env`-д тохируулна:
+
+```dotenv
+PRODUCTIVE_APPLICATIONS=Visual Studio Code,Code,PyCharm,WINWORD,Microsoft Word
+```
+
+App нэрийн том/жижиг үсэг, `.exe`, `.app` өргөтгөлийг normalize хийнэ. `code.exe`
+нь `Code`-той таарна. Safari/Chrome нь default WORK биш. Ажлын browser-ийг WORK
+болгох шаардлагатай бол нэрийг жагсаалтад ил тод нэмнэ. Серверээ дахин асааж хэрэглэнэ.
+Энэ жагсаалт alternative batch-д үйлчилнэ; үндсэн agent-ийн ангиллыг
+`agent/config.json` дахь `productive_apps` удирдана.
+
+Өмнө хадгалсан ангиллыг автоматаар өөрчлөхгүй. Accepted batch-ийг replay хийхэд
+allowlist өөрчлөгдсөн байсан ч өмнөх category хадгалагдана. Хуучин `OTHER` мөрүүдийг
+дахин ангилах migration энэ өөрчлөлтөд ороогүй. Шинэ дүрмээр оноогоо харахын тулд
+өгөгдөл/чанарын үнэлгээгээ шалгаад score-оо дахин тооцно.
+
+## Оноо автоматаар шинэчлэх
+
+`Start WorkTrack.command` launcher нь backend/frontend-тэй хамт score scheduler
+асаана. `--web-only` горимд ч scheduler ажиллана. Асаах үед болон дараа нь
+**60 секунд тутам**, `Asia/Ulaanbaatar` timezone-оор **өнөөдөр ба өчигдрийн**
+идэвхтэй хэрэглэгчдийн оноог дахин тооцно. Ингэснээр agent-ийн шинэ activity,
+шөнө дунд дамнасан бүртгэл, хоцорч ирсэн queue, нөхөж оруулсан quality үнэлгээ
+дараагийн мөчлөгт тусна. Ижил employee/date score-ийг шинэчилнэ, давхар score үүсгэхгүй.
+
+Чанарын үнэлгээ дутуу ажилтныг log-д мэдээлээд алгасна; бусдыг үргэлжлүүлнэ.
+Дараагийн мөчлөгт дахин шалгана. Database түр завгүй эсвэл бэлэн биш үед алдааг
+log-д бичээд дараагийн мөчлөгт дахин оролдоно. Log: `.runtime/scheduler.log`.
+Launcher-ийг Ctrl+C-ээр зогсооход өөрийн асаасан scheduler мөн зогсоно.
+
+Гараар серверүүдээ асаадаг бол scheduler-ийг тусдаа terminal-д ажиллуулна:
+
+```bash
+python manage.py run_score_scheduler                 # Default: 60 секунд
+python manage.py run_score_scheduler --interval 120  # 120 секунд тутам
+python manage.py run_score_scheduler --once          # Хоёр өдрийг нэг удаа тооцоод гарах
+```
+
+Docker Compose-ийн scheduler мөн `--interval 60` ашиглана. Хуучин `--hour` болон
+`--minute` сонголтыг шинэчилж `--interval` болгосон. Давтамж 10–3600 секунд байна.
+
+Хоёроос олон хоногийн өмнөх өгөгдөл өөрчлөгдвөл тухайн өдрийг тусад нь дахин тооцно:
+
+```bash
+python manage.py calculate_daily_scores --date 2026-11-01
+```
+
+Компьютер унтарсан эсвэл launcher зогссон үед локал scheduler ажиллахгүй. Дахин
+асаахад зөвхөн өнөөдөр/өчигдрийг нөхөж тооцно; бүх хуучин өдрийг автоматаар нөхөхгүй.
+Вебийн нээлттэй хуудас автоматаар дахин хүсэлт явуулдаг болоогүй: шинэ оноог харахдаа
+Dashboard-ийн «Шинэчлэх» дарна. «Оноо тооцох / шинэчлэх» товч гараар шууд тооцох
+боломж хэвээр байна.
+
+## Backup, restore болон хадгалалтын хязгаар
+
+### Database backup
+
+```bash
+python manage.py backup_database
+python manage.py backup_database --output backend/backups/my-backup.sqlite3
+```
+
+Default файл нь `backend/backups/database-TIMESTAMP-RANDOM.sqlite3` (SQLite)
+эсвэл `.dump` (PostgreSQL). Existing output файлыг дарж бичихгүй. Backup файл
+0600 permission-тэй бөгөөд `backups/`, `*.dump`, `*.sqlite3` нь Git-д орохгүй.
+Database дотор account/password hash, token blacklist, task болон activity байдаг тул
+backup-ийг хувийн, найдвартай хадгалалт руу өөрөө хуулна. Энэ команд backup-ийг
+автоматаар cloud руу upload хийхгүй, launcher автоматаар backup үүсгэдэг болоогүй.
+
+SQLite нь online backup API ашиглаж WAL дахь committed өгөгдлийг хамруулна.
+PostgreSQL нь custom-format `pg_dump`, restore-д `pg_restore` ашиглана. Эдгээр CLI
+суусан, server-тэй нийцэх хувилбартай байх ёстой. Нууц үгийг command argument-д
+бичихгүй; subprocess environment-оор дамжуулна. 2026-11-06-нд PostgreSQL 17.11-ийн тусдаа түр cluster дээр бодит backup/restore,
+safety backup-ийг өөр database-д сэргээх туршилт амжилттай хийгдсэн.
+
+### Restore
+
+Эхлээд файлыг өөрчлөлтгүй шалгана:
+
+```bash
+python manage.py restore_database backend/backups/my-backup.sqlite3
+```
+
+Жинхэнэ restore хийхийн **өмнө launcher, тусдаа backend/scheduler, agent/camera-аа
+зогсооно**. Ижил project/schema-гийн backup ашиглана. Дараа нь:
+
+```bash
+python manage.py restore_database backend/backups/my-backup.sqlite3 --apply --confirm-stopped
+```
+
+`--confirm-stopped` нь process-уудыг автоматаар унтраахгүй; өөрөө зогсоосныг
+баталж өгч буй flag. Restore-оос өмнө одоогийн database-ийн safety backup-ийг
+`backend/backups/` дотор үүсгэнэ. SQLite integrity/schema шалгалт хийж, live database
+файлыг өөрт нь restore хийхийг хориглоно. PostgreSQL restore нь single transaction
+ашиглана. Restore амжилттай бол launcher-аа дахин асаана; сэргээгдсэн account,
+password, token төлөв backup авсан үеийнх болно. Локал agent queue нь тусдаа файл
+тул database restore түүнийг буцааж сэргээхгүй.
+
+### Хуучин activity цэвэрлэх
+
+```bash
+python manage.py cleanup_activity --days 90          # Зөвхөн тоо, cutoff харуулна
+python manage.py backup_database                     # Эхлээд backup авна
+python manage.py cleanup_activity --days 90 --apply  # Жинхэнэ устгал
+```
+
+Default хадгалалт 90 хоног, minimum 1 хоног. Camera-ийн дууссан timestamp,
+computer interval-ийн дууссан цагаар cutoff-оос бүхэлдээ өмнөх мөрийг сонгоно.
+Cutoff дамнасан segment-ийг хадгална. User, task, consent, device болон хадгалсан
+score-уудыг устгахгүй. Cleanup автомат биш, `--apply` байхгүй үед юу ч устгахгүй.
+SQLite файл logical delete хийсний дараа шууд жижигрэх албагүй.
+
+Цэвэрлэсэн хуучин өдрийн score-ийг дараа нь дахин тооцвол activity өгөгдөл нь
+байхгүй тул W өөрчлөгдөж болно. Хуучин тайлангаа дахин тооцох шаардлагатай бол
+retention хугацаагаа уртасгах эсвэл backup-аас тусдаа орчинд шалгана.
+
+### Offline queue хязгаар
+
+Үндсэн agent: `agent/config.json` дахь `max_queue_events` (default 10000),
+`max_queue_bytes` (default 10485760 буюу 10 MiB). Camera-д ижил утгууд
+`config.yaml`-ийн `api_sync` дотор байна. Alternative agent-ийн config нь
+`max_spool_batches=10000`, `max_spool_bytes=10485760` ашиглана.
+
+Queue дүүрвэл **хамгийн шинэ бүртгэлүүдийг хадгалж, хуучин бүртгэлүүдийг хасна**;
+ганц мөр нь byte хязгаараас том бол тэр мөрийг алгасна. Хасагдсан тоог log-д
+мэдээлнэ. Хязгаараас хэтэрсэн offline хугацааны бүх өгөгдөл хадгалагдана гэсэн
+баталгаа байхгүй. Хязгаарыг нэмэх эсвэл backend холболтоо сэргээх шаардлагатай.
+Queue нь UTF-8 файлд бичигдэх бодит хэмжээгээр хязгаарлагдана; temp файл бичих
+зуур дискэнд нэмэлт зай хэрэгтэй. Agent upload хийж байх үед queue дүүрсэн ч
+хараахан илгээгдээгүй шинэ мөрийг андуурч устгахгүй.
 
 ## Шалгах
 
@@ -171,6 +373,7 @@ refresh token 1 өдөр хүчинтэй. Agent-ууд refresh token ашигл
 | --- | --- | --- |
 | `/api/auth/login/` | POST | Username, password-аар access/refresh авах |
 | `/api/auth/refresh/` | POST | Refresh token-оор access шинэчлэх |
+| `/api/auth/logout/` | POST | Өөрийн refresh token-ийг хүчингүй болгох; access authentication шаардлагатай |
 | `/api/users/`, `/api/users/{id}/` | GET, POST / GET, PUT, PATCH, DELETE | User удирдах; өөрчлөх эрх зөвхөн admin |
 | `/api/users/me/` | GET | Одоогийн хэрэглэгч |
 | `/api/departments/`, `/api/departments/{id}/` | GET, POST / GET, PUT, PATCH, DELETE | Хэлтэс; өөрчлөх эрх зөвхөн admin |
@@ -235,6 +438,142 @@ Camera state: `WORKING`, `PHONE`, `IDLE`, `AWAY`. Хоёр ingest endpoint-д en
 
 Admin бүх ажилтанд, manager өөрийн хэлтэст, employee өөртөө оноо тооцож болно.
 Ирээдүйн өдрийн оноо тооцохгүй. Өгөгдөл өөрчлөгдвөл дахин тооцно.
+
+## Бодит орчны шалгалт
+
+2026-11-06-нд энэ Mac дээр хийсэн шалгалтууд:
+
+| Шалгалт | Үр дүн |
+| --- | --- |
+| macOS foreground app | Safari → Code гэж бодитоор шилжүүлэхэд хоёул зөв танигдсан |
+| Idle timer | OS-оос idle секунд уншигдсан |
+| Camera capture | Webcam нээгдэж 1920×1080 frame ирсэн |
+| Camera → YOLO → state | Бодит нэг frame боловсруулж хүчинтэй state буцаасан; зураг хадгалаагүй/upload хийгээгүй |
+| Primary agent offline → recovery | Бодит TCP connection-refused үед queue хадгалж, Django HTTP сервер сэргэхэд илгээсэн; replay давхар хугацаа үүсгээгүй |
+| Tracker/association/gaze | 17 unit тест амжилттай; энэ нь бодит detection accuracy-ийн үнэлгээ биш |
+| Sleep/resume | Хэрэглэгч Mac-аа унтуулаад сэрээсэн; 10.17 секундийн observation gap илэрч app time-д ороогүй |
+| PostgreSQL 17.11 | Migration болон 63 backend тест амжилттай |
+| PostgreSQL concurrency | Давхардсан хоёр хүсэлтээс нэг нь 201, нөгөө нь 400; ижил replay нь 201/200, нэг мөр хадгалсан |
+| PostgreSQL backup/restore | `pg_dump` → өөрчлөлт оруулах → `pg_restore` → өөрчлөлт буцсан; safety dump-ийг өөр database-д мөн сэргээсэн |
+
+Offline/recovery туршилт нь **локал endpoint хүрэхгүй болох** нөхцөл үүсгэсэн;
+Mac-ийн Wi-Fi-г унтраагаагүй. Django-ийн түр test database ашигласан, үндсэн
+хэрэглэгчийн database руу test event нэмээгүй. YOLO-ийн стандарт `yolov8n.pt` weight
+локал татагдсан бөгөөд Git-д орохгүй.
+
+Дахин шалгах integration тест:
+
+```bash
+python manage.py test workforce.tests.LiveUploaderTests.test_primary_agent_offline_queue_recovers_against_real_django
+python -m pytest tests/test_activity_tracker.py tests/test_association.py tests/test_gaze.py -q
+```
+
+Sleep/resume-ийг өөрөө туршихдаа launcher-аа асааж, VS Code дээр хэдэн секунд
+ажиллаад Apple → Sleep сонгон 20 секундээс удаан хүлээнэ. Сэрээсний дараа дахин
+хэдэн секунд ажиллаад `.runtime/agent.log` дахь `Sleep/clock gap skipped` мөрийг
+шалгана. Dashboard-ийн нийт app хугацаанд унтсан 20 секунд нэмэгдээгүй байх ёстой.
+Туршилтын өмнөх/дараах хугацааг ялгаж үзнэ; нийт өмнөх бүртгэлийг нойртой андуурахгүй.
+
+PostgreSQL-ийн тестэд тусдаа тестийн server/database болон test database үүсгэх
+эрхтэй хэрэглэгч хэрэгтэй. `backend/.env`-ийн `POSTGRES_*`-ийг тухайн орчинд
+тохируулж `python manage.py test users workforce activity scoring` ажиллуулна.
+SQLite дээрх амжилт PostgreSQL row locking, migration, backup/restore-ийг дангаараа
+батлахгүй. Энэ Mac дээр PostgreSQL 17 суулгаж, зөвхөн private Unix socket ашигласан
+түр cluster дээр дээрх тестүүдийг хийсэн. Байнгын service асаагаагүй, үндсэн
+SQLite database болон `backend/.env`-ийг PostgreSQL рүү өөрчлөөгүй.
+
+Дахин тусгаарласан PostgreSQL шалгалт хийх:
+
+```bash
+python verify_postgresql.py
+# PATH-д PostgreSQL tool байхгүй бол:
+python verify_postgresql.py --pg-bin /opt/homebrew/opt/postgresql@17/bin
+```
+
+Энэ script нь түр cluster/database үүсгэж, migrations, нийт backend тест,
+concurrent ingest, backup/restore шалгаад серверээ зогсоож cluster-ээ устгана.
+Үндсэн database руу холбогдохгүй. macOS/Linux дээр локал PostgreSQL binary шаардана.
+Товч үр дүн `.runtime/postgresql-verification.json` файлд үлдэнэ.
+
+Бодит sleep хэмжилт хийх команд:
+
+```bash
+python verify_sleep.py
+```
+
+READY гарсны дараа Apple → Sleep сонгоод 20 секунд хүлээн сэрээнэ. Script нь
+үндсэн agent-ийн бодит sampler-ийг ашиглах боловч HTTP uploader-ийг diagnostic
+recorder-оор сольдог тул database руу бичихгүй. Сэрсний дараа 8 секунд ажиглаад
+дуусна. Default дээд хугацаа 300 секунд. Завсар илрээгүй бол **inconclusive**,
+илэрсэн завсрыг app time-д оруулаагүй бол **passed** гарна. Үр дүн
+`.runtime/sleep-resume-test.json` файлд үлдэнэ.
+
+## Login хамгаалалт ба logout
+
+`POST /api/auth/login/` нь амжилттай болон амжилтгүй оролдлогыг хамтад нь хязгаарлана:
+
+- Нэг IP хаягаас **10 оролдлого/минут**.
+- Нэг username-д бүх IP нийлээд **20 оролдлого/минут**.
+- Хязгаар давбал **429** болон хэдэн секунд хүлээхийг заасан `Retry-After` header буцаана.
+  Энэ нь account-ийг байнга lock хийхгүй; цонх өнгөрөхөд дахин нэвтэрч болно.
+
+Username cache key-д plain text-ээр хадгалагдахгүй. Хэрэглэгчийн илгээсэн
+`X-Forwarded-For`-д шууд итгэхгүй; local deployment `REMOTE_ADDR` ашиглана.
+Default Django cache нь process-local тул олон worker/server дээр shared cache
+болон trusted reverse proxy-ийн IP тохиргоо шаардлагатай. DRF throttle нь local
+түвшний хамгаалалт; зэрэгцсэн request-ийн яг атомик hard limit биш.
+
+Logout хүсэлтэд өөрийн access token-ийг Authorization header-т, refresh token-ийг JSON-д өгнө:
+
+```json
+{"refresh":"YOUR_REFRESH_TOKEN"}
+```
+
+Амжилттай бол **204**. Refresh token blacklist-д орж, дахин refresh хийхэд 401 болно.
+Өөр хэрэглэгчийн refresh-ийг хүчингүй болгох хүсэлт 403. Logout нь тухайн нэг
+refresh token-д үйлчилнэ; бусад төхөөрөмжийн өөр login session-ийг автоматаар хаахгүй.
+Өмнө олгосон **access token 30 минутын хугацаагаа дуустал хүчинтэй** хэвээр байна.
+Refresh rotation-ийг асаагаагүй: agent/camera нэг refresh файл ашигладаг урсгалыг хадгалсан.
+
+Үндсэн agent-аас logout хийх:
+
+```bash
+python agent/main.py --logout
+```
+
+Энэ нь collection-ийг pause хийж, сервер дээр refresh-ийг revoke хийгээд локал token
+файлыг устгана. Сервер хүрэхгүй бол collection paused хэвээр, token файлыг retry-д
+хадгална. Logout хийсний дараа camera болон alternative agent мөн shared login-гүй
+болно. Дахин ашиглахдаа `--login`, дараа нь `--resume` хийнэ; offline queue-г устгахгүй.
+
+Шинэ blacklist хүснэгтүүдийг үүсгэхийн тулд `python manage.py migrate` ажиллуулна
+(launcher үүнийг өөрөө хийдэг). Хугацаа дууссан token бүртгэлийг цэвэрлэх команд:
+
+```bash
+python manage.py flushexpiredtokens
+```
+
+Frontend-ийн «Гарах» товчийг энэ өөрчлөлтөд засварлаагүй: тэр нь одоогоор зөвхөн
+browser-ийн local login session-ийг цэвэрлэдэг, шинэ logout API-г дууддаггүй.
+
+## Activity хугацааны API шалгалт
+
+Computer/camera ingest болон API-аар admin үүсгэх, засах хүсэлтэд дараах дүрэм үйлчилнэ:
+
+- `duration_seconds` нь finite тоо, 0-ээс их, хамгийн ихдээ 3600 секунд байна.
+- Computer event-ийн `started_at + duration_seconds` нь ирээдүйд байж болохгүй.
+- Camera-ийн `timestamp` нь segment-ийн **дууссан цаг**; эхэлсэн цаг нь
+  `timestamp - duration_seconds`. Дууссан цаг ирээдүйд байж болохгүй.
+- Нэг ажилтны computer event-үүд төхөөрөмжөөс үл хамааран давхцахгүй.
+  Camera нь тусдаа stream тул computer event-тэй зэрэг бүртгэгдэж болно.
+- Camera uploader хугацааг 0.1 секундээр тоймлодог тул camera event хоорондын
+  0.1 секунд хүртэлх rounding зөрүүг зөвшөөрнө. Computer stream-д энэ зөрүүг зөвшөөрөхгүй.
+- Яг ижил event дахин ирвэл 200 буцааж, давхар мөр үүсгэхгүй. Залгаа interval-ууд зөвшөөрөгдөнө.
+- Batch-ийн хугацаа ирээдүйд байж болохгүй. Нэг мөр давхцвал batch-ийн бүх шинэ мөр,
+  тухайн хүсэлтээр үүсгэсэн device хамт rollback хийгдэнэ. Алдаа нь 400 байна.
+
+Энэ шалгалт өмнө нь хадгалсан өгөгдлийг автоматаар цэвэрлэхгүй. Django admin сайт
+болон CSV import нь API-аас тусдаа зам тул дээрх API шалгалтаар хамгаалагдахгүй.
 
 ## Activity agent-ийн contract ба найдвартай байдал
 
