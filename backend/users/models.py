@@ -147,3 +147,18 @@ class LauncherInterval(models.Model):
                 condition=models.Q(ended_at__gte=models.F('started_at')), name='launcher_interval_order'
             ),
         ]
+
+
+class PasswordResetCode(models.Model):
+    """A one-time code an admin gives an employee who forgot their password (no e-mail needed).
+
+    Only a hash is stored. The code works once, for one day, and a newer code replaces older ones.
+    """
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='reset_codes')
+    code_hash = models.CharField(max_length=64)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='issued_reset_codes'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()

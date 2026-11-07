@@ -9,6 +9,7 @@ import Today, { PasswordSettings } from './Today';
 import MonthlyReport from './MonthlyReport';
 import { FirstAdminSetup, FirstRunHint } from './FirstRun';
 import { readSetupToken } from './setupToken';
+import { ResetWithCode } from './ResetPassword';
 import {
   AgentStatus,
   AuditHistory,
@@ -36,6 +37,8 @@ function App() {
   const [user, setUser] = useState(null),
     [page, setPage] = useState('today');
   const [setupToken, setSetupToken] = useState(readSetupToken);
+  const [resetting, setResetting] = useState(false),
+    [resetDone, setResetDone] = useState('');
   const [tasks, setTasks] = useState([]),
     [members, setMembers] = useState([]),
     [departments, setDepartments] = useState([]);
@@ -237,16 +240,28 @@ function App() {
         onSkip={() => setSetupToken('')}
       />
     );
+  if (!user && resetting)
+    return (
+      <ResetWithCode
+        onDone={(username) => {
+          setResetting(false);
+          setResetDone(username);
+        }}
+        onCancel={() => setResetting(false)}
+      />
+    );
   if (!user)
     return (
       <main className="main">
         <form className="task-form" onSubmit={signIn}>
           <h1>WorkTrack — Нэвтрэх</h1>
           <label htmlFor="login-username">Хэрэглэгчийн нэр</label>
+          {resetDone && <p role="status">Нууц үг шинэчлэгдлээ. Шинэ нууц үгээрээ нэвтэрнэ үү.</p>}
           <input
             id="login-username"
             name="username"
             autoComplete="username"
+            defaultValue={resetDone}
             required
             disabled={busy}
           />
@@ -261,9 +276,12 @@ function App() {
           />
           {error && <p role="alert">{error}</p>}
           <button disabled={busy}>Нэвтрэх</button>
+          <button type="button" className="secondary-button" onClick={() => setResetting(true)}>
+            Нууц үгээ мартсан уу?
+          </button>
           <p className="muted">
-            Нэвтрэх нэр эсвэл нууц үгээ мартсан бол байгууллагынхаа админтай холбогдоно уу. Админ
-            таны нэвтрэх нэрийг шалгаж, нууц үгийг шинэчилж өгнө.
+            Админаасаа нууц үг сэргээх код аваад шинэ нууц үгээ өөрөө тохируулна. Нэвтрэх нэрээ
+            мартсан бол админаас асууна уу.
           </p>
           <FirstRunHint />
         </form>

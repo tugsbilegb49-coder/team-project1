@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { passwordFeedback } from './passwordFeedback';
+import { MemberResetCode } from './ResetPassword';
 
 function MemberPasswordReset({ member, busy, mutate }) {
   const [open, setOpen] = useState(false);
@@ -269,7 +270,10 @@ export default function Members({ user, members, departments, busy, mutate }) {
               <small>{member.department_name || 'Хэлтэсгүй'}</small>
             )}
             {user.is_admin && member.id !== user.id && member.is_active && (
-              <MemberPasswordReset member={member} busy={busy} mutate={mutate} />
+              <>
+                <MemberResetCode member={member} busy={busy} />
+                <MemberPasswordReset member={member} busy={busy} mutate={mutate} />
+              </>
             )}
           </div>
           {user.is_admin && member.id !== user.id && member.is_active && (

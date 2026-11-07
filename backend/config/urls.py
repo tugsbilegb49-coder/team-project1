@@ -5,6 +5,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from users.auth import LoginView, LogoutView
 from users.first_run import FirstRunView
 from users.health import HealthView
+from users.reset_codes import PasswordResetWithCodeView
 from users.self_service import PasswordChangeView, DesktopLinkView, MyTodayView
 from users.monthly import LauncherUsageView, MonthlyReportView
 from users.weekly import MyWeekView
@@ -53,5 +54,6 @@ urlpatterns = [
     path('api/auth/login/', LoginView.as_view(), name='token-obtain-pair'),
     path('api/auth/logout/', LogoutView.as_view(), name='token-logout'),
     path('api/auth/refresh/', TokenRefreshView.as_view(), name='token-refresh'),
+    path('api/auth/reset-password/', PasswordResetWithCodeView.as_view()),
     path('api/', include(router.urls)),
 ]

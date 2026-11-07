@@ -29,7 +29,7 @@ class UserViewSet(viewsets.ModelViewSet):
         return queryset.filter(pk=user.pk)
 
     def get_permissions(self):
-        if self.action in {'create', 'update', 'partial_update', 'destroy'}:
+        if self.action in {'create', 'update', 'partial_update', 'destroy', 'reset_code'}:
             return [IsSystemAdmin()]
         return [IsAuthenticated()]
 
@@ -74,6 +74,16 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def me(self, request):
         return Response(self.get_serializer(request.user).data)
+
+    @action(detail=True, methods=['post'], url_path='reset-code')
+    def reset_code(self, request, pk=None):
+        from .reset_codes import issue
+
+        user = self.get_object()
+        if not user.is_active:
+            raise ValidationError({'detail': 'Идэвхгүй хэрэглэгчид код үүсгэхгүй. Эхлээд идэвхжүүлнэ үү.'})
+        code, expires_at = issue(user, request.user)
+        return Response({'code': code, 'expires_at': expires_at}, status=status.HTTP_201_CREATED)
 
 
 class ConsentRecordViewSet(viewsets.ReadOnlyModelViewSet):
@@ -148,7 +158,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
         return queryset.filter(employee=user)
 
     def get_permissions(self):
-        if self.action in {'create', 'update', 'partial_update', 'destroy'}:
+        if self.action in {'create', 'update', 'partial_update', 'destroy', 'reset_code'}:
             return [IsSystemAdmin()]
         return [IsAuthenticated()]
 

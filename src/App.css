@@ -959,3 +959,18 @@ textarea:focus-visible {
   border-radius: 8px;
   padding: 10px 12px;
 }
+
+.reset-code {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.reset-code p {
+  margin: 4px 0;
+}
+.reset-code-value {
+  font-size: 1.15em;
+  letter-spacing: 0.08em;
+  user-select: all;
+}

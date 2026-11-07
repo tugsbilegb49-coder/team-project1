@@ -196,6 +196,8 @@ export function AuditHistory({ user }) {
     revoke: 'Цуцалсан',
     export: 'Экспортолсон',
     password_change: 'Нууц үг сольсон',
+    password_reset_code: 'Нууц үг сэргээх код үүсгэсэн',
+    password_reset: 'Кодоор нууц үгээ шинэчилсэн',
     admin_change: 'Admin-аар зассан',
     transfer_request: 'Шилжүүлэх хүсэлт',
     transfer_accept: 'Шилжүүлгийг зөвшөөрсөн',

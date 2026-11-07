@@ -292,6 +292,11 @@ async function mockApp(page) {
       return respond({ results: state.departments, next: null });
     if (method === 'GET' && path === '/api/tasks/')
       return respond({ results: state.tasks, next: null });
+    if (method === 'POST' && /^\/api\/users\/\d+\/reset-code\/$/.test(path)) {
+      state.posts.push({ path, data });
+      const code = ['ABCD-EFGH-JKLM', 'NPQR-STUV-WXYZ'][state.posts.length % 2];
+      return respond({ code, expires_at: '2026-11-08T10:00:00+08:00' }, 201);
+    }
     if (method === 'POST' && path === '/api/users/') {
       state.posts.push({ path, data });
       const member = { ...data, id: 20, is_active: true };
@@ -378,12 +383,61 @@ test('self-service password requires matching confirmation and returns to login 
   await expect(page.getByRole('alert')).toContainText('Нууц үг солигдлоо');
 });
 
-test('login explains how to recover a forgotten username or password', async ({ page }) => {
+test('a forgotten password is reset on the login page with the admin one-time code', async ({
+  page,
+}) => {
+  const requests = [];
+  await page.route('**/api/auth/reset-password/', (route) => {
+    const data = route.request().postDataJSON();
+    requests.push(data);
+    if (data.code !== 'ABCD-EFGH-JKLM')
+      return route.fulfill({
+        status: 400,
+        json: { code: ['Код буруу эсвэл хугацаа нь дууссан байна. Админаас шинэ код аваарай.'] },
+      });
+    return route.fulfill({ json: { detail: 'Нууц үг шинэчлэгдлээ.' } });
+  });
   await page.goto('/');
+  await page.getByRole('button', { name: 'Нууц үгээ мартсан уу?' }).click();
+  await expect(page.getByRole('heading', { name: 'Нууц үг шинэчлэх' })).toBeVisible();
+  await page.getByLabel('Хэрэглэгчийн нэр').fill('worker');
+  const code = page.getByLabel('Сэргээх код');
+  await code.fill('ABCD-0000-JKLM');
+  await page.getByLabel('Шинэ нууц үг', { exact: true }).fill('Fresh-worktrack-48!');
+  await page.getByLabel('Шинэ нууц үг давтах').fill('Fresh-worktrack-48!');
+  await page.getByRole('button', { name: 'Шинэ нууц үг хадгалах' }).click();
+  await expect(page.getByRole('alert')).toContainText('Код буруу');
+  await expect(code).toHaveAttribute('aria-invalid', 'true');
+  await code.fill('ABCD-EFGH-JKLM');
+  await page.getByRole('button', { name: 'Шинэ нууц үг хадгалах' }).click();
   await expect(page.getByRole('heading', { name: 'WorkTrack — Нэвтрэх' })).toBeVisible();
-  await expect(
-    page.getByText('Нэвтрэх нэр эсвэл нууц үгээ мартсан бол', { exact: false }),
-  ).toContainText('админтай холбогдоно уу');
+  await expect(page.getByRole('status')).toContainText('Нууц үг шинэчлэгдлээ');
+  await expect(page.getByLabel('Хэрэглэгчийн нэр')).toHaveValue('worker');
+  expect(requests).toHaveLength(2);
+  expect(requests[1]).toEqual({
+    username: 'worker',
+    code: 'ABCD-EFGH-JKLM',
+    new_password: 'Fresh-worktrack-48!',
+    confirm_password: 'Fresh-worktrack-48!',
+  });
+});
+
+test('admin gives an employee a one-time reset code', async ({ page }) => {
+  const state = await mockApp(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Багийн гишүүд', exact: true }).click();
+  const worker = page
+    .locator('article')
+    .filter({ has: page.getByRole('heading', { name: 'Worker', exact: true }) });
+  await worker.getByRole('button', { name: 'Сэргээх код үүсгэх' }).click();
+  await expect(worker.getByRole('status')).toContainText('NPQR-STUV-WXYZ');
+  page.once('dialog', (dialog) => dialog.accept());
+  await worker.getByRole('button', { name: 'Сэргээх код үүсгэх' }).click();
+  await expect(worker.getByRole('status')).toContainText('ABCD-EFGH-JKLM');
+  expect(state.posts.map((row) => row.path)).toEqual([
+    '/api/users/2/reset-code/',
+    '/api/users/2/reset-code/',
+  ]);
 });
 
 test('launcher monthly clock survives navigation and reload and selects historical totals', async ({
