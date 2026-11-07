@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
-import { clockTime, useTick } from './taskTime';
+import { useState } from 'react';
+import { clockTime, sessionTiming, useTick } from './taskTime';
 import { api } from './api';
+import { usePolling } from './usePolling';
 
 export function LauncherClock({ user, card = false }) {
   const [sample, setSample] = useState(null);
@@ -8,45 +9,32 @@ export function LauncherClock({ user, card = false }) {
   const [error, setError] = useState('');
   const now = useTick();
   const connected = sample && now - sample.at < 45000;
-  useEffect(() => {
-    const controller = new AbortController();
-    const flight = { busy: false };
-    async function read() {
-      if (flight.busy) return;
-      flight.busy = true;
+  usePolling(
+    async (signal) => {
       try {
         const value = await api('/desktop/status/', {
-          signal: controller.signal,
+          signal,
           headers: { 'X-WorkTrack-Desktop': '1' },
         });
-        if (!controller.signal.aborted) {
-          const usage = value.launcher_usage;
-          if (usage?.available && Array.isArray(usage.months)) {
-            setSample({ usage, at: Date.now() });
-            setError('');
-          } else {
-            setSample(null);
-            setError(
-              usage?.error || 'Сарын тооцоог эхлүүлэхийн тулд WorkTrack-аа дахин асаана уу.',
-            );
-          }
+        if (signal.aborted) return;
+        const usage = value.launcher_usage;
+        if (usage?.available && Array.isArray(usage.months)) {
+          setSample({ usage, at: Date.now() });
+          setError('');
+        } else {
+          setSample(null);
+          setError(usage?.error || 'Сарын тооцоог эхлүүлэхийн тулд WorkTrack-аа дахин асаана уу.');
         }
       } catch {
-        if (!controller.signal.aborted) {
+        if (!signal.aborted) {
           setSample(null);
           setError('Локал launcher-тэй холбогдоогүй.');
         }
-      } finally {
-        flight.busy = false;
       }
-    }
-    read();
-    const timer = setInterval(read, 15000);
-    return () => {
-      controller.abort();
-      clearInterval(timer);
-    };
-  }, [user.id]);
+    },
+    15000,
+    user.id,
+  );
   const Container = card ? 'article' : 'div';
   const Value = card ? 'h2' : 'strong';
   const usage = sample?.usage;
@@ -120,26 +108,13 @@ export function LauncherClock({ user, card = false }) {
 }
 
 export function TaskWorkClock({ work, busy, onStop, navigate, card = false }) {
-  const now = useTick();
-  const session = work.sample?.data.session;
-  const allowance = session
-    ? Math.max(
-        0,
-        (Date.parse(session.lease_expires_at) - Date.parse(work.sample.data.server_now)) / 1000,
-      )
-    : 0;
-  const delta = work.sample ? Math.max(0, now - work.sample.at) / 1000 : 0;
-  const running = session?.running && delta < allowance;
+  const { session, running, seconds } = sessionTiming(work.sample, useTick());
   if (card)
     return (
       <article className="stat-card" aria-label="Одоогийн даалгаврын цаг">
         <p className="eyebrow">Энэ удаагийн бүртгэл</p>
         <p>Даалгаврын цаг</p>
-        <h2>
-          {clockTime(
-            session ? session.seconds + (session.running ? Math.min(delta, allowance) : 0) : 0,
-          )}
-        </h2>
+        <h2>{clockTime(seconds)}</h2>
         <small>
           {session
             ? `${session.title} · ${running ? 'Бүртгэж байна' : 'Зогссон'}`
@@ -156,9 +131,7 @@ export function TaskWorkClock({ work, busy, onStop, navigate, card = false }) {
           <span>
             {session.title} · {running ? 'Цаг бүртгэж байна' : 'Цаг зогссон'}
           </span>
-          <strong aria-label="Даалгаврын session хугацаа">
-            {clockTime(session.seconds + (session.running ? Math.min(delta, allowance) : 0))}
-          </strong>
+          <strong aria-label="Даалгаврын session хугацаа">{clockTime(seconds)}</strong>
           {running && (
             <button type="button" disabled={busy} onClick={onStop}>
               Түр зогсоох

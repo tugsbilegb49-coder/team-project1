@@ -1,36 +1,246 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { api, clearAuth } from './api';
 import { LauncherClock, TaskWorkClock } from './WorkClocks';
-import { useTick } from './taskTime';
+import { durationText, sessionTiming, useTick } from './taskTime';
+import { usePolling } from './usePolling';
 
-function duration(seconds) {
-  if (Number(seconds || 0) < 60) return `${Math.floor(Number(seconds || 0))} сек`;
-  const minutes = Math.floor(Number(seconds || 0) / 60);
-  return `${Math.floor(minutes / 60)} цаг ${minutes % 60} мин`;
+const DEFAULT_DEVICE_NAME = 'Миний компьютер';
+
+const CAMERA_ERRORS = {
+  permission:
+    'Camera зөвшөөрөгдөөгүй. System Settings → Privacy & Security → Camera → WorkTrack Camera-ийг зөвшөөрөөд дахин асаана уу.',
+  setup:
+    'Camera launcher бэлтгэгдсэнгүй. Camera бэлтгэх товчийг дарж, Command Line Tools болон Python суулгалтаа шалгана уу.',
+  startup: 'Camera апп эхэлсэнгүй. macOS-ийн зөвшөөрлийн цонхыг шалгаад дахин асаана уу.',
+};
+
+function deviceErrorMessage(state) {
+  if (CAMERA_ERRORS[state.camera_error]) return CAMERA_ERRORS[state.camera_error];
+  const stopped = state.errors.includes('agent') ? 'Agent' : 'Camera';
+  return `${stopped} зогссон байна. Зөвшөөрөл/нэвтрэлтээ шалгаад дахин холбоно уу.`;
 }
 
-export function DesktopPanel({ user, tasks, work, workday, busy }) {
-  const now = useTick();
-  const { state, error, connectionError, message, closed } = workday;
-  const [step, setStep] = useState(1),
-    [deviceName, setDeviceName] = useState('Миний компьютер'),
-    [consent, setConsent] = useState(false);
-  const [relink, setRelink] = useState(false);
-  async function act(action, body = {}) {
-    if (await workday.action(action, body)) {
-      if (action === 'connect') setRelink(false);
-    }
+/** Энэ компьютерийг хэрэглэгчийн бүртгэлтэй холбох 3 алхам. */
+function DeviceSetup({ user, busy, initialName, onConnect, onCancel }) {
+  const [step, setStep] = useState(1);
+  const [deviceName, setDeviceName] = useState(initialName);
+  const [consent, setConsent] = useState(false);
+  function submit(event) {
+    event.preventDefault();
+    if (step < 3) setStep(step + 1);
+    else onConnect({ device_name: deviceName, consent });
   }
-  const runningWork = state?.computer_running;
-  const session = work.sample?.data.session;
-  const taskRunning =
-    session?.running &&
-    now - work.sample.at <
-      Date.parse(session.lease_expires_at) - Date.parse(work.sample.data.server_now);
-  const working = Boolean((runningWork && !state.paused) || taskRunning);
+  return (
+    <form onSubmit={submit}>
+      <fieldset disabled={busy}>
+        <legend>Анхны тохиргоо · {step}/3</legend>
+        {step === 1 && (
+          <>
+            <p>1. Энэ төхөөрөмж {user.username} хэрэглэгчид хугацаа бүртгэнэ.</p>
+            <label>
+              Төхөөрөмжийн нэр
+              <input
+                required
+                maxLength={120}
+                value={deviceName}
+                onChange={(event) => setDeviceName(event.target.value)}
+              />
+            </label>
+          </>
+        )}
+        {step === 2 && (
+          <>
+            <p>
+              2. Идэвхтэй аппын нэр, ашигласан болон идэвхгүй хугацааг бүртгэнэ. Бичсэн текст, URL,
+              дэлгэцийн зураг хадгалахгүй.
+            </p>
+            <p>
+              Account-тай холбосны дараа WorkTrack нээлттэй байсан хугацаа мөн сарын тайланд админд
+              харагдана. Ажил түр зогсоосон үед ч програмын нээлттэй цаг тоологдоно; бүрэн зогсоох
+              бол WorkTrack-аа хаах эсвэл төхөөрөмжөө салгана.
+            </p>
+            <p>
+              Камер тусдаа товчоор асна. Зураг, видео хадгалахгүй; зөвхөн хүн байгаа эсэх,
+              илрүүлэлтийн итгэлцүүр бүртгэнэ.
+            </p>
+            <label className="toggle-field">
+              <input
+                type="checkbox"
+                checked={consent}
+                onChange={(event) => setConsent(event.target.checked)}
+              />
+              Мэдээлэл бүртгэхийг зөвшөөрч байна (2026-11)
+            </label>
+          </>
+        )}
+        {step === 3 && (
+          <p>
+            3. {deviceName} төхөөрөмжийг {user.username}-тай холбоно. Дараа нь “Ажил эхлүүлэх”
+            дарна; camera автоматаар асахгүй.
+          </p>
+        )}
+        <div className="desktop-actions">
+          {step > 1 && (
+            <button type="button" onClick={() => setStep(step - 1)}>
+              Буцах
+            </button>
+          )}
+          <button type="submit" disabled={step === 2 && !consent}>
+            {busy ? 'Холбож байна…' : step === 3 ? 'Төхөөрөмж холбох' : 'Үргэлжлүүлэх'}
+          </button>
+          {onCancel && (
+            <button type="button" onClick={onCancel}>
+              Болих
+            </button>
+          )}
+        </div>
+      </fieldset>
+    </form>
+  );
+}
+
+/** Даалгавар сонгоод ажил эхлүүлэх, түр зогсоох, дуусгах. */
+function WorkControls({ user, tasks, state, work, workday, session, taskRunning, working, busy }) {
+  const selectId = useId();
+  const paused = state.computer_running && state.paused;
   const ownTasks = tasks.filter((task) => task.employee === user.id && task.status !== 'Дууссан');
   const selected = taskRunning ? String(session.task_id) : workday.choice;
   const validChoice = selected === 'none' || ownTasks.some((task) => String(task.id) === selected);
+  const canFinish = state.computer_running || state.camera_running || session;
+  function submit(event) {
+    event.preventDefault();
+    workday.start(selected);
+  }
+  return (
+    <form className="workday-form" onSubmit={submit}>
+      <div className="workday-field">
+        <label htmlFor={selectId}>Хийх даалгавар</label>
+        <select
+          id={selectId}
+          value={validChoice ? selected : ''}
+          disabled={busy || working}
+          onChange={(event) => workday.selectTask(event.target.value)}
+          required
+        >
+          <option value="">Даалгавраа сонгоно уу</option>
+          {ownTasks.map((task) => (
+            <option key={task.id} value={task.id}>
+              {task.title}
+            </option>
+          ))}
+          <option value="none">Даалгаваргүй — зөвхөн аппын хэрэглээ</option>
+        </select>
+      </div>
+      {!ownTasks.length && (
+        <p className="muted">
+          Танд оноосон дуусаагүй даалгавар алга. Зөвхөн аппын хэрэглээгээ бүртгэж болно.
+        </p>
+      )}
+      <p>
+        {taskRunning ? (
+          <>
+            <strong>{session.title}</strong> — даалгаврын цаг ажиллаж байна.
+          </>
+        ) : (
+          'Даалгавраа сонгоод нэг удаа эхлүүлнэ. Даалгаврын цаг болон аппын хэрэглээ хамт бүртгэгдэнэ.'
+        )}
+      </p>
+      <div className="desktop-actions workday-primary-actions">
+        {working ? (
+          <button type="button" disabled={busy} onClick={workday.pause}>
+            Түр зогсоох
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={busy || !validChoice || !work.sample || Boolean(work.error)}
+          >
+            {paused ? 'Ажил үргэлжлүүлэх' : 'Ажил эхлүүлэх'}
+          </button>
+        )}
+        <button type="button" disabled={busy || !canFinish} onClick={workday.finish}>
+          Ажил дуусгах
+        </button>
+      </div>
+      <small className="muted">
+        Эдгээр товч даалгаврын цаг болон аппын бүртгэлийг удирдана. Програм нээлттэй байсан сарын
+        цаг WorkTrack-ийг хаах хүртэл үргэлжилнэ.
+      </small>
+    </form>
+  );
+}
+
+/** Камерыг ажил эхэлсэн, түр зогсоогоогүй үед л асаана. */
+function CameraControls({ state, busy, act }) {
+  const canTurnOn =
+    state.computer_running && !state.paused && state.camera_ready && !state.preparing_camera;
+  const status = state.camera_running
+    ? state.paused
+      ? 'түр зогссон'
+      : 'асаалттай'
+    : 'унтраалттай';
+  return (
+    <details className="camera-controls">
+      <summary>Камер · {status}</summary>
+      <p>Камер хэрэглэх эсэхээ өөрөө сонгоно. Ажил эхлүүлэхэд автоматаар асахгүй.</p>
+      <div className="desktop-actions">
+        <button
+          disabled={busy || (!state.camera_running && !canTurnOn)}
+          onClick={() => act(state.camera_running ? 'camera-off' : 'camera-on')}
+        >
+          {state.camera_running ? 'Camera унтраах' : 'Camera асаах'}
+        </button>
+        {!state.camera_ready && (
+          <button disabled={busy || state.preparing_camera} onClick={() => act('prepare-camera')}>
+            {state.preparing_camera ? 'Camera бэлтгэж байна…' : 'Camera бэлтгэх'}
+          </button>
+        )}
+      </div>
+    </details>
+  );
+}
+
+/** Ховор хэрэглэгддэг үйлдлүүд: камер шинэчлэх, дахин холбох, салгах, хаах. */
+function DeviceMenu({ state, busy, act, onRelink }) {
+  function quit() {
+    if (window.confirm('Agent, camera болон WorkTrack-ийг хаах уу?')) act('quit');
+  }
+  return (
+    <details>
+      <summary>Төхөөрөмжийн нэмэлт үйлдэл</summary>
+      <div className="desktop-actions">
+        <button
+          disabled={busy || state.camera_running || state.preparing_camera}
+          onClick={() => act('prepare-camera')}
+        >
+          {state.preparing_camera ? 'Camera бэлтгэж байна…' : 'Камерын тохиргоог шинэчлэх'}
+        </button>
+        <button
+          disabled={busy || state.computer_running || state.camera_running}
+          onClick={onRelink}
+        >
+          Дахин холбох
+        </button>
+        <button disabled={busy} onClick={() => act('disconnect')}>
+          Холболт салгах
+        </button>
+        <button disabled={busy} onClick={quit}>
+          WorkTrack хаах
+        </button>
+      </div>
+    </details>
+  );
+}
+
+export function DesktopPanel({ user, tasks, work, workday, busy }) {
+  const { state, error, connectionError, message, closed } = workday;
+  const { session, running: taskRunning } = sessionTiming(work.sample, useTick());
+  const [relink, setRelink] = useState(false);
+  const paused = Boolean(state?.computer_running && state.paused);
+  const working = Boolean((state?.computer_running && !state.paused) || taskRunning);
+  async function act(action, body = {}) {
+    if ((await workday.action(action, body)) && action === 'connect') setRelink(false);
+  }
   return (
     <section className="desktop-panel" aria-label="Энэ компьютерийн удирдлага">
       <div className="workday-heading">
@@ -39,7 +249,7 @@ export function DesktopPanel({ user, tasks, work, workday, busy }) {
           <h2>Одоо хийх ажил</h2>
         </div>
         <span className={`work-status ${working ? 'is-working' : ''}`}>
-          {working ? 'Бүртгэж байна' : runningWork && state.paused ? 'Түр зогссон' : 'Эхлээгүй'}
+          {working ? 'Бүртгэж байна' : paused ? 'Түр зогссон' : 'Эхлээгүй'}
         </span>
       </div>
       {closed ? (
@@ -79,189 +289,28 @@ export function DesktopPanel({ user, tasks, work, workday, busy }) {
                   Өөр account-ийн ажил үргэлжилж байна. Тэр account-аар нэвтэрч ажлаа дуусгана уу.
                 </p>
               ) : !state.linked || relink ? (
-                <form
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    if (step < 3) setStep(step + 1);
-                    else act('connect', { device_name: deviceName, consent });
-                  }}
-                >
-                  <fieldset disabled={busy}>
-                    <legend>Анхны тохиргоо · {step}/3</legend>
-                    {step === 1 && (
-                      <>
-                        <p>1. Энэ төхөөрөмж {user.username} хэрэглэгчид хугацаа бүртгэнэ.</p>
-                        <label>
-                          Төхөөрөмжийн нэр
-                          <input
-                            required
-                            maxLength={120}
-                            value={deviceName}
-                            onChange={(e) => setDeviceName(e.target.value)}
-                          />
-                        </label>
-                      </>
-                    )}
-                    {step === 2 && (
-                      <>
-                        <p>
-                          2. Идэвхтэй аппын нэр, ашигласан болон идэвхгүй хугацааг бүртгэнэ. Бичсэн
-                          текст, URL, дэлгэцийн зураг хадгалахгүй.
-                        </p>
-                        <p>
-                          Account-тай холбосны дараа WorkTrack нээлттэй байсан хугацаа мөн сарын
-                          тайланд админд харагдана. Ажил түр зогсоосон үед ч програмын нээлттэй цаг
-                          тоологдоно; бүрэн зогсоох бол WorkTrack-аа хаах эсвэл төхөөрөмжөө салгана.
-                        </p>
-                        <p>
-                          Камер тусдаа товчоор асна. Зураг, видео хадгалахгүй; зөвхөн хүн байгаа
-                          эсэх, илрүүлэлтийн итгэлцүүр бүртгэнэ.
-                        </p>
-                        <label className="toggle-field">
-                          <input
-                            type="checkbox"
-                            checked={consent}
-                            onChange={(e) => setConsent(e.target.checked)}
-                          />
-                          Мэдээлэл бүртгэхийг зөвшөөрч байна (2026-11)
-                        </label>
-                      </>
-                    )}
-                    {step === 3 && (
-                      <p>
-                        3. {deviceName} төхөөрөмжийг {user.username}-тай холбоно. Дараа нь “Ажил
-                        эхлүүлэх” дарна; camera автоматаар асахгүй.
-                      </p>
-                    )}
-                    <div className="desktop-actions">
-                      {step > 1 && (
-                        <button type="button" onClick={() => setStep(step - 1)}>
-                          Буцах
-                        </button>
-                      )}
-                      <button type="submit" disabled={step === 2 && !consent}>
-                        {busy ? 'Холбож байна…' : step === 3 ? 'Төхөөрөмж холбох' : 'Үргэлжлүүлэх'}
-                      </button>
-                      {relink && (
-                        <button type="button" onClick={() => setRelink(false)}>
-                          Болих
-                        </button>
-                      )}
-                    </div>
-                  </fieldset>
-                </form>
+                <DeviceSetup
+                  user={user}
+                  busy={busy}
+                  initialName={state.device_name || DEFAULT_DEVICE_NAME}
+                  onConnect={(body) => act('connect', body)}
+                  onCancel={relink ? () => setRelink(false) : null}
+                />
               ) : (
                 <>
-                  <form
-                    className="workday-form"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      workday.start(selected);
-                    }}
-                  >
-                    <label>
-                      Хийх даалгавар
-                      <select
-                        value={validChoice ? selected : ''}
-                        disabled={busy || working}
-                        onChange={(event) => workday.selectTask(event.target.value)}
-                        required
-                      >
-                        <option value="">Даалгавраа сонгоно уу</option>
-                        {ownTasks.map((task) => (
-                          <option key={task.id} value={task.id}>
-                            {task.title}
-                          </option>
-                        ))}
-                        <option value="none">Даалгаваргүй — зөвхөн аппын хэрэглээ</option>
-                      </select>
-                    </label>
-                    {!ownTasks.length && (
-                      <p className="muted">
-                        Танд оноосон дуусаагүй даалгавар алга. Зөвхөн аппын хэрэглээгээ бүртгэж
-                        болно.
-                      </p>
-                    )}
-                    <p>
-                      {taskRunning ? (
-                        <>
-                          <strong>{session.title}</strong> — даалгаврын цаг ажиллаж байна.
-                        </>
-                      ) : (
-                        'Даалгавраа сонгоод нэг удаа эхлүүлнэ. Даалгаврын цаг болон аппын хэрэглээ хамт бүртгэгдэнэ.'
-                      )}
-                    </p>
-                    <div className="desktop-actions workday-primary-actions">
-                      {!working ? (
-                        <button
-                          type="submit"
-                          disabled={busy || !validChoice || !work.sample || Boolean(work.error)}
-                        >
-                          {runningWork && state.paused ? 'Ажил үргэлжлүүлэх' : 'Ажил эхлүүлэх'}
-                        </button>
-                      ) : (
-                        <button type="button" disabled={busy} onClick={workday.pause}>
-                          Түр зогсоох
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        disabled={busy || (!runningWork && !state.camera_running && !session)}
-                        onClick={workday.finish}
-                      >
-                        Ажил дуусгах
-                      </button>
-                    </div>
-                    <small className="muted">
-                      Эдгээр товч даалгаврын цаг болон аппын бүртгэлийг удирдана. Програм нээлттэй
-                      байсан сарын цаг WorkTrack-ийг хаах хүртэл үргэлжилнэ.
-                    </small>
-                  </form>
-                  <details className="camera-controls">
-                    <summary>
-                      Камер ·{' '}
-                      {state.camera_running
-                        ? state.paused
-                          ? 'түр зогссон'
-                          : 'асаалттай'
-                        : 'унтраалттай'}
-                    </summary>
-                    <p>Камер хэрэглэх эсэхээ өөрөө сонгоно. Ажил эхлүүлэхэд автоматаар асахгүй.</p>
-                    <div className="desktop-actions">
-                      <button
-                        disabled={
-                          busy ||
-                          (!state.camera_running &&
-                            (!runningWork ||
-                              state.paused ||
-                              !state.camera_ready ||
-                              state.preparing_camera))
-                        }
-                        onClick={() => act(state.camera_running ? 'camera-off' : 'camera-on')}
-                      >
-                        {state.camera_running ? 'Camera унтраах' : 'Camera асаах'}
-                      </button>
-                      {!state.camera_ready && (
-                        <button
-                          disabled={busy || state.preparing_camera}
-                          onClick={() => act('prepare-camera')}
-                        >
-                          {state.preparing_camera ? 'Camera бэлтгэж байна…' : 'Camera бэлтгэх'}
-                        </button>
-                      )}
-                    </div>
-                  </details>
-                  {state.errors?.length > 0 && (
-                    <p role="alert">
-                      {state.camera_error === 'permission'
-                        ? 'Camera зөвшөөрөгдөөгүй. System Settings → Privacy & Security → Camera → WorkTrack Camera-ийг зөвшөөрөөд дахин асаана уу.'
-                        : state.camera_error === 'setup'
-                          ? 'Camera launcher бэлтгэгдсэнгүй. Camera бэлтгэх товчийг дарж, Command Line Tools болон Python суулгалтаа шалгана уу.'
-                          : state.camera_error === 'startup'
-                            ? 'Camera апп эхэлсэнгүй. macOS-ийн зөвшөөрлийн цонхыг шалгаад дахин асаана уу.'
-                            : `${state.errors.includes('agent') ? 'Agent' : 'Camera'} зогссон байна. Зөвшөөрөл/нэвтрэлтээ шалгаад дахин холбоно уу.`}
-                    </p>
-                  )}
+                  <WorkControls
+                    user={user}
+                    tasks={tasks}
+                    state={state}
+                    work={work}
+                    workday={workday}
+                    session={session}
+                    taskRunning={taskRunning}
+                    working={working}
+                    busy={busy}
+                  />
+                  <CameraControls state={state} busy={busy} act={act} />
+                  {state.errors?.length > 0 && <p role="alert">{deviceErrorMessage(state)}</p>}
                   {state.camera_setup_error && (
                     <p role="alert">
                       Camera бэлтгэл амжилтгүй. Холболтоо шалгаад дахин бэлтгэнэ үү.
@@ -271,41 +320,12 @@ export function DesktopPanel({ user, tasks, work, workday, busy }) {
                     Вебээс гарахад аппын бүртгэл үргэлжилж болно. Зогсоохдоо эхлээд “Ажил дуусгах”
                     дарна.
                   </p>
-                  <details>
-                    <summary>Төхөөрөмжийн нэмэлт үйлдэл</summary>
-                    <div className="desktop-actions">
-                      <button
-                        disabled={busy || state.camera_running || state.preparing_camera}
-                        onClick={() => act('prepare-camera')}
-                      >
-                        {state.preparing_camera
-                          ? 'Camera бэлтгэж байна…'
-                          : 'Камерын тохиргоог шинэчлэх'}
-                      </button>
-                      <button
-                        disabled={busy || runningWork || state.camera_running}
-                        onClick={() => {
-                          setStep(1);
-                          setConsent(false);
-                          setRelink(true);
-                        }}
-                      >
-                        Дахин холбох
-                      </button>
-                      <button disabled={busy} onClick={() => act('disconnect')}>
-                        Холболт салгах
-                      </button>
-                      <button
-                        disabled={busy}
-                        onClick={() => {
-                          if (window.confirm('Agent, camera болон WorkTrack-ийг хаах уу?'))
-                            act('quit');
-                        }}
-                      >
-                        WorkTrack хаах
-                      </button>
-                    </div>
-                  </details>
+                  <DeviceMenu
+                    state={state}
+                    busy={busy}
+                    act={act}
+                    onRelink={() => setRelink(true)}
+                  />
                 </>
               )}
             </>
@@ -319,31 +339,21 @@ export function DesktopPanel({ user, tasks, work, workday, busy }) {
 export default function Today({ user, navigate, tasks, work, workday, busy }) {
   const [result, setResult] = useState(null),
     [error, setError] = useState('');
-  useEffect(() => {
-    const controller = new AbortController();
-    const flight = { busy: false };
-    async function load() {
-      if (flight.busy) return;
-      flight.busy = true;
+  usePolling(
+    async (signal) => {
       try {
-        const data = await api('/api/me/today/', { signal: controller.signal });
-        if (!controller.signal.aborted) {
+        const data = await api('/api/me/today/', { signal });
+        if (!signal.aborted) {
           setResult(data);
           setError('');
         }
       } catch (failure) {
-        if (!controller.signal.aborted && failure.name !== 'AbortError') setError(failure.message);
-      } finally {
-        flight.busy = false;
+        if (!signal.aborted && failure.name !== 'AbortError') setError(failure.message);
       }
-    }
-    load();
-    const timer = setInterval(load, 30000);
-    return () => {
-      controller.abort();
-      clearInterval(timer);
-    };
-  }, [user.id]);
+    },
+    30000,
+    user.id,
+  );
   return (
     <section className="today-page">
       <header className="header">
@@ -368,12 +378,12 @@ export default function Today({ user, navigate, tasks, work, workday, busy }) {
           <p className="eyebrow">Өнөөдөр</p>
           <p>Апп ашигласан</p>
           <h2>
-            {result?.application_seconds != null ? duration(result.application_seconds) : '—'}
+            {result?.application_seconds != null ? durationText(result.application_seconds) : '—'}
           </h2>
           <small>Идэвхгүй хугацааг хассан аппын бүртгэл.</small>
           <small>
-            Идэвхгүй: {result?.idle_seconds != null ? duration(result.idle_seconds) : '—'} · Нийт
-            бүртгэл: {result ? duration(result.tracked_seconds) : '—'}
+            Идэвхгүй: {result?.idle_seconds != null ? durationText(result.idle_seconds) : '—'} ·
+            Нийт бүртгэл: {result ? durationText(result.tracked_seconds) : '—'}
           </small>
           {result && result.application_seconds == null && (
             <small>Шинэ тооцоог харахын тулд WorkTrack-аа дахин асаана уу.</small>
@@ -408,7 +418,7 @@ export default function Today({ user, navigate, tasks, work, workday, busy }) {
             {result.applications.map((row) => (
               <div className="activity-row" key={row.application}>
                 <span>{row.application}</span>
-                <strong>{duration(row.seconds)}</strong>
+                <strong>{durationText(row.seconds)}</strong>
               </div>
             ))}
           </section>

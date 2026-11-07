@@ -17,6 +17,34 @@ export function clockTime(seconds) {
     .join(':');
 }
 
+/** "45 сек" эсвэл "1 цаг 5 мин" гэх мэт уншихад хялбар хугацаа. */
+export function durationText(seconds) {
+  const value = Math.max(0, Number(seconds) || 0);
+  if (value < 60) return `${Math.floor(value)} сек`;
+  const minutes = Math.floor(value / 60);
+  return `${Math.floor(minutes / 60)} цаг ${minutes % 60} мин`;
+}
+
+/**
+ * Серверээс ирсэн даалгаврын session-ийг одоогийн цагтай харьцуулна.
+ * Сервер `lease_expires_at` хүртэл л цагийг ажиллаж байна гэж үзнэ; холболт тасарвал
+ * тэр хугацаанаас хойш цаг тоолохгүй.
+ */
+export function sessionTiming(sample, now) {
+  const session = sample?.data.session ?? null;
+  if (!session) return { session: null, running: false, seconds: 0 };
+  const allowance = Math.max(
+    0,
+    (Date.parse(session.lease_expires_at) - Date.parse(sample.data.server_now)) / 1000,
+  );
+  const elapsed = Math.max(0, now - sample.at) / 1000;
+  return {
+    session,
+    running: Boolean(session.running) && elapsed < allowance,
+    seconds: session.seconds + (session.running ? Math.min(elapsed, allowance) : 0),
+  };
+}
+
 export function useTaskWork(user) {
   const [sample, setSample] = useState(null),
     [failure, setFailure] = useState(null);

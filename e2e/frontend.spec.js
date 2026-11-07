@@ -731,6 +731,8 @@ test('partial stop reports the failure and retry stops both streams', async ({ p
   expect(state.desktop.computer_running).toBe(true);
   await page.unroute('**/desktop/stop/');
   await page.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
+  // Alert нь дахин оролдох үед шууд арилдаг тул stop дууссаныг амжилтын мессежээр хүлээнэ.
+  await expect(panel.getByRole('status')).toContainText('аппын бүртгэлийг зогсоолоо');
   await expect(panel.getByRole('alert')).toHaveCount(0);
   expect(state.desktop.computer_running).toBe(false);
 });

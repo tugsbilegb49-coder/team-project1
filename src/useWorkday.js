@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { desktop } from './api';
+import { sessionTiming } from './taskTime';
 
 export function useWorkday(user, work) {
   const userId = user?.id;
@@ -45,6 +46,8 @@ export function useWorkday(user, work) {
     poll();
     const timer = setInterval(poll, 5000);
     return () => {
+      // `revision` нь DOM ref биш, тоолуур: хуучин хүсэлтийн хариуг хаяхын тулд өсгөнө.
+      // oxlint-disable-next-line react-hooks/exhaustive-deps
       ++revision.current;
       controller.abort();
       clearInterval(timer);
@@ -97,11 +100,7 @@ export function useWorkday(user, work) {
         );
       const current = await send('status');
       if (!current.linked) throw new Error('Эхлээд энэ төхөөрөмжийг өөрийн бүртгэлтэй холбоно уу.');
-      const session = work.sample?.data.session;
-      const active =
-        session?.running &&
-        Date.now() - work.sample.at <
-          Date.parse(session.lease_expires_at) - Date.parse(work.sample.data.server_now);
+      const { session, running: active } = sessionTiming(work.sample, Date.now());
       if (active && (value === 'none' || session.task_id !== Number(value)))
         throw new Error('Өмнөх даалгавраа түр зогсоогоод шинэ ажлаа сонгоно уу.');
       const needsApps = !current.computer_running || current.paused;

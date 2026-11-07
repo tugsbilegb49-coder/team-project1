@@ -31,6 +31,15 @@
   flex-direction: row;
   align-items: flex-start;
 }
+.workday-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 14px 0;
+}
+.desktop-panel .workday-field label {
+  margin: 0;
+}
 .desktop-panel input:not([type='checkbox']) {
   width: 100%;
   box-sizing: border-box;

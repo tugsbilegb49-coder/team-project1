@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from './api';
 import { clockTime } from './taskTime';
+import { usePolling } from './usePolling';
 
 function currentMonth() {
   const parts = new Intl.DateTimeFormat('en', {
@@ -24,36 +25,26 @@ export default function MonthlyReport({ user }) {
     const timer = setInterval(() => setCurrent(currentMonth()), 30000);
     return () => clearInterval(timer);
   }, []);
-  useEffect(() => {
-    const controller = new AbortController();
-    const flight = { busy: false };
-    async function read() {
-      if (flight.busy) return;
-      flight.busy = true;
+  usePolling(
+    async (signal) => {
       try {
         const data = await api('/api/reports/monthly/?' + new URLSearchParams({ month }), {
-          signal: controller.signal,
+          signal,
         });
-        if (!controller.signal.aborted) {
+        if (!signal.aborted) {
           setSample({ key, data });
           setError('');
         }
       } catch (failure) {
-        if (!controller.signal.aborted) {
+        if (!signal.aborted) {
           setSample(null);
           setError(failure.message);
         }
-      } finally {
-        flight.busy = false;
       }
-    }
-    read();
-    const timer = setInterval(read, 30000);
-    return () => {
-      controller.abort();
-      clearInterval(timer);
-    };
-  }, [key, month, revision]);
+    },
+    30000,
+    `${key}:${revision}`,
+  );
   return (
     <section className="monthly-report" aria-label="Сарын ажилтны тайлан">
       <div className="monthly-report-heading">
