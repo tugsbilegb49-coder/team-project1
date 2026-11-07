@@ -70,9 +70,19 @@ class ServerProblem(ValueError):
     """A message for the person entering the address."""
 
 
+SELF_SIGNED = {18, 19, 20, 21}  # OpenSSL: a certificate no authority vouches for, like an office server's.
+
+
 def needs_code(error):
     reason = getattr(error, 'reason', error)
-    return isinstance(reason, ssl.SSLCertVerificationError)
+    if not isinstance(reason, ssl.SSLCertVerificationError):
+        return False
+    if reason.verify_code not in SELF_SIGNED:
+        # Expired, or made for another name: a real problem on the server, not a missing code.
+        raise ServerProblem(
+            f'Серверийн HTTPS гэрчилгээ хүчингүй байна ({reason.verify_message}). Админд хэлнэ үү.'
+        ) from error
+    return True
 
 
 def check_server(url, timeout=8, code=None):

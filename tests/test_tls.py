@@ -101,3 +101,34 @@ def test_without_a_pin_an_unknown_certificate_is_rejected(office, monkeypatch):
 def test_the_office_https_port_is_understood_without_a_scheme():
     assert normalize_server('192.168.1.20:8443') == 'https://192.168.1.20:8443'
     assert normalize_server('192.168.1.20:8000') == 'http://192.168.1.20:8000'
+
+
+def test_macos_system_roots_are_trusted_without_pythons_certificate_file(office, tmp_path, monkeypatch):
+    from agent import transport
+
+    url, _ = office
+    root = (tmp_path / 'tls' / 'server.crt').read_text()  # Plays a root that macOS trusts.
+    monkeypatch.delenv(PIN_ENV, raising=False)
+    monkeypatch.setenv('SSL_CERT_FILE', str(tmp_path / 'missing.pem'))  # Like a Mac without the build's Python.
+    monkeypatch.setattr(transport.sys, 'platform', 'darwin')
+    monkeypatch.setattr(transport, 'mac_roots', lambda: root)
+    transport.trusted_context.cache_clear()
+    try:
+        with open_url(Request(url + '/api/health/'), timeout=5) as response:
+            assert json.load(response)['service'] == 'worktrack-api'
+    finally:
+        transport.trusted_context.cache_clear()
+
+
+def test_an_expired_or_misnamed_certificate_is_not_mistaken_for_an_office_server():
+    from urllib.error import URLError
+
+    from desktop.gateway import ServerProblem, needs_code
+
+    expired = ssl.SSLCertVerificationError()
+    expired.verify_code, expired.verify_message = 10, 'certificate has expired'
+    with pytest.raises(ServerProblem, match='гэрчилгээ хүчингүй'):
+        needs_code(URLError(expired))
+    office = ssl.SSLCertVerificationError()
+    office.verify_code, office.verify_message = 18, 'self-signed certificate'
+    assert needs_code(URLError(office))
