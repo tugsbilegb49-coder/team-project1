@@ -71,6 +71,8 @@ async function mockApp(page) {
     desktop: {
       available: true,
       linked: false,
+      reminders_enabled: true,
+      reminder: null,
       another_account: false,
       computer_running: false,
       camera_running: false,
@@ -106,6 +108,8 @@ async function mockApp(page) {
     if (action === 'resume') state.desktop.paused = false;
     if (action === 'camera-on') state.desktop.camera_running = true;
     if (action === 'camera-off') state.desktop.camera_running = false;
+    if (action === 'reminders-on' || action === 'reminders-off')
+      state.desktop.reminders_enabled = action === 'reminders-on';
     if (action === 'stop')
       Object.assign(state.desktop, {
         computer_running: false,
@@ -1150,4 +1154,21 @@ test('my week shows time per day and per task and moves between weeks', async ({
   await week.getByRole('button', { name: 'Дараах ›' }).click();
   await expect(week).toContainText('11/02 – 11/08');
   expect(state.weekRequests).toEqual(expect.arrayContaining(['', '2026-10-26']));
+});
+
+test('a reminder shows on the page and reminders can be turned off', async ({ page }) => {
+  const state = await mockApp(page);
+  Object.assign(state.desktop, {
+    linked: true,
+    username: 'admin',
+    device_name: 'QA laptop',
+    reminder: 'Ажил эхлүүлэхээ мартсан уу? WorkTrack дээр «Ажил эхлүүлэх» дарна уу.',
+  });
+  await page.goto('/');
+  const panel = page.getByRole('region', { name: 'Энэ компьютерийн удирдлага', exact: true });
+  await expect(panel.getByRole('status')).toContainText('Ажил эхлүүлэхээ мартсан уу?');
+  await panel.getByText('Төхөөрөмжийн нэмэлт үйлдэл').click();
+  await panel.getByRole('button', { name: 'Сануулга унтраах', exact: true }).click();
+  await expect(panel.getByRole('button', { name: 'Сануулга асаах', exact: true })).toBeVisible();
+  expect(state.desktop.reminders_enabled).toBe(false);
 });

@@ -76,6 +76,11 @@ function DeviceSetup({ user, busy, initialName, onConnect, onCancel }) {
                 «Түр зогсоох» үед ч WorkTrack нээлттэй цаг тоологдоно. Бүрэн зогсоох бол
                 WorkTrack-аа хаах эсвэл төхөөрөмжөө салгана.
               </li>
+              <li>
+                <strong>Сануулга:</strong> ажил эхлүүлэхээ мартсан эсэхийг мэдэхийн тулд зөвхөн
+                сүүлд товшсоноос хойших хугацааг шалгана. Үүнийг хадгалахгүй, илгээхгүй;
+                «Төхөөрөмжийн нэмэлт үйлдэл»-ээс унтрааж болно.
+              </li>
             </ul>
             <label className="toggle-field">
               <input
@@ -235,6 +240,12 @@ function DeviceMenu({ state, busy, act, onRelink }) {
         >
           Дахин холбох
         </button>
+        <button
+          disabled={busy}
+          onClick={() => act(state.reminders_enabled ? 'reminders-off' : 'reminders-on')}
+        >
+          {state.reminders_enabled ? 'Сануулга унтраах' : 'Сануулга асаах'}
+        </button>
         <button disabled={busy} onClick={() => act('disconnect')}>
           Холболт салгах
         </button>
@@ -274,6 +285,11 @@ export function DesktopPanel({ user, tasks, work, workday, busy }) {
           {message && (
             <p role="status" className="work-feedback">
               {message}
+            </p>
+          )}
+          {state?.reminder && (
+            <p role="status" className="work-reminder">
+              🔔 {state.reminder}
             </p>
           )}
           {connectionError && <p role="alert">{connectionError}</p>}

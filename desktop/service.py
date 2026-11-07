@@ -60,6 +60,9 @@ class DesktopController:
         from desktop.usage_sync import UsageSync
 
         self.usage_sync = UsageSync(self, autostart=sync)
+        from desktop.reminders import Reminders
+
+        self.reminders = Reminders(self, autostart=sync)
 
     def backend(self, route, access, payload=None):
         request = Request(
@@ -116,6 +119,8 @@ class DesktopController:
                 importlib.util.find_spec(module) is not None for module in ('cv2', 'ultralytics', 'yaml')
             ),
             'preparing_camera': self.preparing,
+            'reminders_enabled': self.reminders.enabled,
+            'reminder': self.reminders.current() if linked else None,
             'camera_setup_error': self.setup_error,
             'camera_error': 'permission'
             if camera_code == 77
@@ -267,6 +272,8 @@ class DesktopController:
                     self._client(user).logout()
                     self.metadata.unlink(missing_ok=True)
                     self.owner = None
+                elif action in ('reminders-on', 'reminders-off'):
+                    self.reminders.set_enabled(action == 'reminders-on')
                 elif action == 'quit':
                     self._stop_collectors()
                     threading.Timer(0.3, self.shutdown).start()
@@ -276,6 +283,7 @@ class DesktopController:
 
     def close(self):
         self.usage_sync.close()
+        self.reminders.close()
         with self.lock:
             self.closed = True
             if self.owns_usage:
@@ -370,6 +378,8 @@ class DesktopHandler(BaseHTTPRequestHandler):
                     'camera-off',
                     'prepare-camera',
                     'disconnect',
+                    'reminders-on',
+                    'reminders-off',
                     'quit',
                 }
                 action = self.path.removeprefix('/desktop/').removesuffix('/')

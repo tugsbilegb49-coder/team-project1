@@ -939,3 +939,11 @@ textarea:focus-visible {
     gap: 4px;
   }
 }
+
+.work-reminder {
+  background: #fff6e5;
+  border: 1px solid #f1d39b;
+  color: #6b4a00;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
