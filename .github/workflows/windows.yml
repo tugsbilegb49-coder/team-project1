@@ -1,6 +1,7 @@
 name: Windows
 # Proves the project installs, passes its tests and starts/stops cleanly on Windows.
-# Each check is its own step so a failure names exactly what broke.
+# Every check runs even after an earlier one fails, and .github/ci_step.py publishes each
+# failure as an annotation, so one run shows everything that is broken.
 on:
   pull_request:
   push:
@@ -36,28 +37,41 @@ jobs:
       - name: Install Node packages
         run: npm ci
       - name: Django check
-        run: python manage.py check
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Django check" python manage.py check
       - name: Migrations are complete
-        run: python manage.py makemigrations --check --dry-run
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Migrations are complete" python manage.py makemigrations --check --dry-run
       - name: Django tests
-        run: python manage.py test users workforce activity scoring
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Django tests" python manage.py test users workforce activity scoring
       - name: Python tests
-        run: python -m pytest -q
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Python tests" python -m pytest -q
       - name: Agent tests (includes Windows API calls)
-        run: python -m unittest discover -s agent -p "test*.py" -v
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Agent tests (includes Windows API calls)" python -m unittest discover -s agent -p "test*.py" -v
       - name: Alternative agent tests
-        run: python -m unittest discover -s activity_agent/tests
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Alternative agent tests" python -m unittest discover -s activity_agent/tests
       - name: Frontend unit tests
-        run: npm test
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Frontend unit tests" npm test
       - name: Frontend lint
-        run: npm run lint
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Frontend lint" npm run lint
       - name: Frontend build
-        run: npm run build
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Frontend build" npm run build
       - name: Install browser
+        if: ${{ !cancelled() }}
         run: npx playwright install chromium
       - name: Frontend browser tests
-        run: npx playwright test e2e/frontend.spec.js
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Frontend browser tests" npx playwright test e2e/frontend.spec.js
       - name: Real browser with Django
-        run: python verify_frontend.py
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Real browser with Django" python verify_frontend.py
       - name: Launcher start, agent start/stop and Ctrl+Break shutdown
-        run: python verify_launcher.py --agent
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Launcher start, agent start/stop and Ctrl+Break shutdown" python verify_launcher.py --agent
