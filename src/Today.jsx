@@ -71,7 +71,11 @@ export function DesktopPanel({user}) {
               <button disabled={busy || state.camera_running || state.preparing_camera} onClick={()=>act('prepare-camera')}>
                 {state.preparing_camera?'Camera бэлтгэж байна…':state.camera_ready?'Camera dependency шинэчлэх':'Camera бэлтгэх'}</button>
             </div>
-            {state.errors?.length>0 && <p role="alert">{state.errors.includes('agent')?'Agent':'Camera'} зогссон байна. Зөвшөөрөл/нэвтрэлтээ шалгаад дахин холбоно уу.</p>}
+            {state.errors?.length>0 && <p role="alert">{state.camera_error==='permission'
+              ? 'Camera зөвшөөрөгдөөгүй. System Settings → Privacy & Security → Camera → WorkTrack Camera-ийг зөвшөөрөөд дахин асаана уу.'
+              : state.camera_error==='setup' ? 'Camera launcher бэлтгэгдсэнгүй. Camera бэлтгэх товчийг дарж, Command Line Tools болон Python суулгалтаа шалгана уу.'
+              : state.camera_error==='startup' ? 'Camera апп эхэлсэнгүй. macOS-ийн зөвшөөрлийн цонхыг шалгаад дахин асаана уу.'
+              : `${state.errors.includes('agent')?'Agent':'Camera'} зогссон байна. Зөвшөөрөл/нэвтрэлтээ шалгаад дахин холбоно уу.`}</p>}
             {state.camera_setup_error && <p role="alert">Camera бэлтгэл амжилтгүй. Холболтоо шалгаад дахин бэлтгэнэ үү.</p>}
             <p className="muted">Вебээс гарахад бүртгэл үргэлжилнэ. Зогсоохдоо “Ажил дуусгах” дарна.</p>
             <details><summary>Төхөөрөмжийн нэмэлт үйлдэл</summary><div className="desktop-actions">

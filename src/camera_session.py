@@ -27,6 +27,8 @@ class CameraSession:
                     uploader._worker,lambda:not self.allowed(),kind='camera')
 
     def allowed(self):
+        from src.camera_capture import check_session
+        check_session()
         return not locally_paused(self.config) and (self.guard is None or self.guard.allowed())
 
     def frames(self):
@@ -36,6 +38,8 @@ class CameraSession:
         if self.runtime: self.runtime.start()
         was_paused = True
         while self.seconds is None or time.monotonic()-start < self.seconds:
+            from src.camera_capture import check_session
+            check_session()
             data=self.runtime.snapshot() if self.runtime else {}
             if data.get('version') is not None and data['version'] != self.applied_version:
                 if self.configure: self.configure(data)
@@ -53,7 +57,9 @@ class CameraSession:
             if was_paused and self.reset: self.reset()
             was_paused = False
             if self.cap is None:
-                self.cap = cv2.VideoCapture(self.config['camera_index'])
+                from src.camera_capture import open_camera
+                self.cap = open_camera(self.config['camera_index'],permitted=self.allowed)
+                if self.cap is None:continue
                 if not self.cap.isOpened(): raise RuntimeError('Could not open webcam. Check OS permission and camera_index.')
             ok, frame = self.cap.read()
             if not ok: raise RuntimeError('Could not read camera frame.')

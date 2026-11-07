@@ -197,6 +197,14 @@ test('today controls fit a small screen and unavailable local service offers ret
   await expect(page.getByRole('alert')).toContainText('WorkTrack.app');
 });
 
+test('camera permission failures explain the macOS setting',async({page})=>{
+  const state=await mockApp(page);
+  Object.assign(state.desktop,{linked:true,username:'admin',device_name:'QA Mac',errors:['camera'],camera_error:'permission'});
+  await page.goto('/');
+  await expect(page.getByRole('alert')).toContainText('System Settings → Privacy & Security → Camera → WorkTrack Camera');
+  await expect(page.getByRole('button',{name:'Camera асаах',exact:true})).toBeDisabled();
+});
+
 test('agent status, notifications and audit history are connected', async ({page}) => {
   const errors=[];page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
   const state=await mockApp(page);

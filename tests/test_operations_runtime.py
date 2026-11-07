@@ -38,7 +38,7 @@ def test_legacy_entry_forwards_seconds_and_does_not_import_multi_person_dependen
     spec=importlib.util.spec_from_file_location('camera_cli_under_test',Path(__file__).resolve().parents[1]/'main.py')
     entry=importlib.util.module_from_spec(spec);spec.loader.exec_module(entry)
     path=tmp_path/'config.yaml';path.write_text('camera_mode: activity\nmulti_person: false\n')
-    with patch.dict('sys.modules',{'src.monitor':module}),patch.object(sys,'argv',['main.py','--config',str(path),'--consent','--seconds','1']):
+    with patch.dict('sys.modules',{'src.monitor':module}),patch.object(sys,'argv',['main.py','--config',str(path),'--consent','--seconds','1']),patch('desktop.camera_runtime.ensure_host'):
         entry.main()
     module.WorkerActivityMonitor.return_value.run.assert_called_once_with(seconds=1)
 

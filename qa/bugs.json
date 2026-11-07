@@ -107,6 +107,12 @@
       "status": "fixed",
       "title": "Launcher reinstalls changed dependency manifests and refuses npm changes under a running frontend",
       "evidence": "worktrack.py; tests/test_operations_runtime.py"
+    },
+    {
+      "id": "FIX-12",
+      "status": "fixed",
+      "title": "macOS camera TCC abort caused by missing usage description in Python worker",
+      "evidence": "desktop/CameraHost.m; desktop/build_camera_host.py; desktop/camera_runtime.py; tests/test_camera_runtime.py; qa/evidence/camera-macos-fix.json"
     }
   ],
   "implemented_features": [

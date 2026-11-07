@@ -255,6 +255,20 @@ Keyboard/mouse event тоонуудыг database-д хадгалахгүй. Mock
 
 ## Camera
 
+macOS дээр `NSCameraUsageDescription` дутуу Python process-оос capture хийхэд TCC
+процессыг SIGABRT-аар хааж болно. Camera CLI болон вебийн товч нь өөрийн signed
+**WorkTrack Camera** bundle дотор Python/OpenCV-г ажиллуулна. System Python-ийн
+Info.plist-ийг өөрчлөхгүй. Camera болон төслийн хавтсын тайлбар bundle-д байна;
+камерын OS зөвшөөрлийг capture-ээс өмнө шалгана. Зөвшөөрөөгүй бол crash хийхийн
+оронд Settings → Privacy & Security → Camera → WorkTrack Camera гэдгийг заана.
+
+Bundle нь эхний ашиглалтад Command Line Tools-оор build хийгдэж, macOS-ийн private
+temporary cache-д хадгалагдана. Ингэснээр iCloud Desktop-ийн Finder metadata кодын
+signature-д саад болохгүй. Cache арилсан, Python эсвэл host эх код өөрчлөгдвөл
+дахин бүтээнэ. Зураг/видео хадгалахгүй; зөвхөн одоогийн presence metadata хэвээр.
+Startup-ийг цуцлахад session permit эхэлж хүчингүй болно. Хоцорч ассан native host
+болон OS permission хүлээж буй worker цуцлагдсан session-оор capture эхлүүлэхгүй.
+
 ```bash
 pip install -r requirements.txt
 python main.py

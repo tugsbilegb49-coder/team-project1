@@ -131,6 +131,7 @@ def run_fake_monitor(tmp_path, *, paused=False, allowed=True, revoke_during_infe
     monitor = PresenceMonitor({'model_name': 'fake', 'confidence_threshold': .45, 'camera_index': 0,
                                'control_file': str(tmp_path/'control.json'), 'api_sync': {'enabled': True}})
     with patch.dict('sys.modules', {'cv2': cv}), patch('src.detector.ObjectDetector', return_value=detector), \
+         patch('src.camera_capture.open_camera',side_effect=cv.VideoCapture), \
          patch('src.presence.PresenceLogger', return_value=logger), \
          patch('src.api_logger.PresenceEventUploader', return_value=uploader), \
          patch.object(monitor, 'paused', return_value=paused), patch('src.presence.time.sleep'):

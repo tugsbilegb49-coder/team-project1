@@ -187,6 +187,8 @@ class PresenceMonitor:
             print('Presence demo: q = stop. Frames/video are never saved. Pause uses agent/control.json.')
             result = None
             while seconds is None or time.monotonic() - start < seconds:
+                from src.camera_capture import check_session
+                check_session()
                 remote = runtime.snapshot() if runtime else {}
                 if remote.get('version') is not None and remote['version'] != applied_version:
                     self.config['confidence_threshold'] = remote['camera_threshold']
@@ -217,7 +219,9 @@ class PresenceMonitor:
                 if self.paused() or (guard is not None and not guard.allowed()):
                     continue
                 if cap is None:
-                    cap = cv2.VideoCapture(self.config['camera_index'])
+                    from src.camera_capture import open_camera
+                    cap = open_camera(self.config['camera_index'],permitted=lambda:not self.paused() and (guard is None or guard.allowed()))
+                    if cap is None:continue
                     if not cap.isOpened():
                         raise RuntimeError('Could not open webcam. Check camera permission and camera_index.')
                 ok, frame = cap.read()
@@ -226,6 +230,7 @@ class PresenceMonitor:
                 now = time.monotonic()
                 if now >= next_sample:
                     result = detector.detect_presence(frame, self.config.get('labels', {}).get('person', 'person'))
+                    check_session()
                     if not self.paused() and (guard is None or guard.allowed()):
                         timestamp = datetime.now().astimezone()
                         logger.log(**result, timestamp=timestamp)

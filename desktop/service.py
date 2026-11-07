@@ -71,6 +71,8 @@ class DesktopController:
 
     def state(self, user):
         linked = bool(self.owner and self.owner.get('user_id') == user['id'])
+        camera=self.processes.get('camera')
+        camera_code=camera.poll() if linked and camera is not None else None
         return {'available': True, 'linked': linked,
             'another_account': not linked and any(self._running(name) for name in self.processes),
             'username': user['username'] if linked else None,
@@ -80,6 +82,7 @@ class DesktopController:
             'paused': is_paused(self.control) if linked else True,
             'camera_ready': all(importlib.util.find_spec(module) is not None for module in ('cv2','ultralytics','yaml')),
             'preparing_camera': self.preparing, 'camera_setup_error': self.setup_error,
+            'camera_error': 'permission' if camera_code==77 else 'setup' if camera_code in (70,78) else 'startup' if camera_code==76 else '',
             'errors': [name for name, process in self.processes.items() if linked and process.poll() not in (None,0)]}
 
     def _spawn(self, name, command):

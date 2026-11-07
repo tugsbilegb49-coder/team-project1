@@ -27,14 +27,25 @@ def main():
     if not args.consent and input('Camera uses frames in RAM only. Save presence/confidence locally? [y/N]: ').strip().lower() not in {'y', 'yes', 'тийм'}:
         print('Camera consent was not granted; camera not opened.')
         return
+    import sys
+    from desktop.camera_runtime import ensure_host
+    arguments=sys.argv[1:]
+    if '--consent' not in arguments:arguments=[*arguments,'--consent']
+    ensure_host(arguments)
     mode = args.mode or config.get('camera_mode', 'presence')
     if mode not in {'presence','activity'}: parser.error('camera_mode must be presence or activity.')
     from agent.process_lock import collector_lock, AlreadyRunningError
+    from src.camera_capture import CameraPermissionError, CameraSessionCancelled
     try:
         with collector_lock('camera'):
             run_monitor(config, mode, args.seconds)
     except AlreadyRunningError as exc:
         raise SystemExit(str(exc)) from exc
+    except CameraPermissionError as exc:
+        print(str(exc),file=sys.stderr)
+        raise SystemExit(77) from exc
+    except CameraSessionCancelled:
+        raise SystemExit(130)
 
 
 def run_monitor(config, mode, seconds):
