@@ -44,7 +44,7 @@ jobs:
           node-version: "22"
           cache: npm
       - name: Install build tools (and the test server's packages)
-        run: python -m pip install -r backend/requirements.txt pyinstaller tzdata psutil
+        run: python -m pip install -r backend/requirements.txt pyinstaller tzdata psutil pystray pillow
       - name: Install Node packages
         run: npm ci
       - name: Build the app
@@ -85,7 +85,7 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Use the installed app as an employee (office server over HTTPS with its code)
         if: ${{ !cancelled() }}
-        run: python .github/ci_step.py "Installed app" python verify_client.py --tls --command ${{ matrix.app }}
+        run: python .github/ci_step.py "Installed app" python verify_client.py --tls --expect-tray --command ${{ matrix.app }}
       - name: Team computer from source
         if: ${{ !cancelled() }}
         run: python .github/ci_step.py "Team computer from source" python verify_client.py

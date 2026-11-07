@@ -1,11 +1,13 @@
 """Loopback-only, authenticated controls for processes owned by this launcher."""
 
+import hmac
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import importlib.util
 import json
 import os
 from pathlib import Path
 import platform
+import secrets
 import subprocess
 import sys
 import threading
@@ -41,6 +43,8 @@ class DesktopController:
         usage=None,
         sync=True,
         autostart_command=None,
+        open_page=None,
+        tray_command=None,
     ):
         # `root` holds the program files; `home` the user's data (see WORKTRACK_HOME in agent/main.py).
         self.root, self.api, self.python = Path(root), api, str(python)
@@ -89,6 +93,18 @@ class DesktopController:
             self.autostart = Autostart(autostart_command, log=self.runtime / 'app.log')
         except OSError:
             self.autostart = Autostart(None)
+        from desktop.workday import Workday
+
+        self.workday = Workday(self, autostart=sync)
+        self.open_page = open_page or (lambda: None)
+        # The tray icon is a separate process (desktop/tray.py) that proves itself with this secret.
+        self.tray_secret = secrets.token_urlsafe(32)
+        self.tray_process = None
+        if tray_command:
+            try:
+                self.tray_process = self.spawn('tray', tray_command, {'WORKTRACK_TRAY_SECRET': self.tray_secret})
+            except OSError:
+                self.tray_process = None  # The web page still does everything.
 
     def backend(self, route, access, payload=None):
         request = Request(
@@ -146,6 +162,7 @@ class DesktopController:
             and all(importlib.util.find_spec(module) is not None for module in ('cv2', 'ultralytics', 'yaml')),
             'preparing_camera': self.preparing,
             'reminders_enabled': self.reminders.enabled,
+            'last_task': self.workday.remembered(user['id']) if linked else None,
             'version': VERSION,
             'update': self.updates.available,
             'autostart_supported': self.autostart.supported,
@@ -165,7 +182,7 @@ class DesktopController:
             'errors': [name for name, process in self.processes.items() if linked and process.poll() not in (None, 0)],
         }
 
-    def _spawn(self, name, command):
+    def _spawn(self, name, command, env=None):
         from worktrack import spawn
 
         stream = (self.runtime / (name + '.log')).open('a')
@@ -176,7 +193,7 @@ class DesktopController:
             stdin=subprocess.DEVNULL,
             stdout=stream,
             stderr=subprocess.STDOUT,
-            env={**os.environ, 'YOLO_CONFIG_DIR': str(self.runtime / 'ultralytics')},
+            env={**os.environ, 'YOLO_CONFIG_DIR': str(self.runtime / 'ultralytics'), **(env or {})},
         )
 
     def _client(self, user):
@@ -266,6 +283,16 @@ class DesktopController:
                         self.autostart.set(True)
                     except OSError:
                         pass  # Starting by hand still works; the page shows the switch as off.
+            elif action == 'remember-task':
+                # The task last started here becomes the default for the next start.
+                if not self.owner or self.owner.get('user_id') != user['id']:
+                    raise DesktopError('Өөр хэрэглэгчийн төхөөрөмжийг удирдах эрхгүй.', 403)
+                if set(data) - {'task', 'title'} or not isinstance(data.get('task'), str):
+                    raise DesktopError('Буруу даалгавар.')
+                try:
+                    self.workday.remember(user['id'], data['task'], data.get('title', ''))
+                except ValueError as exc:
+                    raise DesktopError('Буруу даалгавар.') from exc
             elif action in ('autostart-on', 'autostart-off'):
                 # Anyone signed in on this computer may choose, unless it is linked to someone else.
                 if data:
@@ -334,10 +361,44 @@ class DesktopController:
                     raise DesktopError('Танигдаагүй үйлдэл.', 404)
             return self.state(user)
 
+    def tray_state(self):
+        with self.lock:
+            if self.closed:
+                raise DesktopError('WorkTrack хаагдаж байна.', 409)
+            return self.workday.tray_state()
+
+    def tray_act(self, action):
+        """start / pause / finish / open / quit from the tray icon, as the person linked here."""
+        if self.closed:
+            raise DesktopError('WorkTrack хаагдаж байна.', 409)
+        message, open_page = '', False
+        if action == 'open':
+            open_page = True
+        elif action == 'quit':
+            try:
+                self.workday.pause(finish=True)
+            except (AgentError, DesktopError, OSError):
+                pass  # Quit anyway; the server ends an abandoned task timer after 90 seconds.
+            with self.lock:
+                self._stop_collectors()
+            threading.Timer(0.3, self.shutdown).start()
+        elif action == 'start':
+            message, open_page = self.workday.start()
+        elif action in ('pause', 'finish'):
+            message, open_page = self.workday.pause(finish=action == 'finish')
+        else:
+            raise DesktopError('Олдсонгүй.', 404)
+        if open_page:
+            self.open_page()
+        return {'message': message, **self.tray_state()} if action != 'quit' else {'message': ''}
+
     def close(self):
         self.usage_sync.close()
         self.reminders.close()
         self.updates.close()
+        self.workday.close()
+        if self.tray_process is not None:
+            self.stop(self.tray_process)
         with self.lock:
             self.closed = True
             if self.owns_usage:
@@ -388,11 +449,28 @@ class DesktopHandler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass  # A browser may cancel a status poll while navigating away.
 
+    def _tray(self, post):
+        """The tray icon process: no browser, no login; it knows the secret the launcher gave it."""
+        secret = self.headers.get('X-WorkTrack-Tray') or ''
+        controller = self.server.controller
+        if self.headers.get('Origin') or not hmac.compare_digest(secret, controller.tray_secret):
+            raise DesktopError('Зөвшөөрөлгүй.', 403)
+        if self.headers.get('Content-Length', '0') not in ('', '0'):
+            raise DesktopError('Энэ үйлдэлд утга хэрэггүй.', 413)
+        action = self.path.removeprefix('/desktop/tray/').strip('/')
+        if not post:
+            if action:
+                raise DesktopError('Олдсонгүй.', 404)
+            return controller.tray_state()
+        return controller.tray_act(action)
+
     def _handle(self, post=False):
         try:
             port = self.server.server_port
             if self.headers.get('Host') not in (f'127.0.0.1:{port}', f'localhost:{port}'):
                 raise DesktopError('Local host шаардлагатай.', 403)
+            if self.path.startswith('/desktop/tray/'):
+                return self._reply(200, self._tray(post))
             origin = self.headers.get('Origin')
             if (origin and origin not in self.server.origins) or (post and not origin):
                 raise DesktopError('Энэ хуудас WorkTrack-ийг удирдах эрхгүй.', 403)
@@ -436,6 +514,7 @@ class DesktopHandler(BaseHTTPRequestHandler):
                     'reminders-off',
                     'autostart-on',
                     'autostart-off',
+                    'remember-task',
                     'quit',
                 }
                 action = self.path.removeprefix('/desktop/').removesuffix('/')

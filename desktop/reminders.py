@@ -25,7 +25,7 @@ ACTIVE_IDLE_LIMIT = 120  # Input within the last two minutes counts as "at the c
 LATE_HOUR = 20
 SHOW_FOR = 30 * 60  # How long the web page keeps showing the latest reminder.
 
-FORGOT = 'Ажил эхлүүлэхээ мартсан уу? WorkTrack дээр «Ажил эхлүүлэх» дарна уу.'
+FORGOT = 'Ажил эхлүүлэхээ мартсан уу? WorkTrack-ийн дүрс эсвэл хуудаснаас «Ажил эхлүүлэх»-ийг дарна уу.'
 LATE = 'Ажил асаалттай хэвээр байна. Дууссан бол WorkTrack дээр «Ажил дуусгах» дарна уу.'
 
 

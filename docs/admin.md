@@ -348,6 +348,13 @@ Installer-ийг `python packaging/build_client.py` build хийнэ (PyInstalle
 (`.github/workflows/installer.yml`) нь Windows, macOS дээр build хийж, `verify_client.py`-аар
 ажилтны бүх урсгалыг (суулгасан аппыг оффисын HTTPS сервер, кодтой) туршаад zip-ийг хадгална.
 
+Tray дүрс (`desktop/tray.py`) нь тусдаа жижиг процесс: launcher түүнийг нууц түлхүүртэй асааж,
+тэр зөвхөн `127.0.0.1:8766/desktop/tray/`-тай ярина. Эхлүүлэх үед сүүлд сонгосон даалгаврыг
+(`.runtime/last-task.json`) эхлүүлнэ; даалгавар дууссан/шилжсэн бол хуудсыг нээж шинээр сонгуулна.
+Хуудас нээлттэй эсэхээс үл хамааран WorkTrack нь бүртгэж байх үед даалгаврын цагийн session-ийг 30
+секунд тутам сунгана (`desktop/workday.py`; сервер 90 секунд мэдээгүй session-ийг дуусгадаг).
+Эх кодоос ажиллуулахад tray-д `pip install pystray pillow` хэрэгтэй; суулгасан аппад орсон.
+
 ### Ажилтны аппын шинэ хувилбар гаргах
 
 1. `agent/version.py`-ийн `VERSION`-ийг нэмнэ (жишээ нь `1.1.0`), commit хийнэ.

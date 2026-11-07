@@ -116,6 +116,7 @@ async function mockApp(page) {
     if (action === 'camera-off') state.desktop.camera_running = false;
     if (action === 'reminders-on' || action === 'reminders-off')
       state.desktop.reminders_enabled = action === 'reminders-on';
+    if (action === 'remember-task') state.desktop.last_task = route.request().postDataJSON();
     if (action === 'autostart-on' || action === 'autostart-off')
       state.desktop.autostart_enabled = action === 'autostart-on';
     if (action === 'stop')
@@ -373,7 +374,9 @@ test('today home guides consent then controls work and camera explicitly', async
   await expect(page.getByRole('button', { name: 'Камер асаах', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Ажил үргэлжлүүлэх', exact: true }).click();
   await page.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true })).toBeDisabled();
+  // The last choice stays, so the next start is one click.
+  await expect(page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true })).toBeEnabled();
+  await expect(page.getByLabel('Хийх даалгавар', { exact: true })).toHaveValue('none');
   expect(state.desktop.computer_running).toBe(false);
 });
 
@@ -596,7 +599,7 @@ test('task owner records time and percent then requests a handoff without changi
   expect(state.workSession.task_id).toBe(11);
   expect(state.desktop.paused).toBe(false);
   await page.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true })).toBeEnabled();
   expect(state.workSession).toBeNull();
   expect(state.desktop.computer_running).toBe(false);
   await page.getByRole('button', { name: 'Даалгавар', exact: true }).click();
@@ -1335,4 +1338,25 @@ test('admin sees how employees connect, the last backup and sets a second backup
   await expect(server.getByText('Хадгаллаа.', { exact: false })).toBeVisible();
   await expect(folder).toHaveValue('/Volumes/USB/WorkTrack');
   await expect(server.getByText('Одоогоор backup зөвхөн серверийн компьютер дээр')).toHaveCount(0);
+});
+
+test('the next day starts with one click on the task used last time', async ({ page }) => {
+  const state = await mockApp(page);
+  Object.assign(state.desktop, { linked: true, username: 'admin', device_name: 'QA laptop' });
+  await page.goto('/');
+  const panel = page.getByRole('region', { name: 'Энэ компьютерийн удирдлага', exact: true });
+  const start = panel.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true });
+  await expect(start).toBeDisabled(); // Nothing chosen on this computer yet.
+  await panel.getByLabel('Хийх даалгавар', { exact: true }).selectOption('none');
+  await start.click();
+  await expect(panel.getByRole('button', { name: 'Түр зогсоох', exact: true })).toBeVisible();
+  expect(state.desktop.last_task).toEqual({ task: 'none', title: '' });
+  await panel.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
+  await expect(start).toBeEnabled();
+  expect(state.desktop.computer_running).toBe(false);
+  await page.reload(); // Next morning: the page remembers nothing, the computer does.
+  await expect(start).toBeEnabled();
+  await start.click();
+  await expect(panel.getByRole('button', { name: 'Түр зогсоох', exact: true })).toBeVisible();
+  expect(state.desktopPosts.filter((action) => action === 'start')).toHaveLength(2);
 });

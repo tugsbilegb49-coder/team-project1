@@ -28,6 +28,13 @@ analysis = Analysis(
         'desktop.tls',
         'agent.transport',
         'agent.version',
+        'desktop.workday',
+        'desktop.tray',
+        # The tray icon: pystray picks its backend at run time, so name it here.
+        'PIL.Image',
+        'PIL.ImageDraw',
+        *(['pystray._darwin', 'PyObjCTools.AppHelper', 'AppKit'] if sys.platform == 'darwin' else []),
+        *(['pystray._win32'] if sys.platform == 'win32' else []),
         'tzdata',
     ],
     # Server and camera code is reachable only from modes this app never runs. cryptography only

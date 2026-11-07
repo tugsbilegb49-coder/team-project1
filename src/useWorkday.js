@@ -91,7 +91,7 @@ export function useWorkday(user, work) {
     setSelection({ userId, value: String(value) });
   }
 
-  function start(value) {
+  function start(value, title = '') {
     return perform(async (send, signal) => {
       if (!value) throw new Error('Эхлээд хийх даалгавраа сонгоно уу.');
       if (!work.sample || work.error)
@@ -125,6 +125,12 @@ export function useWorkday(user, work) {
         );
       }
       selectTask(value);
+      try {
+        // The next start (here or from the tray icon) begins with this task.
+        await send('remember-task', { task: String(value), title });
+      } catch {
+        // Only a convenience: the work itself has started.
+      }
       return value === 'none'
         ? 'Аппын хэрэглээ бүртгэгдэж байна. Даалгаврын цаг эхлүүлээгүй.'
         : 'Сонгосон даалгаврын цаг болон аппын хэрэглээ бүртгэгдэж байна.';
@@ -152,7 +158,6 @@ export function useWorkday(user, work) {
         errors.push(`Аппын бүртгэл зогссоныг баталгаажуулж чадсангүй: ${error.message}`);
       }
       if (errors.length) throw new Error(errors.join(' '));
-      if (!paused) selectTask('');
       return paused
         ? 'Даалгаврын цаг, аппын бүртгэл түр зогслоо. Програм нээлттэй цаг үргэлжилнэ.'
         : 'Даалгаврын цаг, аппын бүртгэлийг зогсоолоо. Даалгаврыг дууссан төлөвт оруулаагүй. Програм нээлттэй цаг үргэлжилнэ.';
@@ -172,7 +177,9 @@ export function useWorkday(user, work) {
     state,
     busy: Boolean(operation && operation.userId === userId),
     closed: isClosed,
-    choice: selection && selection.userId === userId ? selection.value : '',
+    // The task chosen on this page, else the one last started on this computer.
+    choice:
+      selection && selection.userId === userId ? selection.value : state?.last_task?.task || '',
     selectTask,
     error: feedback && feedback.userId === userId && feedback.error ? feedback.message : '',
     message: feedback && feedback.userId === userId && !feedback.error ? feedback.message : '',

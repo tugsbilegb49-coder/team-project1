@@ -16,12 +16,14 @@ Close WorkTrack before running it (it needs ports 8000, 5173 and 8766).
 """
 
 import argparse
+import json
 import os
 from pathlib import Path
 import secrets
 import subprocess
 import sys
 import tempfile
+import time
 
 from verify_launcher import group_options, kill_tree, port_open, request, wait_for
 
@@ -54,6 +56,98 @@ def start_client(command, env, log):
     )
 
 
+def tray_processes(client):
+    """The tray icon helper (desktop/tray.py) among the client's children, if psutil is installed."""
+    try:
+        import psutil
+    except ImportError:
+        return None
+    try:
+        children = psutil.Process(client.pid).children(recursive=True)
+    except psutil.Error:
+        return []
+    found = []
+    for child in children:
+        try:
+            command = child.cmdline()
+        except psutil.Error:
+            continue
+        if 'tray' in command[1:2] or 'desktop.tray' in command:
+            found.append(child)
+    return found
+
+
+def check_tray(client, home, expect):
+    deadline = time.monotonic() + 20
+    found = tray_processes(client)
+    while found == [] and time.monotonic() < deadline:
+        time.sleep(1)
+        found = tray_processes(client)
+    log = home / '.runtime' / 'tray.log'
+    if found is None:
+        print('SKIPPED: tray check (psutil is not installed)', flush=True)
+    elif found and all(process.is_running() for process in found):
+        time.sleep(3)  # Still there a moment later: it did not crash at start.
+        assert all(process.is_running() for process in found), 'The tray icon process stopped:\n' + (
+            log.read_text(encoding='utf-8', errors='replace')[-2000:] if log.exists() else ''
+        )
+        print('PASSED: the tray icon process is running', flush=True)
+    else:
+        message = 'The tray icon process did not start.\n' + (
+            log.read_text(encoding='utf-8', errors='replace')[-2000:] if log.exists() else '(no tray.log)'
+        )
+        assert not expect, message
+        print('WARNING: ' + message, flush=True)
+    return found or []
+
+
+def exercise_tray(trays, headers):
+    """Start, pause and finish from the tray icon's API, as its menu does, against the real server."""
+    try:
+        secret = trays[0].environ().get('WORKTRACK_TRAY_SECRET')
+    except Exception:  # psutil may not read another process's environment on every system.
+        secret = None
+    if not secret:
+        print('SKIPPED: tray actions (cannot read the tray secret here)', flush=True)
+        return
+    auth = {'Authorization': headers['Authorization']}
+
+    def tray(action=''):
+        from urllib.error import HTTPError
+        from urllib.request import Request, urlopen
+
+        url = f'http://127.0.0.1:8766/desktop/tray/{action + "/" if action else ""}'
+        sent = Request(url, data=b'' if action else None, headers={'X-WorkTrack-Tray': secret})
+        try:
+            with urlopen(sent, timeout=60) as response:  # Exactly what desktop/tray.py sends.
+                return json.load(response)
+        except HTTPError as error:
+            raise AssertionError(f'Tray {action or "state"} returned {error.code}: {error.read()[:300]!r}') from None
+
+    def timer():
+        return request(WEB + '/api/tasks/work-session/', headers=auth)[1]['session']
+
+    _, me = request(WEB + '/api/users/me/', headers=auth)
+    status, task = request(
+        WEB + '/api/tasks/', {'title': 'Tray task', 'employee': me['id']}, {**auth, 'Content-Type': 'application/json'}
+    )
+    assert status == 201, f'Creating a task failed: {status} {task}'
+    status, _ = request(
+        WEB + '/desktop/remember-task/', {'task': str(task['id']), 'title': 'Tray task'}, headers
+    )  # What the page does after a start.
+    assert status == 200, f'remember-task returned {status}'
+    state = tray('start')
+    session = timer()
+    assert state['working'] and session and session['running'] and session['task_id'] == task['id'], (state, session)
+    state = tray('pause')
+    assert state['paused'] and timer() is None, (state, timer())
+    state = tray('start')
+    assert state['working'] and timer()['running'], state
+    state = tray('finish')
+    assert not state['running'] and timer() is None, state
+    print('PASSED: tray started the remembered task, paused and finished it on the server', flush=True)
+
+
 def quit_client(client, headers):
     status, _ = request(WEB + '/desktop/quit/', {}, {**headers, 'Content-Type': 'application/json'})
     assert status == 200, f'«WorkTrack хаах» failed: {status}'
@@ -61,7 +155,7 @@ def quit_client(client, headers):
     wait_for('the client ports to close', lambda: not port_open(5173) and not port_open(8766), None, 30)
 
 
-def exercise(client, command, env, home, log, password, code=None):
+def exercise(client, command, env, home, log, password, code=None, expect_tray=False):
     wait_for('the setup page', lambda: 'Сервертэй холбох' in text(WEB + '/'), client, 900)
     setup = {'Origin': WEB, 'Content-Type': 'application/json'}
     if code:
@@ -96,6 +190,7 @@ def exercise(client, command, env, home, log, password, code=None):
 
     state = act('connect', {'device_name': 'Ажилтны компьютер', 'consent': True})
     assert state['linked'], state
+    trays = check_tray(client, home, expect_tray)
     _, devices = request(WEB + '/api/devices/', headers={'Authorization': headers['Authorization']})
     names = [row['name'] for row in (devices.get('results', devices) if isinstance(devices, dict) else devices)]
     assert 'Ажилтны компьютер' in names, f'The server does not list the device: {devices}'
@@ -116,8 +211,12 @@ def exercise(client, command, env, home, log, password, code=None):
     output = agent_log.read_text(encoding='utf-8', errors='replace') if agent_log.exists() else ''
     assert 'Desktop agent stopped.' in output, 'Agent was killed instead of stopping cleanly:\n' + output[-3000:]
     print('PASSED: device linked on the server; agent reported, then stopped cleanly', flush=True)
+    if trays:
+        exercise_tray(trays, headers)
 
     quit_client(client, headers)
+    left = [process.pid for process in trays if process.is_running()]
+    assert not left, f'The tray icon process outlived WorkTrack: {left}'
     print('PASSED: «WorkTrack хаах» ended every process', flush=True)
     again = start_client(command, env, log)
     try:
@@ -135,6 +234,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--command', help='Installed app to test, e.g. dist/WorkTrack/WorkTrack.exe')
     parser.add_argument('--tls', action='store_true', help="Behind the office server's HTTPS front end (8443)")
+    parser.add_argument('--expect-tray', action='store_true', help='Fail when the tray icon process does not run')
     args = parser.parse_args()
     busy = [port for port in (8000, 5173, 8766, 8443) if port_open(port)]
     if busy:
@@ -192,7 +292,7 @@ def main():
                     proxy.start()
                     code = pairing_code(digest)
                 client = start_client(command, client_env, log)
-                exercise(client, command, client_env, home, log, password, code)
+                exercise(client, command, client_env, home, log, password, code, args.expect_tray)
                 failed = False
             except AssertionError as error:
                 print(f'FAILED: {error}', flush=True)

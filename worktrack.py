@@ -220,6 +220,8 @@ def run_client(args, started_at):
             started_at=started_at,
             usage=usage,
             autostart_command=autostart_command(args),
+            open_page=open_browser,
+            tray_command=tray_command(),
         )
         desktop = DesktopServer(('127.0.0.1', 8766), controller, {WEB, 'http://localhost:5173'})
         desktop.start()
@@ -241,6 +243,15 @@ def autostart_command(args):
         return [sys.executable, '--no-browser']
     python = VENV_PYTHON if VENV_PYTHON.exists() else Path(sys.executable)
     return [str(python), str(ROOT / 'worktrack.py'), '--desktop', *(['--share'] if args.share else []), '--no-browser']
+
+
+def tray_command():
+    """The menu bar / notification area icon (desktop/tray.py), when its packages are available."""
+    if FROZEN:
+        return [sys.executable, 'tray']
+    if importlib.util.find_spec('pystray') and importlib.util.find_spec('PIL'):
+        return [sys.executable, '-m', 'desktop.tray']
+    return None
 
 
 def open_browser(url=WEB):
@@ -585,6 +596,8 @@ def main():
                 started_at=started_at,
                 usage=usage,
                 autostart_command=autostart_command(args),
+                open_page=open_browser,
+                tray_command=tray_command(),
             )
             desktop = DesktopServer(('127.0.0.1', 8766), controller, {WEB, 'http://localhost:5173'})
             desktop.start()
@@ -643,6 +656,11 @@ if __name__ == '__main__':
         from agent.main import main as agent_main
 
         agent_main()
+        sys.exit(0)
+    if FROZEN and sys.argv[1:2] == ['tray']:
+        from desktop.tray import main as tray_main  # The menu bar / notification area icon.
+
+        tray_main()
         sys.exit(0)
     if sys.stdout is None or sys.stderr is None:  # A windowed app has no console: log to a file.
         RUNTIME.mkdir(parents=True, exist_ok=True)

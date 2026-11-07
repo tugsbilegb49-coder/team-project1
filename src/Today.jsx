@@ -134,7 +134,8 @@ function WorkControls({ user, tasks, state, work, workday, session, taskRunning,
   const canFinish = state.computer_running || state.camera_running || session;
   function submit(event) {
     event.preventDefault();
-    workday.start(selected);
+    const task = ownTasks.find((row) => String(row.id) === selected);
+    workday.start(selected, task ? task.title : '');
   }
   return (
     <form className="workday-form" onSubmit={submit}>
