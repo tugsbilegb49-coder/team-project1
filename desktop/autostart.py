@@ -118,11 +118,25 @@ def disable():
     (mac_plist() if sys.platform == 'darwin' else linux_entry()).unlink(missing_ok=True)
 
 
+def temporary_location(program):
+    """Why `program` cannot be started at sign-in: it runs from a place that disappears."""
+    text = str(program).replace('\\', '/')
+    if '/AppTranslocation/' in text:
+        # macOS runs a downloaded app from a random read-only copy until it is moved.
+        return 'WorkTrack-ийг Applications хавтас руу зөөгөөд дахин нээвэл автоматаар асах боломжтой болно.'
+    if '/AppData/Local/Temp/' in text and sys.platform == 'win32':
+        return 'Zip-ийг задлаад (Extract all) задалсан хавтаснаас WorkTrack-ийг нээвэл автоматаар асах боломжтой болно.'
+    return ''
+
+
 class Autostart:
     """Start-at-sign-in for this copy of WorkTrack, kept pointing at the current program location."""
 
     def __init__(self, command, log=None, platform_ok=None):
         self.command, self.log = list(command or []), log
+        self.note = temporary_location(self.command[0]) if self.command else ''
+        if self.note:
+            self.command = []
         self.supported = bool(self.command) and (supported() if platform_ok is None else platform_ok)
         if self.supported and self.enabled and current() != expected(self.command):
             self.set(True)  # The program was moved or updated: point the entry at this copy.

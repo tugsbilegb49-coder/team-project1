@@ -385,6 +385,9 @@ export function DesktopPanel({ user, tasks, work, workday, busy }) {
               {state.autostart_supported && !state.another_account && (
                 <AutostartSwitch state={state} busy={busy} act={act} />
               )}
+              {state.autostart_note && (
+                <p className="muted autostart-field">{state.autostart_note}</p>
+              )}
             </>
           )}
         </>

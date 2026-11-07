@@ -151,3 +151,11 @@ def test_someone_else_cannot_change_a_linked_computer(controller):
     with pytest.raises(DesktopError) as error:
         controller.act({'id': 2, 'username': 'other'}, 'access', 'autostart-on', {})
     assert error.value.status == 403
+
+
+def test_a_program_running_from_a_temporary_copy_explains_how_to_fix_it():
+    item = Autostart(['/private/var/folders/x/AppTranslocation/ABC/d/WorkTrack.app/Contents/MacOS/WorkTrack'])
+    assert not item.supported and 'Applications' in item.note
+    with patch.object(autostart.sys, 'platform', 'win32'):
+        item = Autostart([r'C:\Users\bat\AppData\Local\Temp\Temp1_WorkTrack.zip\WorkTrack\WorkTrack.exe'])
+    assert not item.supported and 'задлаад' in item.note

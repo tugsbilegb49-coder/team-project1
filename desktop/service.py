@@ -150,6 +150,7 @@ class DesktopController:
             'update': self.updates.available,
             'autostart_supported': self.autostart.supported,
             'autostart_enabled': self.autostart.enabled,
+            'autostart_note': self.autostart.note,
             # The installed app turns this on when a device is linked, unless the user chose before.
             'autostart_on_connect': FROZEN and self.autostart.supported and not self.autostart_choice.exists(),
             'reminder': self.reminders.current() if linked else None,

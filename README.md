@@ -132,7 +132,8 @@ Windows 10/11 дээр macOS-той ижил ажиллана; `.command`-ийн
 
 1. Админаас `WorkTrack-windows.zip` эсвэл `WorkTrack-macos.zip`-ийг авна. Админ үүнийг GitHub-ийн
    **Releases** (эсвэл **Actions → Installer**-ийн сүүлийн амжилттай ажил) хуудаснаас татна.
-2. Zip-ээ задлаад **WorkTrack.exe** (Windows) эсвэл **WorkTrack.app** (macOS)-ийг нээнэ.
+2. Zip-ээ задлаад (Windows: баруун товшиж **Extract All**; zip дотроос шууд бүү нээ) **WorkTrack.exe**-г,
+   macOS дээр **WorkTrack.app**-ийг **Applications** хавтас руу зөөгөөд тэндээс нээнэ.
    - Windows "Windows protected your PC" гэвэл **More info → Run anyway**. Нээгдсэн цонхыг хаахгүй.
    - macOS "unidentified developer" гэвэл аппыг баруун товшиж **Open** (эсвэл System Settings →
      Privacy & Security → **Open Anyway**). Апп Dock-д харагдахгүй; хуудаснаас удирдана.
