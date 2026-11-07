@@ -129,6 +129,10 @@ class UnifiedFlowTests(TestCase):
 class LiveUploaderTests(LiveServerTestCase):
     """Exercise the real HTTP uploaders against Django, not the mock API."""
 
+    # Windows tries IPv6 ::1 first for "localhost" and waits ~2 s per request before
+    # falling back to the IPv4 test server; the real app always uses 127.0.0.1 too.
+    host = '127.0.0.1'
+
     def test_presence_uploader_refresh_consent_and_replay_over_http(self):
         import json
         import sys

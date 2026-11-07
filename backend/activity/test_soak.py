@@ -3,7 +3,6 @@
 import json
 import os
 from pathlib import Path
-import resource
 from tempfile import TemporaryDirectory
 import time
 from unittest import skipUnless
@@ -18,9 +17,20 @@ from users.models import User
 from .models import ComputerActivity
 
 
+def max_rss():
+    """Peak memory as the OS reports it; the resource module exists only on macOS/Linux."""
+    try:
+        import resource
+    except ImportError:
+        return None
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+
+
 @skipUnless(os.environ.get('WORKTRACK_SOAK_SECONDS'), 'Run via verify_soak.py')
 @override_settings(REQUIRE_MONITORING_CONSENT=False)
 class MultiDeviceSoakTests(LiveServerTestCase):
+    host = '127.0.0.1'  # Avoid Windows' slow IPv6-first lookup of "localhost".
+
     def test_multi_device_http_lifecycle(self):
         import sys
 
@@ -78,7 +88,7 @@ class MultiDeviceSoakTests(LiveServerTestCase):
                 'stored_segments': rounds * devices,
                 'max_request_seconds': round(max(latencies), 3),
                 'mean_request_seconds': round(sum(latencies) / len(latencies), 3),
-                'max_rss_raw': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+                'max_rss_raw': max_rss(),
                 'real_camera_or_app_capture': False,
                 'live_database_modified': False,
             }

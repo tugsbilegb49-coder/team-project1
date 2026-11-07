@@ -24,6 +24,10 @@ from src.api_logger import PresenceEventUploader  # noqa: E402
 
 @override_settings(REQUIRE_MONITORING_CONSENT=True)
 class QueueAccountTests(LiveServerTestCase):
+    # Windows tries IPv6 ::1 first for "localhost" and waits ~2 s per request before
+    # falling back to the IPv4 test server; the real app always uses 127.0.0.1 too.
+    host = '127.0.0.1'
+
     def setUp(self):
         cache.clear()
         self.a = User.objects.create_user('queue-account-a')
