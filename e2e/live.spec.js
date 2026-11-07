@@ -182,7 +182,7 @@ test('real Django login → department/manager → task/quality → inactive fil
     },
   });
   expect(heartbeat.status()).toBe(200);
-  await page.getByRole('button', { name: 'Agent төлөв', exact: true }).click();
+  await page.getByRole('button', { name: 'Төхөөрөмжийн төлөв', exact: true }).click();
   await expect(page.getByLabel('QA browser workstation computer', { exact: true })).toContainText(
     '3',
   );
