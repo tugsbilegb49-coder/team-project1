@@ -18,8 +18,14 @@ export function passwordFeedback(failure) {
     const value = failure.details?.[field];
     if (typeof value === 'string' || Array.isArray(value)) {
       const messages = Array.isArray(value) ? value : [value];
-      return {field, message:messages.filter(item => typeof item === 'string').map(translate).join(' ')};
+      return {
+        field,
+        message: messages
+          .filter((item) => typeof item === 'string')
+          .map(translate)
+          .join(' '),
+      };
     }
   }
-  return {field:null, message:failure.message};
+  return { field: null, message: failure.message };
 }
