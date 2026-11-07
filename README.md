@@ -74,6 +74,37 @@ Log-ууд `.runtime/backend.log`, `frontend.log`, `scheduler.log`, `backup.log`
 Launcher ажиллаж байхад agent-ийг өөр terminal эсвэл OS startup script-ээр давхар
 асаахгүй. macOS startup helper-ийн тохиргоо launcher-аас тусдаа хэвээр.
 
+## Нэг даралтаар асаах (Windows)
+
+Windows 10/11 дээр macOS-той ижил ажиллана; `.command`-ийн оронд **Start WorkTrack.bat**.
+
+1. Анх нэг удаа суулгана:
+   - [Python 3.12](https://www.python.org/downloads/) — суулгах цонхны **Add python.exe to PATH**-г чагтална.
+   - [Node.js 22 LTS](https://nodejs.org/).
+2. Төслийн хавтас дахь **Start WorkTrack.bat**-ийг давхар товшино. Анх удаа `.venv`, dependency,
+   migration-ийг бэлдэнэ (хэдэн минут). Default нь вебээс удирдах desktop горим; browser өөрөө нээгдэнэ.
+3. Цоо шинэ суулгалтад admin байхгүй бол цонх үүнийг хэлээд зогсоно. Төслийн хавтсанд PowerShell
+   нээгээд нэг удаа ажиллуулаад `.bat`-аа дахин нээнэ:
+   ```powershell
+   .venv\Scripts\python.exe manage.py createsuperuser
+   ```
+4. Хаах: вебийн **WorkTrack хаах** эсвэл цонхонд **Ctrl+C**. Ингэхэд agent сүүлийн хугацаагаа
+   хадгалж, backend/frontend бүгд зогсоно. Цонхыг **X**-ээр хаавал бүх process мөн зогсоно (сервер
+   үлдэхгүй), гэхдээ agent сүүлийн 30 секунд хүртэлх хугацааг хадгалж амжихгүй байж болно.
+5. Camera: **Settings → Privacy & security → Camera** дээр "Camera access" болон
+   "Let desktop apps access your camera"-г асаана. Хаалттай бол вебэд энэ замыг зааж харуулна.
+
+Анхаарах зүйл:
+
+- Интернэтээс татсан zip-ээс нээхэд "Windows protected your PC" гарвал **More info → Run anyway**.
+- Terminal-аас: `"Start WorkTrack.bat" --web-only` эсвэл `.venv\Scripts\python.exe worktrack.py --camera`.
+- Log-ууд `.runtime\*.log` дотор. 8000/5173/8766 порт дээр өөр програм байвал асахгүй.
+- `WorkTrack.app` болон `agent/install_macos_launch_agent.py` нь зөвхөн macOS-д; Windows-д `.bat` ашиглана.
+- Windows дээр файлын `0600` эрх үйлчлэхгүй; token/config файлууд Windows-ийн хэрэглэгчийн
+  хавтасны эрхээр хамгаалагдана. Төслөө өөрийн хэрэглэгчийн хавтас (жишээ нь `Documents`) дотор байлгана.
+- `.github/workflows/windows.yml` нь push бүрт Windows дээр бүх тест, browser тест болон
+  `verify_launcher.py --agent` (launcher асаах, agent эхлүүлэх/зогсоох, Ctrl+Break-аар хаах) ажиллуулна.
+
 ## Тохируулах
 
 ```bash
@@ -929,6 +960,9 @@ npm run test
 npm run lint
 npm run build
 ```
+
+Launcher-ийг бодитоор асааж/зогсоох шалгалт (`python verify_launcher.py`) нь түр database
+ашиглана. Холбогдсон төхөөрөмжтэй хавтсанд ажиллахгүй тул цэвэр checkout эсвэл CI-д ажиллуулна.
 
 Integration тест нь JWT login → task → device/consent → computer/camera ingest →
 score → dashboard урсгал, batch replay, бусдын account-аар бичихийг хориглох,
