@@ -23,6 +23,9 @@ def failure_part(output):
 
 
 def main():
+    sys.stdout.reconfigure(
+        encoding='utf-8', errors='replace'
+    )  # Output may hold Cyrillic; runner pipes default to cp1252.
     title, command = sys.argv[1], sys.argv[2:]
     command[0] = shutil.which(command[0]) or command[0]  # npm/npx are .cmd files on Windows.
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)

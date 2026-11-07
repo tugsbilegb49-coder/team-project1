@@ -41,10 +41,12 @@ def port_open(port):
 
 
 def parse_json(raw):
+    """JSON body, or for an HTML page (e.g. Django's debug error page) its <title>."""
     try:
         return json.loads(raw) if raw else None
     except ValueError:
-        return None  # e.g. the frontend's HTML page
+        title = re.search(rb'<title>(.*?)</title>', raw or b'', re.S)
+        return {'html_title': title.group(1).decode('utf-8', 'replace').strip()} if title else None
 
 
 def request(url, data=None, headers=None):
