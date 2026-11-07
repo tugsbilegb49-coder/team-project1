@@ -13,10 +13,13 @@ import json
 import mimetypes
 from pathlib import Path
 import re
+import ssl
 import threading
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import Request
+
+from agent.transport import open_url
 
 MAX_BODY = 25 * 1024 * 1024
 HOP_BY_HOP = {
@@ -30,19 +33,20 @@ HOP_BY_HOP = {
     'upgrade',
     'host',
     'content-length',
+    # Forwarding headers are set by whoever forwards; a client never chooses them.
+    'x-forwarded-for',
+    'x-forwarded-proto',
+    'x-forwarded-host',
+    'forwarded',
 }
-
-
-class NoRedirect(HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None  # Pass redirects to the browser unchanged instead of following them here.
 
 
 def normalize_server(value):
     """'192.168.1.20:8000' or 'https://worktrack.example.mn/' -> scheme://host[:port]."""
     value = (value or '').strip()
     if value and '://' not in value:
-        value = 'http://' + value
+        # 8443 is the office server's HTTPS port (worktrack.py --share).
+        value = ('https://' if value.rstrip('/').endswith(':8443') else 'http://') + value
     parts = urlsplit(value)
     try:
         parts.port  # Raises ValueError for a port that is not a number in range.
@@ -62,20 +66,59 @@ def normalize_server(value):
     return f'{parts.scheme}://{parts.netloc}'
 
 
-def check_server(url, timeout=8):
-    """Raise ValueError (in Mongolian) unless `url` is a WorkTrack API server."""
+class ServerProblem(ValueError):
+    """A message for the person entering the address."""
+
+
+def needs_code(error):
+    reason = getattr(error, 'reason', error)
+    return isinstance(reason, ssl.SSLCertVerificationError)
+
+
+def check_server(url, timeout=8, code=None):
+    """The certificate pin to keep for `url` (None when no pin is needed).
+
+    Raises ValueError (in Mongolian) unless `url` is a WorkTrack API server. An office server's own
+    certificate is accepted only when `code` matches the start of its fingerprint.
+    """
+    from desktop.tls import fingerprint, normalize_code
+
+    pin = None
     try:
-        with build_opener(NoRedirect()).open(Request(url + '/api/health/'), timeout=timeout) as response:
+        try:
+            response = open_url(Request(url + '/api/health/'), timeout=timeout)
+        except URLError as exc:
+            if not needs_code(exc):
+                raise
+            code = normalize_code(code)
+            if len(code) < 12:
+                raise ServerProblem(
+                    'Энэ бол оффисын сервер. Серверийн «Сервер ба backup» хуудас эсвэл цонхонд гарсан '
+                    'серверийн кодыг оруулна уу.'
+                ) from exc
+            parts = urlsplit(url)
+            pem = ssl.get_server_certificate((parts.hostname, parts.port or 443), timeout=timeout)
+            pin = fingerprint(ssl.PEM_cert_to_DER_cert(pem))
+            if not pin.upper().startswith(code):
+                raise ServerProblem(
+                    'Серверийн код таарсангүй. Кодоо шалгана уу; таарахгүй хэвээр бол энэ сүлжээнд өөр '
+                    'компьютер сервер мэт дүр эсгэж байж магадгүй тул админдаа хэлнэ үү.'
+                ) from exc
+            response = open_url(Request(url + '/api/health/'), timeout=timeout, pin=pin)
+        with response:
             data = json.load(response)
+    except ServerProblem:
+        raise
     except HTTPError as exc:
         exc.close()
         raise ValueError(f'Сервер хариу өгсөн боловч WorkTrack биш байна (HTTP {exc.code}).') from exc
     except (URLError, OSError, http.client.HTTPException) as exc:
         raise ValueError('Сервертэй холбогдож чадсангүй. Хаяг, сүлжээгээ шалгана уу.') from exc
-    except ValueError as exc:
+    except ValueError as exc:  # Not JSON.
         raise ValueError('Энэ хаяг дээр WorkTrack сервер ажиллахгүй байна.') from exc
     if not isinstance(data, dict) or data.get('service') != 'worktrack-api' or data.get('protocol') != 1:
         raise ValueError('Энэ хаяг дээр WorkTrack сервер ажиллахгүй байна.')
+    return pin
 
 
 SETUP_PAGE = """<!doctype html>
@@ -92,9 +135,12 @@ button:disabled{opacity:.6}.muted{color:#5d6b67}[role=alert]{color:#b42318}
 <h1>WorkTrack — Сервертэй холбох</h1>
 <p>Байгууллагынхаа WorkTrack серверийн хаягийг оруулна уу. Хаягийг админаас асууна.</p>
 <form id="f"><label for="u">Серверийн хаяг</label>
-<input id="u" name="url" required placeholder="https://worktrack.company.mn эсвэл 192.168.1.20:8000" autofocus>
+<input id="u" name="url" required placeholder="https://worktrack.company.mn эсвэл https://192.168.1.20:8443" autofocus>
+<label for="c">Серверийн код <span class="muted">(зөвхөн оффисын сервер бол)</span></label>
+<input id="c" name="code" autocomplete="off" spellcheck="false" placeholder="AB12-CD34-EF56">
 <p id="e" role="alert"></p><button id="b">Холбох</button></form>
-<p class="muted">Оффисын компьютер сервер бол түүний дэлгэц дээр гарсан хаягийг оруулна.</p>
+<p class="muted">Оффисын компьютер сервер бол түүний цонх эсвэл админы «Тохиргоо → Сервер ба backup» хуудсанд
+гарсан хаяг, кодыг оруулна.</p>
 </main><script>
 document.getElementById('f').onsubmit = async (event) => {
   event.preventDefault();
@@ -102,7 +148,7 @@ document.getElementById('f').onsubmit = async (event) => {
   button.disabled = true; button.textContent = 'Шалгаж байна…'; error.textContent = '';
   try {
     const response = await fetch('/setup/server', {method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({url: document.getElementById('u').value})});
+      body: JSON.stringify({url: document.getElementById('u').value, code: document.getElementById('c').value})});
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail);
     location.replace('/');
@@ -119,11 +165,14 @@ class Gateway(ThreadingHTTPServer):
     daemon_threads = True
 
     def __init__(self, address, static_dir, api, desktop, on_server=None):
-        """`on_server(url)` saves a newly entered server address; it is only offered while api is None."""
+        """`on_server(url, pin)` saves a newly entered server address; offered only while api is None."""
         self.static_dir = Path(static_dir).resolve()
         self.api, self.desktop, self.on_server = api, desktop, on_server
         self.lock = threading.Lock()
-        super().__init__(address, GatewayHandler)
+        super().__init__(address, self.handler())
+
+    def handler(self):
+        return GatewayHandler
 
     def start(self):
         self.thread = threading.Thread(target=self.serve_forever, name='web-gateway', daemon=True)
@@ -206,20 +255,23 @@ class GatewayHandler(BaseHTTPRequestHandler):
         if self.server.api or not self.server.on_server:
             return self._json(409, {'detail': 'Сервер аль хэдийн тохируулагдсан.'})
         try:
-            url = normalize_server(json.loads(self.data or b'{}').get('url'))
-            check_server(url)
+            data = json.loads(self.data or b'{}')
+            url = normalize_server(data.get('url'))
+            pin = check_server(url, code=data.get('code') or '')
             with self.server.lock:
-                self.server.on_server(url)
+                self.server.on_server(url, pin)
                 self.server.api = url
         except (ValueError, AttributeError, OSError) as exc:
             return self._json(400, {'detail': str(exc) or 'Буруу хаяг.'})
         return self._json(200, {'server': url})
 
-    def _forward(self, base):
+    def _forward(self, base, extra=None):
         headers = {name: value for name, value in self.headers.items() if name.lower() not in HOP_BY_HOP}
+        headers.update(extra or {})
         request = Request(base + self.path, data=self.data, headers=headers, method=self.command)
         try:
-            response = build_opener(NoRedirect()).open(request, timeout=60)
+            # Pinned to the office server's certificate when the launcher set WORKTRACK_SERVER_PIN.
+            response = open_url(request, timeout=60)
         except HTTPError as exc:
             response = exc  # 4xx/5xx still carry the server's body for the page.
         except (URLError, OSError, http.client.HTTPException):

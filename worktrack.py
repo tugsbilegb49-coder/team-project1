@@ -108,18 +108,44 @@ def lan_addresses():
     return [address for address in dict.fromkeys(found) if not address.startswith(('127.', '0.'))]
 
 
+SHARE_PORT = 8443  # The office server's HTTPS port on the office network.
+
+
+def saved_server():
+    try:
+        value = json.loads((RUNTIME / 'server.json').read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
 def load_server():
     """The organisation's server this computer reports to (team mode), or None."""
-    try:
-        return json.loads((RUNTIME / 'server.json').read_text(encoding='utf-8'))['server']
-    except (OSError, ValueError, KeyError, TypeError):
-        return None
+    value = saved_server().get('server')
+    return value if isinstance(value, str) else None
 
 
-def save_server(url):
+def load_pin():
+    """The office server's certificate fingerprint this computer was paired with, or None."""
+    value = saved_server().get('pin')
+    return value if isinstance(value, str) else None
+
+
+def save_server(url, pin=None):
     from agent.token_store import atomic_json_write
 
-    atomic_json_write(RUNTIME / 'server.json', {'server': url})
+    atomic_json_write(RUNTIME / 'server.json', {'server': url, **({'pin': pin} if pin else {})})
+    use_pin(pin)
+
+
+def use_pin(pin):
+    """Every request to the server from this process and the agent it starts accepts only this certificate."""
+    from agent.transport import PIN_ENV
+
+    if pin:
+        os.environ[PIN_ENV] = pin
+    else:
+        os.environ.pop(PIN_ENV, None)
 
 
 def build_frontend():
@@ -161,16 +187,16 @@ def run_client(args, started_at):
 
     if args.server:
         url = normalize_server(args.server)
-        check_server(url)
-        save_server(url)
+        save_server(url, check_server(url, code=args.code))
+    use_pin(load_pin())
     if not FROZEN:
         build_frontend()
     ready, shutdown = threading.Event(), threading.Event()
     if load_server():
         ready.set()
 
-    def saved(url):
-        save_server(url)
+    def saved(url, pin):
+        save_server(url, pin)
         ready.set()
 
     gateway = Gateway(('127.0.0.1', 5173), ROOT / 'dist', load_server(), 'http://127.0.0.1:8766', saved)
@@ -429,6 +455,7 @@ def main():
     parser.add_argument(
         '--server', metavar='URL', help='Багийн горим: байгууллагын серверт холбогдоно (хаяг хадгалагдана)'
     )
+    parser.add_argument('--code', help='Оффисын серверийн код (--server-тэй хамт)')
     parser.add_argument(
         '--team', action='store_true', help='Багийн горим: серверийн хаягийг browser дээр асууна (хадгалагдаагүй бол)'
     )
@@ -474,7 +501,7 @@ def main():
         finally:
             instance.close()
         return
-    processes, logs = [], []
+    processes, logs, closers = [], [], []
     desktop, controller, usage = None, None, None
     shutdown = threading.Event()
 
@@ -507,20 +534,32 @@ def main():
                 from desktop.build_macos_app import build
 
                 build()
-        host, shared = '127.0.0.1', []
+        shared, code = [], ''
         if args.share:
-            # Office server: other computers on the network reach this API directly. No debug pages
-            # for them; --insecure only lets runserver keep serving the admin's static files.
+            # Office server: other computers reach Django only through the HTTPS front end below.
+            # No debug pages for them; --insecure only lets runserver keep serving the admin's static files.
             shared = lan_addresses()
             if not shared:
                 raise RuntimeError('Сүлжээний хаяг олдсонгүй. Wi-Fi/LAN-д холбогдсон эсэхээ шалгана уу.')
             if existing_backend:
                 raise RuntimeError('Өмнө асаасан backend-ийг хаагаад оффисын сервер горимоор дахин нээнэ үү.')
-            host = '0.0.0.0'
-            os.environ['DJANGO_ALLOWED_HOSTS'] = ','.join(dict.fromkeys(['localhost', '127.0.0.1', *shared]))
-            os.environ['DJANGO_DEBUG'] = 'false'
+            from desktop.tls import TLSProxy, ensure_certificate, pairing_code
+
+            cert, key, digest = ensure_certificate(RUNTIME / 'tls', shared)
+            code = pairing_code(digest)
+            proxy = TLSProxy(('0.0.0.0', SHARE_PORT), cert, key, API)
+            proxy.start()
+            closers.append(proxy.close)
+            os.environ.update(
+                DJANGO_DEBUG='false',
+                # Login throttling reads each computer's address from the front end's X-Forwarded-For.
+                TRUSTED_PROXY_NETWORKS='127.0.0.1/32',
+                TRUST_PROXY_HEADERS='true',
+                WORKTRACK_SHARE_ADDRESSES=','.join(f'https://{address}:{SHARE_PORT}' for address in shared),
+                WORKTRACK_SHARE_CODE=code,
+            )
         if not existing_backend:
-            command = [str(python), 'manage.py', 'runserver', f'{host}:8000', '--noreload']
+            command = [str(python), 'manage.py', 'runserver', '127.0.0.1:8000', '--noreload']
             wait_ready(API + '/api/health/', start('backend', command + (['--insecure'] if args.share else [])))
             if not backend_is_current():
                 raise RuntimeError('Backend readiness/version шалгалт амжилтгүй.')
@@ -567,8 +606,11 @@ def main():
         )
         if setup_url:
             print(f'Анхны админаа үүсгэх хуудас: {setup_url}', flush=True)
-        for address in shared:
-            print(f'Оффисын бусад компьютерийн WorkTrack-д энэ хаягийг оруулна: http://{address}:8000', flush=True)
+        if shared:
+            print('\nОффисын бусад компьютерийн WorkTrack-д оруулах:', flush=True)
+            for address in shared:
+                print(f'  Хаяг: https://{address}:{SHARE_PORT}', flush=True)
+            print(f'  Серверийн код: {code}\n(Админы «Тохиргоо → Сервер ба backup» хуудсанд ч харагдана.)', flush=True)
         if not args.no_browser:
             open_browser(setup_url or WEB)
         while not shutdown.is_set():
@@ -585,6 +627,8 @@ def main():
             controller.close()
         for _, process in reversed(processes):
             stop_process(process)
+        for close in closers:
+            close()
         for log in logs:
             log.close()
         if usage:

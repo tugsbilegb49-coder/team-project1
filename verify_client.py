@@ -8,6 +8,10 @@ web app and its API calls work through the local gateway, that the device links 
 starts and stops cleanly, that «WorkTrack хаах» ends every process, and that the next start
 remembers the server.
 
+With --tls the server sits behind the office server's HTTPS front end (desktop/tls.py) with its
+own certificate: the page must ask for the server code, and the gateway and the agent must reach
+the server only through the paired certificate.
+
 Close WorkTrack before running it (it needs ports 8000, 5173 and 8766).
 """
 
@@ -18,12 +22,12 @@ import secrets
 import subprocess
 import sys
 import tempfile
-import time
 
 from verify_launcher import group_options, kill_tree, port_open, request, wait_for
 
 ROOT = Path(__file__).resolve().parent
 SERVER, WEB = 'http://127.0.0.1:8000', 'http://127.0.0.1:5173'
+OFFICE = 'https://127.0.0.1:8443'
 LOCAL = {'Origin': WEB, 'X-WorkTrack-Desktop': '1'}
 
 
@@ -57,12 +61,20 @@ def quit_client(client, headers):
     wait_for('the client ports to close', lambda: not port_open(5173) and not port_open(8766), None, 30)
 
 
-def exercise(client, command, env, home, log, password):
+def exercise(client, command, env, home, log, password, code=None):
     wait_for('the setup page', lambda: 'Сервертэй холбох' in text(WEB + '/'), client, 900)
-    status, body = request(
-        WEB + '/setup/server', {'url': '127.0.0.1:8000'}, {'Origin': WEB, 'Content-Type': 'application/json'}
-    )
-    assert status == 200 and body == {'server': SERVER}, f'Saving the server failed: {status} {body}'
+    setup = {'Origin': WEB, 'Content-Type': 'application/json'}
+    if code:
+        status, body = request(WEB + '/setup/server', {'url': '127.0.0.1:8443'}, setup)
+        assert status == 400 and 'кодыг' in body['detail'], f'The server code was not asked for: {status} {body}'
+        status, body = request(WEB + '/setup/server', {'url': '127.0.0.1:8443', 'code': '0000-0000-0000'}, setup)
+        assert status == 400 and 'таарсангүй' in body['detail'], f'A wrong code was accepted: {status} {body}'
+        status, body = request(WEB + '/setup/server', {'url': '127.0.0.1:8443', 'code': code}, setup)
+        assert status == 200 and body == {'server': OFFICE}, f'Pairing with the code failed: {status} {body}'
+        print('PASSED: the office server was paired only with its code', flush=True)
+    else:
+        status, body = request(WEB + '/setup/server', {'url': '127.0.0.1:8000'}, setup)
+        assert status == 200 and body == {'server': SERVER}, f'Saving the server failed: {status} {body}'
     wait_for('the local control', lambda: request(WEB + '/desktop/status/', headers=LOCAL)[0] == 401, client, 60)
     assert 'id="root"' in text(WEB + '/'), 'The built web app is not served after setup.'
     status, health = request(WEB + '/api/health/')
@@ -90,12 +102,20 @@ def exercise(client, command, env, home, log, password):
     agent_log = home / '.runtime' / 'agent.log'
     state = act('start')
     assert state['computer_running'], f'Agent did not start: {state}'
-    time.sleep(5)
+
+    def reported():
+        _, rows = request(WEB + '/api/agent-status/', headers={'Authorization': headers['Authorization']})
+        rows = rows.get('results', rows) if isinstance(rows, dict) else rows
+        return any(row['name'] == 'Ажилтны компьютер' and row['agents'] for row in rows or [])
+
+    # The agent is a separate process: its first heartbeat shows it reaches the server too
+    # (through the paired certificate with --tls).
+    wait_for('the agent to report to the server', reported, client, 90)
     state = act('stop')
     assert not state['computer_running'], state
     output = agent_log.read_text(encoding='utf-8', errors='replace') if agent_log.exists() else ''
     assert 'Desktop agent stopped.' in output, 'Agent was killed instead of stopping cleanly:\n' + output[-3000:]
-    print('PASSED: device linked on the server; agent started and stopped cleanly', flush=True)
+    print('PASSED: device linked on the server; agent reported, then stopped cleanly', flush=True)
 
     quit_client(client, headers)
     print('PASSED: «WorkTrack хаах» ended every process', flush=True)
@@ -114,8 +134,9 @@ def main():
         stream.reconfigure(encoding='utf-8', errors='replace')
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--command', help='Installed app to test, e.g. dist/WorkTrack/WorkTrack.exe')
+    parser.add_argument('--tls', action='store_true', help="Behind the office server's HTTPS front end (8443)")
     args = parser.parse_args()
-    busy = [port for port in (8000, 5173, 8766) if port_open(port)]
+    busy = [port for port in (8000, 5173, 8766, 8443) if port_open(port)]
     if busy:
         raise SystemExit(f'Close WorkTrack first; ports in use: {busy}.')
     command = [args.command] if args.command else [sys.executable, str(ROOT / 'worktrack.py')]
@@ -160,17 +181,26 @@ def main():
                 stderr=subprocess.STDOUT,
                 **group_options(),
             )
-            client = None
+            client = proxy = code = None
             try:
                 wait_for('the server', lambda: request(SERVER + '/api/health/')[0] == 200, server, 60)
+                if args.tls:
+                    from desktop.tls import TLSProxy, ensure_certificate, pairing_code
+
+                    cert, key, digest = ensure_certificate(directory / 'tls')
+                    proxy = TLSProxy(('127.0.0.1', 8443), cert, key, SERVER)
+                    proxy.start()
+                    code = pairing_code(digest)
                 client = start_client(command, client_env, log)
-                exercise(client, command, client_env, home, log, password)
+                exercise(client, command, client_env, home, log, password, code)
                 failed = False
             except AssertionError as error:
                 print(f'FAILED: {error}', flush=True)
             finally:
                 if client:
                     kill_tree(client)
+                if proxy:
+                    proxy.close()
                 kill_tree(server)
         if failed:
             print(

@@ -32,6 +32,7 @@ if __package__:
     from .identity import queue_identity
     from .runtime import AgentRuntime
     from .process_lock import collector_lock, AlreadyRunningError
+    from .transport import open_url
 else:
     from intervals import split_interval
     from queue_limits import bounded_queue
@@ -40,8 +41,14 @@ else:
     from identity import queue_identity
     from runtime import AgentRuntime
     from process_lock import collector_lock, AlreadyRunningError
+    from transport import open_url
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import Request
+
+
+def urlopen(request, timeout):
+    """urllib's urlopen, pinned to an office server's own certificate once paired (see transport.py)."""
+    return open_url(request, timeout=timeout, follow_redirects=True)
 
 
 AGENT_DIR = Path(__file__).resolve().parent

@@ -6,7 +6,9 @@ Checks that a first run bootstraps .venv/node_modules, that backend, frontend an
 desktop control come up, that the first admin can be created from the one-time browser link, that a second launch does not start a second copy, that Ctrl+C
 (Ctrl+Break on Windows) shuts everything down, and that no server is left running afterwards.
 With --agent it also links this machine, starts the activity agent from the web API and stops
-it, which proves the agent receives the stop signal and saves its last segment.
+it, which proves the agent receives the stop signal and saves its last segment. With --share it
+starts an office server: the API must be reachable from the network only over HTTPS (8443) with
+the printed server code, and Django itself must not listen on the network address.
 
 Runs in CI on Windows; also works on macOS/Linux. It refuses to run in a folder that already
 has a linked device or launcher history, because it would replace them: use a clean checkout.
@@ -141,6 +143,43 @@ def create_first_admin(env, log_path):
     print('PASSED: first admin created from the one-time browser link', flush=True)
 
 
+def exercise_share(env, log_path):
+    """Office server: other computers get HTTPS with the shown code; plain Django stays local."""
+    from agent.transport import open_url
+    from desktop.gateway import check_server
+
+    output = log_path.read_text(encoding='utf-8', errors='replace')
+    code = re.search(r'Серверийн код: ([0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4})', output)
+    address = re.search(r'Хаяг: https://([0-9.]+):8443', output)
+    assert code and address, 'The office server did not print its address and code:\n' + output[-1500:]
+    url = f'https://{address.group(1)}:8443'
+    pin = check_server(url, code=code.group(1))
+    assert pin, 'The office server did not present its own certificate.'
+
+    def secure(route, data=None, token=None):
+        headers = {'Content-Type': 'application/json', **({'Authorization': 'Bearer ' + token} if token else {})}
+        body = json.dumps(data).encode() if data is not None else None
+        try:
+            with open_url(Request(url + route, data=body, headers=headers), timeout=10, pin=pin) as response:
+                return response.status, json.load(response)
+        except HTTPError as error:
+            error.close()
+            return error.code, None
+
+    status, tokens = secure(
+        '/api/auth/login/',
+        {'username': env['DJANGO_SUPERUSER_USERNAME'], 'password': env['DJANGO_SUPERUSER_PASSWORD']},
+    )
+    assert status == 200, f'Login over the office HTTPS failed: {status}'
+    status, data = secure('/api/server-status/', token=tokens['access'])
+    assert status == 200 and data['share']['code'] == code.group(1), f'Admin page lacks the code: {status} {data}'
+    with socket.socket() as connection:
+        connection.settimeout(2)
+        reachable = connection.connect_ex((address.group(1), 8000)) == 0
+    assert not reachable, 'Django listens on the network address; it must stay on 127.0.0.1.'
+    print(f'PASSED: office server answers over HTTPS at {url} with code {code.group(1)}; port 8000 stays local')
+
+
 def exercise_agent(env):
     """Link this machine, start the agent from the web API and stop it again."""
     status, tokens = request(
@@ -186,7 +225,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--agent', action='store_true', help='Also link this machine and start/stop the agent.')
     parser.add_argument('--timeout', type=int, default=900, help='Seconds allowed for the first-run bootstrap.')
+    parser.add_argument('--share', action='store_true', help='Start it as an office server (HTTPS on 8443).')
     args = parser.parse_args()
+    if args.share:
+        PORTS['office https'] = 8443
     existing = [name for name in LOCAL_STATE if (ROOT / name).exists()]
     if existing:
         raise SystemExit(f'Refusing to run: {", ".join(existing)} exists. Use a clean checkout (or CI).')
@@ -213,7 +255,7 @@ def main():
             'DJANGO_SUPERUSER_PASSWORD': secrets.token_urlsafe(24),
         }
 
-        command = [sys.executable, 'worktrack.py', '--desktop', '--no-browser']
+        command = [sys.executable, 'worktrack.py', '--desktop', '--no-browser', *(['--share'] if args.share else [])]
         log_path = directory / 'launcher.log'
         failed = True
         with log_path.open('wb') as log:
@@ -250,6 +292,8 @@ def main():
                 )
                 print('PASSED: second launch reused the running copy', flush=True)
 
+                if args.share:
+                    exercise_share(env, log_path)
                 if args.agent:
                     exercise_agent(env)
 

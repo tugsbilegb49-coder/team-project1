@@ -277,7 +277,7 @@ class ModeTests(unittest.TestCase):
             solo.assert_called_once()
             self.assertFalse((Path(directory) / 'server.json').exists())
 
-    def test_office_server_listens_on_the_network_without_debug_pages(self):
+    def test_office_server_listens_on_the_network_only_through_https_without_debug_pages(self):
         from pathlib import Path
         from tempfile import TemporaryDirectory
 
@@ -301,13 +301,21 @@ class ModeTests(unittest.TestCase):
                 patch.object(worktrack.signal, 'signal'),
                 patch.object(worktrack.time, 'sleep', side_effect=KeyboardInterrupt),
                 patch.object(worktrack, 'stop_process'),
+                patch('desktop.tls.TLSProxy') as proxy,
             ):
                 worktrack.main()
+                self.assertTrue((Path(directory) / 'tls' / 'server.key').exists())
             self.assertEqual(os.environ['DJANGO_DEBUG'], 'false')
-            self.assertIn('192.168.1.20', os.environ['DJANGO_ALLOWED_HOSTS'].split(','))
+            self.assertEqual(os.environ['WORKTRACK_SHARE_ADDRESSES'], 'https://192.168.1.20:8443')
+            self.assertRegex(os.environ['WORKTRACK_SHARE_CODE'], r'^[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}$')
+            self.assertEqual(os.environ['TRUSTED_PROXY_NETWORKS'], '127.0.0.1/32')
         runserver = next(command for command in commands if 'runserver' in command)
-        self.assertIn('0.0.0.0:8000', runserver)
+        self.assertIn('127.0.0.1:8000', runserver)  # Django itself stays off the network.
         self.assertIn('--insecure', runserver)
+        self.assertEqual(proxy.call_args.args[0], ('0.0.0.0', 8443))
+        self.assertEqual(proxy.call_args.args[3], 'http://127.0.0.1:8000')
+        proxy.return_value.start.assert_called_once()
+        proxy.return_value.close.assert_called_once()
 
 
 class ClientPackageTests(unittest.TestCase):

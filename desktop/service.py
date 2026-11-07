@@ -11,10 +11,11 @@ import sys
 import threading
 import time
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, build_opener, HTTPRedirectHandler
+from urllib.request import Request
 
 from agent.main import ApiClient, AgentError, is_paused, set_paused
 from agent.token_store import atomic_json_write, save_tokens
+from agent.transport import open_url
 from agent.version import VERSION
 
 # The installer build bundles no Python interpreter for scripts and leaves the camera out.
@@ -25,11 +26,6 @@ class DesktopError(RuntimeError):
     def __init__(self, message, status=400):
         super().__init__(message)
         self.status = status
-
-
-class NoRedirect(HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
 
 
 class DesktopController:
@@ -101,7 +97,7 @@ class DesktopController:
             data=json.dumps(payload).encode() if payload is not None else None,
         )
         try:
-            with build_opener(NoRedirect()).open(request, timeout=8) as response:
+            with open_url(request, timeout=8) as response:
                 return json.load(response) if response.status != 204 else None
         except HTTPError as exc:
             code = exc.code

@@ -122,7 +122,7 @@ def test_other_host_names_are_refused(site, api):
 
 def test_first_run_page_saves_a_checked_server_address(site, api):
     saved = []
-    gateway = open_gateway(site, None, desktop=api, on_server=saved.append)
+    gateway = open_gateway(site, None, desktop=api, on_server=lambda url, pin: saved.append(url))
     try:
         status, _, body = call(gateway, 'GET', '/')
         assert status == 200 and 'Сервертэй холбох'.encode() in body
