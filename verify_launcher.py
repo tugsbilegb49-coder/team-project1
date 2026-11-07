@@ -179,6 +179,8 @@ def exercise_agent(env):
 
 
 def main():
+    for stream in (sys.stdout, sys.stderr):  # Logs contain Cyrillic; Windows CI pipes use cp1252.
+        stream.reconfigure(encoding='utf-8', errors='replace')
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--agent', action='store_true', help='Also link this machine and start/stop the agent.')
     parser.add_argument('--timeout', type=int, default=900, help='Seconds allowed for the first-run bootstrap.')
@@ -268,8 +270,8 @@ def main():
             print('FAILED: the launcher did not report a clean shutdown.', flush=True)
             failed = True
         if failed:
-            print('Launcher log:\n' + output[-6000:], flush=True)
-            for name in ('backend', 'frontend', 'agent', 'scheduler', 'backup'):
+            print('Launcher log:\n' + output[-3000:], flush=True)
+            for name in ('backend', 'scheduler', 'backup', 'agent', 'frontend'):
                 path = ROOT / '.runtime' / f'{name}.log'
                 if path.exists():
                     print(f'--- .runtime/{name}.log\n' + path.read_text(encoding='utf-8', errors='replace')[-3000:])
