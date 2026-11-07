@@ -24,7 +24,7 @@ def source_revision():
     # Includes untracked implementation files while excluding private runtime data.
     candidates = subprocess.check_output(['git', 'ls-files', '--cached', '--others', '--exclude-standard'], cwd=ROOT, text=True).splitlines()
     for name in sorted(set(candidates)):
-        if name.startswith('qa/evidence/') or not name.endswith(('.py', '.js', '.jsx', '.json', '.yml', '.yaml', '.txt', '.md', '.csv')):
+        if name.startswith('qa/evidence/') or not name.endswith(('.py', '.js', '.jsx', '.json', '.yml', '.yaml', '.txt', '.md', '.csv', '.m')):
             continue
         path = ROOT/name
         if path.is_file():
@@ -82,6 +82,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=Path('.runtime/qa/final-qa.json'))
     parser.add_argument('--skip-browser', action='store_true', help='Explicitly mark real browser integration as skipped.')
+    parser.add_argument('--native', action='store_true', help='Also run the interactive macOS native lifecycle check.')
     parser.add_argument('--camera-log', type=Path, help='Summarize a previously consented metadata-only live smoke log.')
     args = parser.parse_args()
     npm = shutil.which('npm')
@@ -111,6 +112,10 @@ def main():
         commands.append(('browser-django', [sys.executable, 'verify_frontend.py']))
     else:
         report['manual_remaining'].append('Real browser/Django integration was explicitly skipped')
+    if args.native and sys.platform == 'darwin':
+        commands.append(('native-macos-app',[sys.executable,'verify_desktop_app.py']))
+    else:
+        report['manual_remaining'].append('Native macOS app GUI startup/Quit verification; run --native on macOS')
     try:
         for name, command in commands:
             report['stages'].append(run_stage(name, command, log_dir))

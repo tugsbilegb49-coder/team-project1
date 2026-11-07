@@ -54,7 +54,24 @@ async function mockApp(page) {
     score: "42.00",
     appName: "Visual Studio Code",
     presence: null,
+    notifications: [],
+    devices: [],
+    audit: [],
+    settings: {productive_apps:['Visual Studio Code'],camera_threshold:.45,presence_log_max_bytes:5242880,
+      presence_log_backups:3,presence_log_retention_days:7,activity_retention_days:90,automatic_retention:false,version:1},
+    desktop: {available:true,linked:false,another_account:false,computer_running:false,camera_running:false,paused:true,camera_ready:true,errors:[]},
   };
+  await page.route('**/desktop/**',route=>{
+    const action=new URL(route.request().url()).pathname.split('/')[2];
+    if(action==='connect')Object.assign(state.desktop,{linked:true,username:'admin',device_name:route.request().postDataJSON().device_name});
+    if(action==='start')Object.assign(state.desktop,{computer_running:true,paused:false});
+    if(action==='pause')state.desktop.paused=true;
+    if(action==='resume')state.desktop.paused=false;
+    if(action==='camera-on')state.desktop.camera_running=true;
+    if(action==='camera-off')state.desktop.camera_running=false;
+    if(action==='stop')Object.assign(state.desktop,{computer_running:false,camera_running:false,paused:true});
+    return route.fulfill({json:state.desktop});
+  });
   await page.addInitScript(
     (tokens) =>
       sessionStorage.setItem("worktrack-auth", JSON.stringify(tokens)),
@@ -76,7 +93,18 @@ async function mockApp(page) {
       state.posts.push({ path, data });
       return route.fulfill({ status: 204 });
     }
+    if (path === '/api/notifications/') return respond({items:state.notifications,count:state.notifications.length});
+    if (path === '/api/agent-status/') return respond({results:state.devices,count:state.devices.length,next:null,previous:null});
+    if (path === '/api/audit/') return respond({results:state.audit,count:state.audit.length,next:null,previous:null});
+    if (path === '/api/monitoring-settings/') {
+      if (method === 'PATCH') {state.patches.push({path,data});Object.assign(state.settings,data,{version:state.settings.version+1});}
+      return respond(state.settings);
+    }
+    if (path === '/api/reports/export/') return route.fulfill({status:200,contentType:'text/csv',body:'date,username\n2026-11-05,worker\n'});
     if (path === "/api/auth/login/") return respond(auth);
+    if(path==='/api/me/today/')return respond({date:'2026-11-06',tracked_seconds:3660,open_tasks:1,overdue_tasks:0,
+      applications:[{application:state.appName,seconds:3660}],latest_application:{application:state.appName},tasks:[]});
+    if(path==='/api/me/password/'){state.posts.push({path,data});return respond({detail:'changed'});}
     if (path === "/api/auth/refresh/") return respond({ access: "new-access" });
     if (path === "/api/users/me/") return respond(state.members[0]);
     if (method === "GET" && path === "/api/users/")
@@ -121,11 +149,99 @@ async function mockApp(page) {
   return state;
 }
 
+test('today home guides consent then controls work and camera explicitly',async({page})=>{
+  const state=await mockApp(page);await page.goto('/');
+  await expect(page.getByRole('heading',{name:'Миний өнөөдөр',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'1 цаг 1 мин',exact:true})).toBeVisible();
+  await page.getByLabel('Төхөөрөмжийн нэр',{exact:true}).fill('My QA Mac');
+  await page.getByRole('button',{name:'Үргэлжлүүлэх',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Үргэлжлүүлэх',exact:true})).toBeDisabled();
+  await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Үргэлжлүүлэх',exact:true}).click();
+  await page.getByRole('button',{name:'Төхөөрөмж холбох',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Camera асаах',exact:true})).toBeDisabled();
+  await page.getByRole('button',{name:'Ажил эхлүүлэх',exact:true}).click();
+  expect(state.desktop.camera_running).toBe(false);
+  await page.getByRole('button',{name:'Camera асаах',exact:true}).click();
+  await page.getByRole('button',{name:'Camera унтраах',exact:true}).click();
+  await page.getByRole('button',{name:'Түр зогсоох',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Camera асаах',exact:true})).toBeDisabled();
+  await page.getByRole('button',{name:'Ажил үргэлжлүүлэх',exact:true}).click();
+  await page.getByRole('button',{name:'Ажил дуусгах',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Ажил эхлүүлэх',exact:true})).toBeEnabled();
+  expect(state.desktop.computer_running).toBe(false);
+});
+
+test('self-service password requires matching confirmation and returns to login after save',async({page})=>{
+  const state=await mockApp(page);await page.goto('/');
+  await page.getByRole('button',{name:'Миний бүртгэл',exact:true}).click();
+  await page.getByLabel('Одоогийн нууц үг',{exact:true}).fill('Old-password-948!');
+  await page.getByLabel('Шинэ нууц үг',{exact:true}).fill('New-password-579!');
+  await page.getByLabel('Шинэ нууц үг давтах',{exact:true}).fill('Different-password-579!');
+  await page.getByRole('button',{name:'Нууц үг солих',exact:true}).click();
+  await expect(page.getByRole('alert')).toContainText('ижил');
+  expect(state.posts.some(row=>row.path==='/api/me/password/')).toBe(false);
+  await page.getByLabel('Шинэ нууц үг давтах',{exact:true}).fill('New-password-579!');
+  await page.getByRole('button',{name:'Нууц үг солих',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'WorkTrack — Нэвтрэх',exact:true})).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText('Нууц үг солигдлоо');
+});
+
+test('today controls fit a small screen and unavailable local service offers retry',async({page})=>{
+  const state=await mockApp(page);state.appName='LongApplicationName'.repeat(12);
+  await page.setViewportSize({width:320,height:800});await page.goto('/');
+  await expect(page.getByRole('heading',{name:'Миний өнөөдөр',exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await page.route('**/desktop/**',route=>route.fulfill({status:503,json:{detail:'Unavailable'}}));
+  await page.reload();
+  await expect(page.getByRole('button',{name:'Дахин холбогдох',exact:true})).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText('WorkTrack.app');
+});
+
+test('agent status, notifications and audit history are connected', async ({page}) => {
+  const errors=[];page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
+  const state=await mockApp(page);
+  state.notifications=[{id:'offline-1',kind:'agent_offline',message:'QA Laptop'}];
+  state.devices=[{id:'device-1',name:'QA Laptop',employee_name:'worker',platform:'macOS',enabled:true,agents:[
+    {kind:'computer',state:'offline',queue_count:7,seen_at:'2026-11-05T02:00:00Z',last_upload_at:null,error_code:'network',agent_version:'0.3.0',settings_version:2}]}];
+  state.audit=[{id:1,actor_label:'admin',resource:'task',object_id:'11',action:'update',created_at:'2026-11-05T02:00:00Z',changes:{quality_score:{before:'50.00',after:'80.00'}}}];
+  await page.goto('/');
+  await page.getByText('Мэдэгдэл (1)',{exact:true}).click();
+  await expect(page.getByText('Agent холболтгүй: QA Laptop')).toBeVisible();
+  await page.getByRole('button',{name:'Харах',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Agent-ийн төлөв',exact:true})).toBeVisible();
+  const device=page.getByLabel('QA Laptop computer',{exact:true});
+  await expect(device).toContainText('Холболтгүй');
+  await expect(device).toContainText('7');
+  await page.getByRole('button',{name:'Өөрчлөлтийн түүх',exact:true}).click();
+  await expect(page.getByText('Чанарын үнэлгээ: "50.00" → "80.00"')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('admin settings save with a version and export downloads the chosen date range', async ({page}) => {
+  const state=await mockApp(page);
+  await page.goto('/');
+  await page.getByRole('button',{name:'Тохиргоо',exact:true}).click();
+  await page.getByLabel('Camera confidence threshold',{exact:true}).fill('0.65');
+  await page.getByRole('button',{name:'Тохиргоо хадгалах',exact:true}).click();
+  await expect(page.getByText('Хадгаллаа.',{exact:false})).toBeVisible();
+  const saved=state.patches.find(row=>row.path==='/api/monitoring-settings/').data;
+  expect(saved.expected_version).toBe(1);expect(saved.camera_threshold).toBe(.65);
+  expect(saved.automatic_retention).toBe(false);
+  await page.getByRole('button',{name:'Тайлан',exact:true}).click();
+  await page.getByLabel('Эхлэх өдөр',{exact:true}).fill('2026-11-01');
+  await page.getByLabel('Дуусах өдөр',{exact:true}).fill('2026-11-05');
+  const downloading=page.waitForEvent('download');
+  await page.getByRole('button',{name:'Тайлан татах',exact:true}).click();
+  const download=await downloading;
+  expect(download.suggestedFilename()).toBe('worktrack-2026-11-01-2026-11-05.csv');
+});
+
 test("camera presence observations appear without being shown as worked minutes", async ({page}) => {
   const state = await mockApp(page);
   state.presence = {samples: 5, present_samples: 3, absent_samples: 2,
     latest_present: false, latest_confidence: 0, present_percent: 60};
   await page.goto("/");
+  await page.getByRole("button", {name:"Dashboard",exact:true}).click();
   const presence = page.getByLabel("Camera presence", {exact: true});
   await expect(presence).toBeVisible();
   await expect(presence).toContainText("3 / 5");
@@ -135,6 +251,7 @@ test("camera presence observations appear without being shown as worked minutes"
   state.presence = {samples: 1, present_samples: 1, absent_samples: 0,
     latest_present: true, latest_confidence: .81, present_percent: 100};
   await page.reload();
+  await page.getByRole('button',{name:'Dashboard',exact:true}).click();
   await expect(presence).toContainText("1 / 1");
   await expect(presence).toContainText("81.0%");
 });
@@ -239,6 +356,7 @@ test("report selection hides old data immediately and ignores a late response", 
     } else await route.fallback();
   });
   await page.goto("/");
+  await page.getByRole("button", {name:"Dashboard",exact:true}).click();
   await expect(page.locator(".activity-score-card h3")).toHaveText("42.00");
   await page.getByLabel("Тайлангийн ажилтан").selectOption("2");
   await expect(page.locator(".activity-score-card")).toHaveCount(0);
@@ -346,6 +464,7 @@ test("activity charts fit a 320px viewport with long application names", async (
   state.appName = "VeryLongApplicationName".repeat(8);
   await page.setViewportSize({ width: 320, height: 800 });
   await page.goto("/");
+  await page.getByRole("button", {name:"Dashboard",exact:true}).click();
   await expect(page.locator(".activity-score-card")).toBeVisible();
   expect(
     await page.evaluate(

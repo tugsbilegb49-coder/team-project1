@@ -73,6 +73,7 @@ def test_corrupt_quarantine_retains_event_and_worker_can_retry(tmp_path):
 
 
 def test_camera_log_never_waits_for_slow_http(tmp_path):
+    save_tokens(tmp_path/'tokens.json', {'access':'fake','refresh':'fake'})
     entered,release=threading.Event(),threading.Event()
     def slow_send(payload):
         entered.set();release.wait(timeout=3)
@@ -91,6 +92,7 @@ def test_camera_log_never_waits_for_slow_http(tmp_path):
 
 
 def test_camera_quarantines_bad_event_and_uploads_next(tmp_path):
+    save_tokens(tmp_path/'tokens.json', {'access':'fake','refresh':'fake'})
     camera=CameraEventUploader('http://localhost',str(tmp_path/'tokens.json'),queue_file=str(tmp_path/'camera.json'))
     invalid=CameraAPISyncError('invalid camera event');invalid.status=400;invalid.route='/api/activity-events/ingest/'
     with patch.object(camera,'_send',side_effect=[invalid,None]) as send:
@@ -99,7 +101,7 @@ def test_camera_quarantines_bad_event_and_uploads_next(tmp_path):
             assert camera.flush(2)
             assert send.call_count==2
         finally: camera.close()
-    assert len(json.loads((tmp_path/'camera.rejected.json').read_text()))==1
+    assert len(json.loads(camera._worker.path.with_name(camera._worker.path.stem+'.rejected.json').read_text()))==1
 
 
 def test_concurrent_processes_write_complete_private_token_files(tmp_path):

@@ -102,6 +102,18 @@ def main():
 
             manage('test','users','workforce','activity','scoring','--noinput')
             manage('shell','-c',"from django.contrib.auth import get_user_model; get_user_model().objects.create_user(username='pg_original',password=None)")
+            manage('shell','-c',"from datetime import timedelta; from django.utils import timezone; from users.models import User; from activity.models import CameraPresence; CameraPresence.objects.create(employee=User.objects.get(username='pg_original'),timestamp=timezone.now()-timedelta(days=100),present=True,confidence=.8)")
+            manage('cleanup_activity','--days','90','--apply','--backup')
+            manage('shell','-c',"from activity.models import CameraPresence; assert not CameraPresence.objects.exists()")
+            retention=list((root/'backups').glob('retention-*.dump'))
+            if len(retention)!=1:
+                raise RuntimeError('Expected one fresh pre-retention backup.')
+            pg('createdb','worktrack_retention_check')
+            pg('pg_restore','--dbname','worktrack_retention_check','--no-owner',str(retention[0]),stdout=subprocess.DEVNULL)
+            retained=pg('psql','--dbname','worktrack_retention_check','-Atc','SELECT count(*) FROM activity_camerapresence',capture_output=True,text=True)
+            if retained.stdout.strip()!='1':
+                raise RuntimeError('Retention safety backup did not preserve the deleted row.')
+            print('PASS: activity retention deleted only after a fresh independently restored safety backup.',flush=True)
             copy_dir=root/'second-copy'
             copy_dir.mkdir(mode=0o700)
             manage('backup_cycle','--copy-dir',str(copy_dir),'--keep','2')
@@ -129,6 +141,7 @@ def main():
                 'version':version,'migrations':'passed','backend_tests':'passed',
                 'concurrent_ingestion':'passed','shared_cache':'passed','gunicorn_multi_worker':'passed','backup_restore':'passed',
                 'safety_backup_restore':'passed','live_sqlite_modified':False,
+                'retention_safety_backup_restore':'passed',
             },indent=2))
         finally:
             if started:

@@ -67,6 +67,7 @@ activity_agent/data/
 
 # Local launcher logs and lock
 .runtime/
+WorkTrack.app/
 
 # Database backups contain private account/activity data
 backups/
@@ -78,6 +79,7 @@ agent/.agent_tokens.*
 agent/.pending_events*.json
 data/.pending_camera_events*.json
 data/.pending_presence_events*.json
+data/.pending_multi_control*.json
 *.mp4
 *.avi
 *.mov

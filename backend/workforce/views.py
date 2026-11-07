@@ -1,4 +1,5 @@
 from django.utils import timezone
+from django.db import transaction
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
@@ -50,13 +51,20 @@ class TaskViewSet(viewsets.ModelViewSet):
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("Managers can only manage employees in their own department.")
 
+    @transaction.atomic
     def perform_create(self, serializer):
         employee = serializer.validated_data["employee"]
         self._ensure_employee_in_manager_department(employee)
         completed_at = timezone.now() if serializer.validated_data.get("status") == Task.Status.DONE else None
-        serializer.save(assigned_by=self.request.user, completed_at=completed_at)
+        task = serializer.save(assigned_by=self.request.user, completed_at=completed_at)
+        from users.operations import audit_update
+        audit_update(self.request.user, 'task', task, {}, ('employee_id','title','status','due_date','quality_score'), task.employee, action='create')
 
+    @transaction.atomic
     def perform_update(self, serializer):
+        from users.operations import audit_update, snapshot
+        fields = ('employee_id','title','status','due_date','quality_score','completed_at')
+        before = snapshot(serializer.instance, fields)
         employee = serializer.validated_data.get("employee", serializer.instance.employee)
         self._ensure_employee_in_manager_department(employee)
         task = serializer.save()
@@ -66,4 +74,11 @@ class TaskViewSet(viewsets.ModelViewSet):
         if task.status == Task.Status.DONE and task.completed_at is None:
             task.completed_at = timezone.now()
             task.save(update_fields=["completed_at", "updated_at"])
+        audit_update(self.request.user, 'task', task, before, fields, task.employee)
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        from users.operations import audit_event
+        audit_event(self.request.user, 'task', instance.pk, 'delete', {}, instance.employee)
+        instance.delete()
 

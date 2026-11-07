@@ -49,7 +49,7 @@ function checkSession(expected, signal) {
 }
 async function fetchResponse(path, options) {
   try {
-    return await fetch(base + path, options);
+    return await fetch((path.startsWith('/desktop/') ? '' : base) + path, options);
   } catch (error) {
     if (error.name === "AbortError") throw error;
     throw new APIError(
@@ -159,6 +159,37 @@ export async function login(username, password) {
   )
     throw new APIError("Login token серверээс ирсэнгүй.");
   save(data);
+}
+
+export async function desktop(action, options = {}) {
+  try {
+    return await api(`/desktop/${action}/`, {...options,
+      headers:{...options.headers,'X-WorkTrack-Desktop':'1'}});
+  } catch (error) {
+    if (error.name !== 'AbortError' && (!error.status || error.status === 200 || error.status === 404 || error.status >= 500))
+      throw new APIError('WorkTrack.app эсвэл Start WorkTrack.command-аа нээгээд дахин холбоно уу.',error.status);
+    throw error;
+  }
+}
+
+export async function downloadReport(path, options = {}, retry = true) {
+  const expected = version;
+  checkSession(expected, options.signal);
+  const response = await fetchResponse(path, {
+    ...options,
+    headers: { ...(tokens ? { Authorization: `Bearer ${tokens.access}` } : {}) },
+  });
+  checkSession(expected, options.signal);
+  if (response.status === 401 && tokens && retry) {
+    await refreshSession(expected);
+    checkSession(expected, options.signal);
+    return downloadReport(path, options, false);
+  }
+  if (response.status === 401 && tokens) clearAuth('expired');
+  if (!response.ok) await readResponse(response);
+  const blob = await response.blob();
+  checkSession(expected, options.signal);
+  return blob;
 }
 export async function logout() {
   if (tokens) {

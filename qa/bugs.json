@@ -31,6 +31,14 @@
       "title": "Defense rehearsal requires presenter",
       "impact": "Automated QA cannot certify that a human presentation was rehearsed",
       "next": "Follow the README demo script and update qa/rehearsal.json with actual observations"
+    },
+    {
+      "id": "QA-05",
+      "type": "validation_gap",
+      "status": "open",
+      "title": "Native macOS GUI lifecycle remains unverified",
+      "impact": "Compilation and ad-hoc signing pass; disposable GUI startup did not launch its helper within the test window. Use Start WorkTrack.command for now.",
+      "next": "Run verify_desktop_app.py on an interactive Mac and verify owned startup and Dock Quit before marking complete."
     }
   ],
   "resolved_implementation_issues": [
@@ -69,6 +77,79 @@
       "status": "fixed",
       "title": "Presence CSV rotates by size/day and prunes old generated files",
       "evidence": "src/presence.py; config.yaml; tests/test_presence.py"
+    },
+    {
+      "id": "FIX-07",
+      "status": "fixed",
+      "title": "Account-scoped offline queues and collector identity guard",
+      "evidence": "agent/identity.py; backend/workforce/test_queue_accounts.py; activity_agent/tests/test_spool_limits.py"
+    },
+    {
+      "id": "FIX-08",
+      "status": "fixed",
+      "title": "All camera modes enforce server consent and pause before capture and CSV",
+      "evidence": "src/camera_session.py; src/api_logger.py; tests/test_operations_runtime.py"
+    },
+    {
+      "id": "FIX-09",
+      "status": "fixed",
+      "title": "Legacy activity and multi-person modes respect --seconds",
+      "evidence": "main.py; src/camera_session.py; tests/test_operations_runtime.py"
+    },
+    {
+      "id": "FIX-10",
+      "status": "fixed",
+      "title": "Private root environment removed from version control; Django environment documented",
+      "evidence": "README.md; .gitignore; backend/.env.example"
+    },
+    {
+      "id": "FIX-11",
+      "status": "fixed",
+      "title": "Launcher reinstalls changed dependency manifests and refuses npm changes under a running frontend",
+      "evidence": "worktrack.py; tests/test_operations_runtime.py"
+    }
+  ],
+  "implemented_features": [
+    {
+      "title": "Scoped agent status, last connection/upload and queue errors",
+      "evidence": "agent/runtime.py; backend/users/test_operations_api.py; backend/workforce/test_queue_accounts.py"
+    },
+    {
+      "title": "Employee/date CSV and real XLSX exports with formula protection",
+      "evidence": "backend/users/test_operations_api.py; src/api.test.js; e2e/live.spec.js"
+    },
+    {
+      "title": "Append-only API and Django admin audit history",
+      "evidence": "backend/users/audit_admin.py; backend/users/test_operations_api.py; e2e/frontend.spec.js"
+    },
+    {
+      "title": "In-app task and agent/upload notifications",
+      "evidence": "backend/users/operations.py; backend/users/test_operations_api.py; e2e/frontend.spec.js"
+    },
+    {
+      "title": "Admin monitoring settings, version protection and opt-in retention with verified safety backup",
+      "evidence": "backend/users/test_operations_api.py; tests/test_operations_runtime.py; verify_frontend.py; verify_postgresql.py"
+    },
+    {
+      "title": "Authenticated loopback desktop controls with explicit camera action and collector singleton locks",
+      "evidence": "desktop/service.py; tests/test_desktop.py; e2e/live.spec.js"
+    },
+    {
+      "title": "Three-step device/consent onboarding and separate agent session without a second password",
+      "evidence": "backend/users/self_service.py; backend/users/test_self_service.py; src/Today.jsx"
+    },
+    {
+      "title": "My Today home with self-only daily activity and tasks",
+      "evidence": "backend/users/test_self_service.py; e2e/frontend.spec.js"
+    },
+    {
+      "title": "Self-service password change invalidates old access and refresh tokens",
+      "evidence": "backend/users/test_self_service.py; e2e/live.spec.js"
+    },
+    {
+      "title": "Workspace-local macOS WorkTrack.app launcher and owned-process shutdown",
+      "evidence": "desktop/build_macos_app.py; desktop/WorkTrack.m; desktop/app_control.py; README.md",
+      "status": "native GUI lifecycle pending; use .command launcher"
     }
   ]
 }

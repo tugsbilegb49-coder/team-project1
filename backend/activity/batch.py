@@ -83,8 +83,10 @@ class ActivityBatchView(APIView):
                 cursor += timedelta(seconds=seconds)
 
             app_seconds = 0
+            from users.operations import current_settings
+            productive_apps = current_settings().productive_apps
             for app in sorted(data['apps'], key=lambda row: (row['name'], row['seconds'])):
-                store(app['name'], app['seconds'], category_for_application(app['name']))
+                store(app['name'], app['seconds'], category_for_application(app['name'], productive_apps))
                 app_seconds += app['seconds']
             # Preserve denominator time even when app resolution failed. Counts
             # and input contents are not stored; only duration and category are.

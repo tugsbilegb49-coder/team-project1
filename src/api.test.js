@@ -90,6 +90,29 @@ function deferred() {
   });
   return { promise, resolve };
 }
+
+test('report download refreshes authentication and returns actual CSV bytes', async () => {
+  const client=await setup({access:'expired',refresh:'refresh'});
+  const calls=[];
+  globalThis.fetch=async (url,options)=>{
+    calls.push([url,options]);
+    if(url.endsWith('/refresh/')) return reply({access:'new'});
+    if(options.headers.Authorization!=='Bearer new') return reply({detail:'Expired'},401);
+    return new Response('date,username\n2026-11-05,worker\n',{headers:{'Content-Type':'text/csv'}});
+  };
+  const blob=await client.downloadReport('/api/reports/export/?file_type=csv');
+  assert.equal(await blob.text(),'date,username\n2026-11-05,worker\n');
+  assert.equal(calls.length,3);
+});
+
+test('logout prevents a delayed private report from being delivered', async () => {
+  const client=await setup({access:'access',refresh:'refresh'}),pending=deferred();
+  globalThis.fetch=()=>pending.promise;
+  const download=client.downloadReport('/api/reports/export/');
+  client.clearAuth();
+  pending.resolve(new Response('private report',{headers:{'Content-Type':'text/csv'}}));
+  await assert.rejects(download,error=>error.name==='AbortError');
+});
 test("temporary refresh server error preserves saved login", async () => {
   const client = await setup({ access: "expired", refresh: "valid-refresh" });
   globalThis.fetch = async (url) =>

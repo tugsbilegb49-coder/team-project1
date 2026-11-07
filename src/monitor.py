@@ -25,12 +25,7 @@ def load_config(path: str = "config.yaml") -> dict:
 class WorkerActivityMonitor:
     def __init__(self, config: dict):
         self.config = config
-        self.cap = cv2.VideoCapture(config["camera_index"])
-        if not self.cap.isOpened():
-            raise RuntimeError(
-                f"Could not open webcam at index {config['camera_index']}. "
-                "Check `camera_index` in config.yaml."
-            )
+        self.session = None
 
         self.detector = ObjectDetector(
             model_name=config["model_name"],
@@ -62,10 +57,8 @@ class WorkerActivityMonitor:
         self.control_file = Path(config.get("control_file", "agent/control.json"))
 
     def _is_paused(self) -> bool:
-        try:
-            return bool(json.loads(self.control_file.read_text(encoding="utf-8")).get("paused", False))
-        except (OSError, json.JSONDecodeError, AttributeError):
-            return False
+        from src.camera_session import locally_paused
+        return locally_paused(self.config) or (self.api_uploader is not None and not self.api_uploader.consent_guard.allowed())
 
     def _on_transition(self, old_state: str, duration: float, ended_at: float) -> None:
         if self._is_paused():
@@ -94,31 +87,30 @@ class WorkerActivityMonitor:
             looking_at_phone=looking_at_phone,
         )
 
-    def run(self) -> None:
-        print("Monitoring started. Press 'q' in the video window to stop.")
-        try:
-            while True:
-                ok, frame = self.cap.read()
-                if not ok:
-                    break
+    def _apply_settings(self, settings):
+        self.detector.confidence_threshold=settings['camera_threshold']
+        self.logger.configure(settings)
 
+    def run(self, seconds=None) -> None:
+        from src.camera_session import CameraSession
+        print("Monitoring started. Press 'q' in the video window to stop.")
+        guard = self.api_uploader.consent_guard if self.api_uploader else None
+        if guard: guard.start()
+        self.session = CameraSession(self.config, guard, seconds, self.tracker.reset_timer,
+                                     self.api_uploader,self._apply_settings)
+        try:
+            for frame in self.session.frames():
                 self.frame_count += 1
                 if self.frame_count % self.detect_every_n == 0:
-                    if self._is_paused():
-                        self.tracker.reset_timer()
-                    else:
-                        state = self._classify_frame(frame)
+                    state = self._classify_frame(frame)
+                    if self.session.allowed():
                         self.tracker.update(state)
-
+                if not self.session.allowed(): continue
                 self._draw_overlay(frame)
                 cv2.imshow("Worker Activity Monitor", frame)
-
-                if cv2.waitKey(1) & 0xFF == ord("q"):
-                    break
         finally:
             self.tracker.finalize()
-            self.cap.release()
-            cv2.destroyAllWindows()
+            self.session.close()
             if self.api_uploader is not None:
                 self.api_uploader.close()
             self.logger.close()

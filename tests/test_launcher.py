@@ -59,7 +59,7 @@ class LauncherTests(unittest.TestCase):
                  patch.object(worktrack,'backend_is_current',return_value=True), \
                  patch.object(worktrack.subprocess,'Popen',return_value=process) as launch, \
                  patch.object(worktrack,'setup_agent') as agent, \
-                 patch.object(worktrack.webbrowser,'open'), \
+                 patch.object(worktrack,'open_browser'), \
                  patch.object(worktrack.signal,'signal'), \
                  patch.object(worktrack.time,'sleep',side_effect=KeyboardInterrupt), \
                  patch.object(worktrack,'stop_process') as stop:

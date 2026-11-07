@@ -10,9 +10,12 @@ def normalized_name(name):
     return value
 
 
-def category_for_application(name):
+def category_for_application(name, productive_apps=None):
     key = normalized_name(name)
-    if key in {normalized_name(item) for item in settings.PRODUCTIVE_APPLICATIONS}:
+    if productive_apps is None:
+        from users.operations import current_settings
+        productive_apps = current_settings().productive_apps
+    if key in {normalized_name(item) for item in productive_apps}:
         return 'WORK'
     if key in {'safari','chrome','google chrome','chromium','firefox','arc','msedge','microsoft edge'}:
         return 'BROWSER'

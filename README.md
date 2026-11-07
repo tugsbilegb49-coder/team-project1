@@ -6,30 +6,60 @@ React frontend, Django API, computer activity agent болон camera monitor н
 
 ## Нэг даралтаар асаах (macOS)
 
-Finder-ээс төслийн хавтас дахь **Start WorkTrack.command** файлыг давхар дарна.
+Finder-ээс төслийн хавтас дахь **Start WorkTrack.command**-ийг нээнэ;
+default нь вебээс удирдах desktop горим.
 Энэ нь Python environment, backend dependency, npm dependency-ийг шаардлагатай үед
-бэлдэж, migration хийгээд backend, frontend, онооны scheduler, computer agent-ийг хамт асаана.
+бэлдэж, migration хийгээд backend, frontend, онооны болон backup scheduler, локал
+удирдлагыг асаана. Agent/camera нь хэрэглэгч товч дарахаас өмнө **асахгүй**.
 Ижил төслийн одоогийн кодтой backend өмнө нь ажиллаж байвал дахин асаахгүй.
 Browser автоматаар нээгдэнэ. Хуучин кодтой backend (`--noreload` орно) эсвэл өөр
 төслийн сервер 8000 порт дээр байвал migration хийхээс өмнө алдаа мэдээлнэ.
 Өмнөх backend/launcher цонхонд Ctrl+C дараад дахин нээнэ; өөр process-ийг
 автоматаар зогсоохгүй.
 Анх удаа Python 3 болон Node.js/npm суусан байх шаардлагатай.
+`backend/requirements.txt`, `package.json`, `package-lock.json` өөрчлөгдвөл launcher
+dependency-ийг дахин суулгана; өөрчлөгдөөгүй үед давтаж суулгахгүй. npm шинэчлэх
+шаардлагатай байхад хуучин frontend ажиллаж байвал түүний terminal-д Ctrl+C дараад
+launcher-аа дахин нээнэ. Dependency fingerprint нь `.runtime/dependencies.json` дотор байна.
 
-- Admin account байхгүй бол terminal дотор үүсгэх алхам гарна.
-- Agent-ийн эхний тохиргоонд хугацаагаа бүртгүүлэх account-ийн username/password
-  оруулна. Password дэлгэц дээр харагдахгүй, файлд хадгалагдахгүй; JWT хадгалагдана.
-- Monitoring consent байхгүй бол зөвшөөрөл асууна. Татгалзвал зөвхөн веб ажиллана.
-- Camera асаах эсэхийг `y/N` асуултаар сонгоно. `y` гэвэл camera dependency-ийг
-  шаардлагатай үед суулгана. OS camera permission тусдаа шаардагдаж болно.
-- Launcher цонхыг нээлттэй байлгана. Зогсоохдоо **Ctrl+C** дарна.
-  Launcher өөрөө асаасан process-уудаа л зогсооно.
+- Вебэд өөрийн account-аар нэвтрээд **Миний өнөөдөр** нүүрийг ашиглана.
+- Төхөөрөмжийн нэр → мэдээлэл бүртгэх зөвшөөрөл → **Төхөөрөмж холбох** гэсэн
+  гурван алхмыг хийнэ. Agent-д дахин password оруулахгүй; тусдаа JWT үүсгэж 0600
+  permission-тэй локал файлд хадгална. Password файлд хадгалахгүй.
+- **Ажил эхлүүлэх**, **Түр зогсоох**, **Ажил үргэлжлүүлэх**, **Ажил дуусгах** товчтой.
+- Camera хэрэгтэй бол **Camera бэлтгэх**, дараа **Camera асаах** дарна. Ажил эхэлсэн,
+  pause биш үед л camera асаана; OS permission тусдаа шаардагдаж болно.
+- WorkTrack.app-ийн Dock → Quit эсвэл төхөөрөмжийн нэмэлт үйлдлийн **WorkTrack хаах**
+  нь тухайн launcher өөрөө асаасан process-уудаа зогсооно. `.command` хувилбарт Ctrl+C
+  мөн ажиллана. Өмнө нь тусад нь асаасан серверийг хаахгүй.
 
-Дараагийн удаа зөвхөн энэ файлыг давхар дарахад хангалттай. Хадгалсан login-ийн
-хугацаа дуусвал дахин нэвтрэхийг асууна. Agent өмнө нь pause болсон бол pause
-төлөвийг хэвээр хадгална; resume хийхдээ `python agent/main.py --resume` ашиглана.
-Веб дотор нэвтэрсэн account болон agent-ийн account тусдаа тул dashboard дээр
-agent-д сонгосон хэрэглэгчийн тайланг харна.
+Дараагийн удаа аппыг нээж **Ажил эхлүүлэх** дарахад хангалттай. Agent-ийн login
+дууссан бол нэмэлт үйлдлийн **Дахин холбох** ашиглана. Вебээс гарахад тусдаа agent
+session үргэлжилдэг тул бүртгэл зогсоохдоо **Ажил дуусгах** дарна.
+
+`.app` нь энэ төслийн хавтастай хамт ажиллах локал launcher; Python 3, Node.js болон
+source-гүйгээр тараах standalone installer биш. Хавтсаас нь салгаж зөөхгүй; Dock-д
+shortcut нэмэж болно. Generated `.app` Git-д орохгүй. `.command` desktop горимоор
+анх асахад байхгүй бол автоматаар үүсгэнэ. Дахин бүтээх команд:
+
+```bash
+.venv/bin/python desktop/build_macos_app.py
+```
+
+Аппын wrapper нь Cocoa native startup/Quit ашиглана. Эх кодоос `.app` бүтээхэд
+macOS Xcode Command Line Tools (`clang`) хэрэгтэй; бэлэн локал bundle-ийг өдөр тутам
+нээхэд дахин compile хийхгүй. Build нь түр хавтаст compile/sign/verify хийгээд
+төслийн хавтаст тавина.
+
+**WorkTrack.app-ийн GUI startup/Quit одоогоор баталгаажаагүй**: compile болон ad-hoc
+signature шалгалт амжилттай, харин энэ орчны disposable GUI туршилтад helper
+хугацаандаа эхлээгүй. Одоохондоо `.command` хувилбарыг ашиглана. GUI шалгалтыг
+Mac дээр `python verify_desktop_app.py` буюу `python verify_camera_ai.py --native`
+командаар тусад нь ажиллуулна; `qa/bugs.json`-ийн QA-05 нээлттэй хэвээр.
+
+Цоо шинэ суулгалтад admin байхгүй бол нэг удаа `python manage.py createsuperuser`
+ажиллуулна. Desktop горим далд terminal prompt дээр гацахгүй, бэлтгэл дутууг
+`.runtime/app.log` дотор мэдээлнэ.
 
 Terminal-аас ашиглах хувилбарууд:
 
@@ -37,6 +67,7 @@ Terminal-аас ашиглах хувилбарууд:
 python3 worktrack.py              # Backend + frontend + agent, camera сонголт
 python3 worktrack.py --web-only   # Зөвхөн веб систем
 python3 worktrack.py --camera     # Agent болон camera хамт
+python3 worktrack.py --desktop    # Вебээс тохируулах/удирдах; camera эхэндээ унтраалттай
 ```
 
 Log-ууд `.runtime/backend.log`, `frontend.log`, `scheduler.log`, `backup.log`, `agent.log`, `camera.log` дотор байна.
@@ -55,6 +86,9 @@ cp backend/.env.example backend/.env
 
 `backend/.env` дахь `DJANGO_SECRET_KEY`-г өөрийн random утгаар солино.
 Хэрэв файл өмнө нь байгаа бол хуулж дарж болохгүй.
+Backend зөвхөн `backend/.env` дахь `DJANGO_*` болон баримтжуулсан бусад түлхүүрийг
+уншина. Root `.env` нь шаардлагатай үед frontend-ийн `VITE_API_URL`-д зориулагдсан;
+түүний `SECRET_KEY`, `DEBUG` нь Django-г тохируулахгүй. `.env` файлууд Git-д орохгүй.
 
 ```bash
 python manage.py migrate
@@ -74,6 +108,23 @@ http://127.0.0.1:8000 руу дамжуулна. Production build-д ижил or
 
 ## Хэрэглэх дараалал
 
+Өдөр тутам **Миний өнөөдөр** нүүрнээс ажлаа эхлүүлнэ. Өөрийн илгээгдсэн хугацаа,
+ашигласан апп, сүүлд бүртгэгдсэн апп, дуусаагүй task-уудыг 30 секунд тутам шинэчилнэ.
+Энэ нүүр admin-д ч зөвхөн өөрийн мэдээллийг харуулна; багийн мэдээлэл Dashboard,
+Даалгавар, Тайлан хэсэгт хэвээр. Төхөөрөмжийн локал төлөв 5 секунд тутам шинэчлэгдэнэ.
+**Миний бүртгэл** хэсэгт одоогийн нууц үгээ оруулж шинээр сольж болно. Хуучин
+access/refresh session-ууд хүчингүй болж, agent-аа дахин холбоно. Мартсан нууц үгийн
+recovery биш; мартсан бол admin reset хийнэ. Нууц үгийн JWT хамгаалалт нэмэгдсэн тул
+энэ шинэчлэлээс өмнөх login-оор нэг удаа дахин нэвтрэх шаардлагатай.
+
+Локал удирдлага зөвхөн `127.0.0.1:8766` дээр ажиллаж, frontend-ийн `/desktop/`
+proxy-оор холбогдоно. Хүсэлт бүрийн JWT-г backend-аар баталгаажуулж, Host/Origin
+болон тусгай header шалгана. Өөр account ажиллаж буй agent/camera-г удирдах буюу
+login-ийг нь дарж холбохгүй. Зөвхөн урьдчилан тогтоосон үйлдэл, launcher өөрөө
+асаасан process-уудыг удирдана; shell command дамжуулах endpoint байхгүй.
+Public deployment нь энэ desktop bridge-ийг интернетэд гаргахгүй. Локал удирдлага
+ашиглахдаа энэ Mac-ийн WorkTrack.app-аар нээгдсэн локал вебийг хэрэглэнэ.
+
 1. Багийн гишүүд хэсэгт username, нэр, нууц үгтэй employee үүсгэнэ.
    Хэлтсээ вебийн «Багийн гишүүд» хэсэгт үүсгэж сонгоно. Manager-д хэлтэс заавал байна.
 2. Даалгавар хэсэгт идэвхтэй ажилтанд task хуваарилж, deadline, status оруулна.
@@ -85,6 +136,38 @@ http://127.0.0.1:8000 руу дамжуулна. Production build-д ижил or
 Admin бүх хэрэглэгчийг, manager өөрийн хэлтсийг, employee зөвхөн өөрийн өгөгдлийг харна.
 Task өөрчлөх эрх admin/manager-д байна. Нэр, task зэрэг бизнес өгөгдөл browser-ийн
 localStorage-д хадгалагдахгүй. Login session нь tab-ийн sessionStorage-д хадгалагдана.
+
+## Agent төлөв, тайлан, өөрчлөлтийн түүх
+
+- **Agent төлөв**: account, төхөөрөмж, computer/camera-ийн online, pause, offline
+  төлөв, сүүлийн холболт/илгээлт, хүлээгдэж буй queue, алдааны төрлийг харуулна.
+  Үндсэн agent болон camera 30 секунд тутам heartbeat илгээнэ; 90 секундээс
+  хуучирвал offline болно. Огт heartbeat ирээгүй төхөөрөмжийг ажиллаж байна гэж
+  таамаглахгүй. Хуудсыг 30 секунд тутам шинэчилнэ. Өөр хувилбарын
+  `activity_agent/` collector өөрийн heartbeat илгээдэггүй; үндсэн launcher ашиглана.
+- **Тайлан → Тайлан татах**: эхлэх/дуусах өдөр, ажилтан, CSV эсвэл Excel (.xlsx)
+  сонгоно. Admin бүх, manager хэлтсийн, employee өөрийн өгөгдлийг экспортолно.
+  Нэг хүсэлтэд хамгийн ихдээ 366 өдөр, 50,000 мөр. Хадгалсан score байхгүй бол
+  нүдийг хоосон үлдээнэ; автоматаар оноо зохиохгүй. Computer/work секунд болон
+  presence sample тоо тусдаа баганатай; presence-ийг ажилласан хугацаа гэж үзэхгүй.
+  Spreadsheet formula болж ажиллаж болох хэрэглэгчийн нэрийг text болгон хамгаална.
+- **Өөрчлөлтийн түүх**: task, чанарын үнэлгээ, хэрэглэгчийн эрх/идэвх, consent,
+  monitoring тохиргоо, тайлан экспортын actor/time болон зөвшөөрсөн талбаруудыг
+  хадгална. API болон Django admin-ийн task/user өөрчлөлтүүд ижил түүхэнд орно.
+  Нууц үг, password hash, token хадгалахгүй; history API нь зөвхөн унших эрхтэй.
+- **Мэдэгдэл**: хугацаа хэтэрсэн/өнөөдөр дуусах task, offline agent, upload алдаа,
+  queue хүлээгдэж байгааг веб дотор харуулна. Асуудал шийдэгдмэгц дараагийн
+  шинэчлэлтээр арилна. Email болон гаднын чат руу илгээхгүй.
+- **Тохиргоо** (зөвхөн admin): ажилд тооцох апп, camera confidence threshold,
+  local CSV-ийн хэмжээ/backup/хоног, database activity хадгалах хоногийг удирдана.
+  Agent дараагийн амжилттай холболтоор өөрчлөлтийг авна; сүлжээ тасарвал ажиллаж буй
+  process сүүлийн авсан тохиргоогоо хэрэглэнэ. Нэгэн зэрэг зассан хуучин хувилбарыг
+  409 хариугаар буцааж, дахин уншихыг шаардана. Local CSV-д өөрчлөлт хэрэгжихэд
+  шинэ хязгаарт багтах хуучин generated log-ууд цэвэрлэгдэж болно.
+
+Автомат database цэвэрлэгээ эхэндээ **унтраалттай**. Admin үүнийг тусад нь сонгож
+хадгалсан үед launcher-ийн backup scheduler амжилттай backup авсны дараа л
+хуучин activity-г устгана. Доорх backup/retention хэсгийг үзнэ үү.
 
 ## Computer agent (үндсэн)
 
@@ -163,7 +246,7 @@ python activity_agent/agent.py run
 `POST /api/v1/activity` compatibility endpoint нь batch-ийг ижил Django database-д
 хадгалж, retry хийхэд ижил мөрийг дахин үүсгэхгүй. Aggregate app хугацаанд дарааллын
 мэдээлэл байдаггүй тул хадгалсан цагийн offset нь бодит foreground дараалал биш.
-Энэ contract-ийн аппуудыг серверийн `PRODUCTIVE_APPLICATIONS` жагсаалтаар
+Энэ contract-ийн аппуудыг төв monitoring тохиргооны productive apps жагсаалтаар
 `WORK`, browser нэрээр `BROWSER`, харилцааны аппын нэрээр `COMMUNICATION`, бусдыг
 `OTHER` гэж ангилна. Idle хугацааг `Idle/OTHER`, апп нь тодорхойгүй active хугацааг
 `Unattributed activity/OTHER` segment болгон хадгалж, W-ийн нийт хугацаанд оруулна.
@@ -185,6 +268,14 @@ monitoring consent-ийг үргэлж шалгана. Presence нь productivit
 Өмнөх state experiment-ийг `python main.py --mode activity` гэж тусад нь асаана;
 тэр нь `/api/activity-events/ingest/` ашиглана. Multi-person identity integration
 хийгдээгүй. Аль ч горимд raw зураг API руу илгээхгүй.
+
+API sync асаалттай үед presence, legacy activity болон multi-person бүх горим server consent lease,
+local pause-ийг шалгаж, татгалзсан/хугацаа дууссан үед camera-г суллаж, CSV бичихээ
+зогсооно. `--seconds 20` хугацааны хязгаар бүх горимд үйлчилнэ. Multi-person-ийн
+server identity/sync байхгүй тул зөвхөн consent-оор хамгаалсан local log үүсгэнэ.
+Legacy CSV ч хэмжээ/хоногоор эргэлдэнэ. Presence, single-person, multi-person-ийн
+CSV бүтэц өөр тул `config.yaml` дахь `log_file`-ийг тусдаа нэрээр сонгоно;
+өөр бүтэцтэй хуучин файл дээр мөр нэмж хольж бичихгүй.
 
 ## Camera, AI, QA, documentation
 
@@ -551,14 +642,18 @@ password, token төлөв backup авсан үеийнх болно. Локал
 
 ```bash
 python manage.py cleanup_activity --days 90          # Зөвхөн тоо, cutoff харуулна
-python manage.py backup_database                     # Эхлээд backup авна
-python manage.py cleanup_activity --days 90 --apply  # Жинхэнэ устгал
+python manage.py cleanup_activity --days 90 --apply --backup  # Backup шалгаад устгана
 ```
 
-Default хадгалалт 90 хоног, minimum 1 хоног. Camera-ийн дууссан timestamp,
+Default хадгалалт төв тохиргооноос (анх 90 хоног), minimum 1 хоног. Camera-ийн дууссан timestamp,
 computer interval-ийн дууссан цагаар cutoff-оос бүхэлдээ өмнөх мөрийг сонгоно.
 Cutoff дамнасан segment-ийг хадгална. User, task, consent, device болон хадгалсан
-score-уудыг устгахгүй. Cleanup автомат биш, `--apply` байхгүй үед юу ч устгахгүй.
+score-уудыг устгахгүй. `--apply` байхгүй үед юу ч устгахгүй. Автомат горим зөвхөн
+admin-ийн opt-in тохиргоогоор асна. Устгалын сонголтод тухайн үеийн ID хязгаар
+ашиглаж, backup хүлээх зуур шинээр ирсэн хуучин timestamp-тай мөрийг хамруулахгүй.
+`--backup` нь устгахаас яг өмнө шинэ backup үүсгэж шалгана; алдаа гарвал устгахгүй.
+Автомат горим үргэлж энэ хамгаалалттай. `retention-*.sqlite3/.dump` generated safety
+backup-аас хамгийн сүүлийн 7-г хадгална; daily/manual backup-д хүрэхгүй.
 SQLite файл logical delete хийсний дараа шууд жижигрэх албагүй.
 
 Цэвэрлэсэн хуучин өдрийн score-ийг дараа нь дахин тооцвол activity өгөгдөл нь
@@ -596,6 +691,14 @@ Backend удаашрахад frame loop сүлжээ хүлээхгүй. Зог�
 Үндсэн agent, camera, alternative agent нь JWT файлыг process хоорондын lock,
 давтагдахгүй temp файл, atomic replace ашиглан бичнэ. Refresh-ийн хариу хожуу
 ирэхэд шинэ login-ийг дарах эсвэл logout хийсэн login-ийг сэргээхгүй.
+
+Queue/spool нь API origin болон JWT user ID-аас гаргасан hash нэрээр account бүрт
+тусдаа хадгалагдана. Ижил account дахин нэвтрэх/refresh хийхэд өмнөх queue үргэлжилнэ;
+өөр account-ийн мөрийг авахгүй. Ажиллаж буй collector-ийн login солигдвол зогсоож,
+тухайн account-ийн queue-г хадгална. Account солихдоо agent/camera-аа эхлээд зогсоож,
+шинээр login хийгээд дахин асаана. Хуучин account тодорхойгүй bare queue болон
+`unverified` файл автоматаар одоогийн хэрэглэгчид оноогдохгүй. Файлыг хадгалж,
+эзэмшигчийг тусад нь шалгана; зүгээр нэрийг нь солиод upload хийж болохгүй.
 
 ## Үлдсэн ажлуудын нэмэлт хэрэгслүүд
 
@@ -739,6 +842,9 @@ refresh token 1 өдөр хүчинтэй. Agent-ууд refresh token ашигл
 | --- | --- | --- |
 | `/api/auth/login/` | POST | Username, password-аар access/refresh авах |
 | `/api/auth/refresh/` | POST | Refresh token-оор access шинэчлэх |
+| `/api/me/today/` | GET | Зөвхөн өөрийн өнөөдрийн хугацаа, апп, task |
+| `/api/me/password/` | POST | current_password/new_password/confirm_password; session-уудыг цуцална |
+| `/api/desktop/link/` | POST | Өөрийн device + explicit consent; тусдаа agent JWT; no-store |
 | `/api/auth/logout/` | POST | Өөрийн refresh token-ийг хүчингүй болгох; access authentication шаардлагатай |
 | `/api/users/`, `/api/users/{id}/` | GET, POST / GET, PUT, PATCH, DELETE | User удирдах; өөрчлөх эрх зөвхөн admin |
 | `/api/users/me/` | GET | Одоогийн хэрэглэгч |
@@ -746,6 +852,12 @@ refresh token 1 өдөр хүчинтэй. Agent-ууд refresh token ашигл
 | `/api/tasks/`, `/api/tasks/{id}/` | GET, POST / GET, PUT, PATCH, DELETE | Task; өөрчлөх эрх admin/manager |
 | `/api/devices/enroll/` | POST | Өөрийн workstation бүртгүүлэх |
 | `/api/devices/` | GET | Харах эрхтэй device-ууд |
+| `/api/agent-status/` | GET | Эрхийн хүрээний төхөөрөмж, agent heartbeat/queue төлөв |
+| `/api/agent-status/heartbeat/` | POST | Өөрийн enabled device-ийн operational metadata |
+| `/api/monitoring-settings/` | GET, PATCH | Бүгд уншина; зөвхөн admin `expected_version`-той засна |
+| `/api/notifications/` | GET | Task, agent, upload-ийн веб мэдэгдэл |
+| `/api/audit/` | GET | Эрхийн хүрээний өөрчлөлтийн түүх; pagination |
+| `/api/reports/export/?start=2026-11-01&end=2026-11-05&employee_id=all&file_type=xlsx` | GET | CSV эсвэл Excel өдрийн тайлан татах |
 | `/api/consents/grant/` | POST | Өөрийн monitoring consent олгох |
 | `/api/consents/revoke/` | POST | Өөрийн consent цуцлах |
 | `/api/consents/status/` | GET | Өөрийн consent төлөв |

@@ -33,6 +33,29 @@ class UserViewSet(viewsets.ModelViewSet):
             return [IsSystemAdmin()]
         return [IsAuthenticated()]
 
+    @transaction.atomic
+    def perform_create(self, serializer):
+        from .operations import audit_update
+        user = serializer.save()
+        audit_update(self.request.user, 'user', user, {}, ('username','role','department_id','is_active'), user, action='create')
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        from .operations import audit_update, snapshot, audit_event
+        fields = ('username','role','department_id','is_active')
+        before = snapshot(serializer.instance, fields)
+        changed_password = 'password' in serializer.validated_data
+        user = serializer.save()
+        audit_update(self.request.user, 'user', user, before, fields, user)
+        if changed_password:
+            audit_event(self.request.user, 'user', user.pk, 'password_change', {}, user)
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        from .operations import audit_event
+        audit_event(self.request.user, 'user', instance.pk, 'delete', {}, instance)
+        instance.delete()
+
     @action(detail=False, methods=["get"])
     def me(self, request):
         return Response(self.get_serializer(request.user).data)
@@ -64,6 +87,8 @@ class ConsentRecordViewSet(viewsets.ReadOnlyModelViewSet):
             granted=True,
             policy_version=policy_version.strip(),
         )
+        from .operations import audit_event
+        audit_event(request.user, 'consent', record.pk, 'grant', {'policy_version': record.policy_version}, request.user)
         return Response(self.get_serializer(record).data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=["post"])
@@ -73,6 +98,8 @@ class ConsentRecordViewSet(viewsets.ReadOnlyModelViewSet):
         lock_employee(request.user)
         active_records = ConsentRecord.objects.filter(employee=request.user, granted=True, revoked_at__isnull=True)
         revoked = active_records.update(revoked_at=timezone.now())
+        from .operations import audit_event
+        audit_event(request.user, 'consent', request.user.pk, 'revoke', {'records_revoked': revoked}, request.user)
         return Response({"revoked": revoked})
 
     @action(detail=False, methods=["get"])

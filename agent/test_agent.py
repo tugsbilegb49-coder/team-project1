@@ -217,6 +217,7 @@ class IntervalSplitTests(unittest.TestCase):
         from unittest.mock import patch
         from src.api_logger import CameraEventUploader
         with TemporaryDirectory() as directory:
+            (Path(directory)/'tokens.json').write_text('{"access":"fake","refresh":"fake"}')
             uploader=CameraEventUploader('http://localhost:8000',str(Path(directory)/'tokens.json'),
                 str(Path(directory)/'device.json'),str(Path(directory)/'queue.json'))
             end=datetime(2026,11,5,16,0,10,tzinfo=timezone.utc)
@@ -324,6 +325,7 @@ class QueueLimitTests(unittest.TestCase):
         from unittest.mock import patch
         from src.api_logger import CameraEventUploader, CameraAPISyncError
         with TemporaryDirectory() as directory:
+            (Path(directory)/'tokens').write_text('{"access":"fake","refresh":"fake"}')
             uploader=CameraEventUploader('http://localhost',str(Path(directory)/'tokens'),queue_file=str(Path(directory)/'camera.json'),max_queue_events=2)
             with patch.object(uploader,'_send',side_effect=CameraAPISyncError('offline')):
                 for number in range(3):

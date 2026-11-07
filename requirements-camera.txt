@@ -1,0 +1,4 @@
+# Default metadata-only presence mode; optional legacy experiments use requirements.txt.
+ultralytics>=8.2.0
+opencv-python>=4.9.0
+PyYAML>=6.0

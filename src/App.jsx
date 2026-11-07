@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { api, list, login, logout, hasAuth, onAuthCleared } from "./api";
 import Tasks from "./Tasks";
 import Members from "./Members";
+import Today, { PasswordSettings } from './Today';
+import { AgentStatus, AuditHistory, MonitoringSettings, Notifications, ReportExport } from './Operations';
 import "./App.css";
 const statuses = {
   TODO: "Хүлээгдэж байна",
@@ -20,7 +22,7 @@ function localToday() {
 }
 function App() {
   const [user, setUser] = useState(null),
-    [page, setPage] = useState("dashboard");
+    [page, setPage] = useState("today");
   const [tasks, setTasks] = useState([]),
     [members, setMembers] = useState([]),
     [departments, setDepartments] = useState([]);
@@ -63,9 +65,9 @@ function App() {
     setDepartments([]);
     setReport(null);
     setEmployee("");
-    setPage("dashboard");
+    setPage("today");
     setError(
-      reason === "expired" ? "Нэвтрэх хугацаа дууссан. Дахин нэвтэрнэ үү." : "",
+      reason === 'password_changed' ? 'Нууц үг солигдлоо. Шинэ нууц үгээр дахин нэвтэрнэ үү.' : reason === "expired" ? "Нэвтрэх хугацаа дууссан. Дахин нэвтэрнэ үү." : "",
     );
   }
   async function load(signal) {
@@ -251,10 +253,15 @@ function App() {
         <h2>WorkTrack</h2>
         <nav>
           {[
+            ['today', 'Миний өнөөдөр'],
             ["dashboard", "Dashboard"],
             ["tasks", "Даалгавар"],
             ["members", "Багийн гишүүд"],
             ["reports", "Тайлан"],
+            ['agents', 'Agent төлөв'],
+            ['audit', 'Өөрчлөлтийн түүх'],
+            ...(user.is_admin ? [['settings', 'Тохиргоо']] : []),
+            ['account', 'Миний бүртгэл'],
           ].map(([key, label]) => (
             <button
               type="button"
@@ -274,6 +281,7 @@ function App() {
         </button>
       </aside>
       <main className="main" aria-busy={busy}>
+        <Notifications key={`notifications:${user.id}:${user.role}:${user.department}`} user={user} navigate={setPage}/>
         {user.role === "MANAGER" && !user.department && !user.is_admin && (
           <p role="alert">
             Manager-ийн хэлтэс тохируулагдаагүй байна. Admin-аар хэлтэс
@@ -282,7 +290,7 @@ function App() {
         )}
         {error && <p role="alert">{error}</p>}
         {busy && <p>Хадгалж байна…</p>}
-        {page === "tasks" ? (
+        {page === 'today' ? <Today key={`today:${user.id}`} user={user} navigate={setPage}/> : page === 'account' ? <PasswordSettings key={`password:${user.id}`}/> : page === "tasks" ? (
           <Tasks
             tasks={tasks}
             members={members}
@@ -309,6 +317,12 @@ function App() {
             busy={busy}
             mutate={mutate}
           />
+        ) : page === 'agents' ? (
+          <AgentStatus key={`agents:${user.id}:${user.role}:${user.department}`} user={user}/>
+        ) : page === 'audit' ? (
+          <AuditHistory key={`audit:${user.id}:${user.role}:${user.department}`} user={user}/>
+        ) : page === 'settings' && user.is_admin ? (
+          <MonitoringSettings key={`settings:${user.id}`} user={user}/>
         ) : (
           <section>
             <header className="header">
@@ -317,6 +331,7 @@ function App() {
                 Шинэчлэх
               </button>
             </header>
+            {page === 'reports' && <ReportExport key={`${user.id}:${user.role}:${user.department}`} user={user} members={members} date={date}/>}
             <section className="stats">
               <div className="stat-card">
                 <p>Нийт даалгавар</p>

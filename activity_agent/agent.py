@@ -20,7 +20,7 @@ import uuid
 
 from collector import ActivityCollector
 from contract import build_batch, validate_batch
-from sender import BatchSender
+from sender import BatchSender, StaleTokenError
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 log = logging.getLogger("agent")
@@ -86,8 +86,10 @@ def cmd_mock(config):
 def cmd_run(config):
     collector = ActivityCollector(config["idle_threshold_seconds"])
     sender = make_sender(config)
+    sender.check_account()
     dev_id = device_id()
     stopping = {"flag": False}
+    account_changed = False
 
     def stop(*_):
         stopping["flag"] = True
@@ -103,6 +105,7 @@ def cmd_run(config):
     while not stopping["flag"]:
         time.sleep(config["tick_seconds"])
         try:
+            sender.check_account()
             collector.tick()
             if not collector.listeners_alive():
                 log.warning("Input listener stopped, restarting")
@@ -114,6 +117,10 @@ def cmd_run(config):
                 batch = build_batch(config["employee_id"], dev_id, period_start, now, collector.flush())
                 period_start = now
                 sender.send(batch)
+        except StaleTokenError:
+            account_changed = True
+            log.error("Login account changed. Restart the agent; the previous account spool is preserved.")
+            break
         except Exception:
             # Нэг алдаанаас болж agent бүхэлдээ зогсох ёсгүй.
             log.exception("Unexpected error in main loop")
@@ -121,7 +128,7 @@ def cmd_run(config):
     # Унтрахаас өмнө сүүлийн дутуу batch-ийг spool-д хадгална.
     now = time.time()
     batch = build_batch(config["employee_id"], dev_id, period_start, now, collector.flush())
-    if batch["active_seconds"] + batch["idle_seconds"] > 0:
+    if not account_changed and batch["active_seconds"] + batch["idle_seconds"] > 0:
         sender.spool_only(batch)
     collector.stop_listeners()
     log.info("Agent stopped")

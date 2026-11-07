@@ -74,3 +74,49 @@ class Device(models.Model):
     def __str__(self) -> str:
         return f"{self.employee} - {self.name}"
 
+
+def default_productive_apps():
+    return list(getattr(settings, 'PRODUCTIVE_APPLICATIONS', []))
+
+
+class MonitoringSettings(models.Model):
+    productive_apps = models.JSONField(default=default_productive_apps)
+    camera_threshold = models.FloatField(default=.45)
+    presence_log_max_bytes = models.PositiveIntegerField(default=5242880)
+    presence_log_backups = models.PositiveSmallIntegerField(default=3)
+    presence_log_retention_days = models.PositiveSmallIntegerField(default=7)
+    activity_retention_days = models.PositiveSmallIntegerField(default=90)
+    automatic_retention = models.BooleanField(default=False)
+    version = models.PositiveIntegerField(default=1)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+
+
+class AgentHeartbeat(models.Model):
+    device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name='heartbeats')
+    kind = models.CharField(max_length=20, default='computer')
+    seen_at = models.DateTimeField()
+    queue_count = models.PositiveIntegerField(default=0)
+    paused = models.BooleanField(default=False)
+    last_upload_at = models.DateTimeField(null=True, blank=True)
+    error_code = models.CharField(max_length=24, blank=True)
+    agent_version = models.CharField(max_length=40, blank=True)
+    settings_version = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['device', 'kind'], name='one_heartbeat_per_device_kind')]
+
+
+class AuditEntry(models.Model):
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='audit_actions')
+    actor_label = models.CharField(max_length=150)
+    employee = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='audit_entries')
+    action = models.CharField(max_length=30)
+    resource = models.CharField(max_length=40)
+    object_id = models.CharField(max_length=64)
+    changes = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+

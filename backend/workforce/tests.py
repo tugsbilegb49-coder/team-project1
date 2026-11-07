@@ -127,7 +127,7 @@ class LiveUploaderTests(LiveServerTestCase):
                 self.assertFalse(uploader.flush(3))
             finally:
                 uploader.close()
-            self.assertEqual(len(json.loads((root/'pending.json').read_text())),1)
+            self.assertEqual(len(json.loads(uploader._worker.path.read_text())),1)
             self.assertEqual(CameraPresence.objects.filter(employee=user).count(),1)
 
     def test_launcher_recognizes_current_backend_over_http(self):
@@ -159,14 +159,15 @@ class LiveUploaderTests(LiveServerTestCase):
             path=Path(directory)
             (path/'tokens.json').write_text(json.dumps(tokens))
             uploader=PendingUploader(ApiClient(self.live_server_url,path/'tokens.json'),path/'pending.json')
+            queue_path = uploader.path
             payload={'started_at':(timezone.now()-timedelta(seconds=60)).isoformat(),'duration_seconds':30,'application':'Code','category':'WORK'}
             uploader.append_many([{**payload,'duration_seconds':-1},payload])
             try:
                 self.assertTrue(uploader.flush(3))
             finally:
                 uploader.stop()
-            self.assertEqual(json.loads((path/'pending.json').read_text()),[])
-            rejected=json.loads((path/'pending.rejected.json').read_text())
+            self.assertEqual(json.loads(queue_path.read_text()),[])
+            rejected=json.loads(queue_path.with_name(queue_path.stem+'.rejected.json').read_text())
             self.assertEqual(rejected[0]['status'],400)
             self.assertEqual(rejected[0]['event']['duration_seconds'],-1)
             self.assertEqual(ComputerActivity.objects.filter(employee=user).count(),1)
@@ -261,7 +262,8 @@ class LiveUploaderTests(LiveServerTestCase):
                         failed.set()
                         raise
                     uploaded.set()
-            uploader=PendingUploader(ObservedClient(),queue_path)
+            uploader=PendingUploader(ObservedClient(),queue_path,owner_getter=http.queue_owner)
+            queue_path=uploader.path
             start=timezone.now()-timedelta(seconds=60)
             payload={'started_at':start.isoformat(),'duration_seconds':30,'application':'Code','category':'WORK'}
             uploader.append(payload)

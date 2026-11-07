@@ -28,11 +28,17 @@ if __package__:
     from .queue_limits import bounded_queue
     from .token_store import atomic_json_write, read_tokens, save_tokens, remove_tokens, StaleTokenError
     from .upload_support import quarantine_event, PERMANENT_EVENT_STATUSES
+    from .identity import queue_identity
+    from .runtime import AgentRuntime
+    from .process_lock import collector_lock, AlreadyRunningError
 else:
     from intervals import split_interval
     from queue_limits import bounded_queue
     from token_store import atomic_json_write, read_tokens, save_tokens, remove_tokens, StaleTokenError
     from upload_support import quarantine_event, PERMANENT_EVENT_STATUSES
+    from identity import queue_identity
+    from runtime import AgentRuntime
+    from process_lock import collector_lock, AlreadyRunningError
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -66,6 +72,10 @@ WINDOWS_PROCESS_NAMES = {
 
 
 class AgentError(RuntimeError):
+    pass
+
+
+class AccountChangedError(AgentError):
     pass
 
 
@@ -302,6 +312,40 @@ class ApiClient:
     def __init__(self, api_url: str, token_path: Path):
         self.api_url = api_url
         self.token_path = token_path
+        self.identity_origin = api_url
+        self.bound_owner = None
+
+    def queue_owner(self):
+        return self._accept_tokens(self._read_tokens())
+
+    def _accept_tokens(self, tokens):
+        owner = queue_identity(tokens, self.identity_origin)
+        if self.bound_owner is None:
+            self.bound_owner = owner
+        if self.bound_owner != owner:
+            raise AccountChangedError('Agent account changed. Restart the agent; the previous account queue is preserved.')
+        return owner
+
+    def _get_json(self, route, access_token):
+        request = Request(self.api_url + route, headers={'Authorization': 'Bearer ' + access_token})
+        try:
+            with urlopen(request, timeout=5) as response:
+                return json.load(response)
+        except HTTPError as exc:
+            code = exc.code; exc.close()
+            raise ApiError(code, f'API read failed ({code}).', route=route) from exc
+        except (OSError, ValueError) as exc:
+            raise AgentError('API read failed; retaining the previous local configuration.') from exc
+
+    def get(self, route):
+        tokens = self._read_tokens()
+        self._accept_tokens(tokens)
+        try:
+            return self._get_json(route, tokens['access'])
+        except ApiError as exc:
+            if exc.status != 401: raise
+            tokens = self._refresh_access_token(tokens)
+            return self._get_json(route, tokens['access'])
 
     def _post_json(self, route: str, payload: dict[str, Any], access_token: str | None = None) -> dict[str, Any]:
         headers = {"Content-Type": "application/json"}
@@ -349,6 +393,7 @@ class ApiClient:
         if not tokens.get("access") or not tokens.get("refresh"):
             raise AgentError("Login response did not contain JWT tokens.")
         self._write_tokens(tokens)
+        self.bound_owner = queue_identity(tokens, self.identity_origin)
 
     def logout(self) -> None:
         tokens = self._read_tokens()
@@ -368,6 +413,7 @@ class ApiClient:
 
     def _authenticated_post(self, route: str, payload: dict[str, Any]) -> dict[str, Any]:
         tokens = self._read_tokens()
+        self._accept_tokens(tokens)
         try:
             return self._post_json(route, payload, tokens["access"])
         except ApiError as exc:
@@ -404,14 +450,20 @@ def segment_payload(application: str, category: str, started_at: datetime, ended
 class PendingUploader:
     """Persist segments immediately; perform slow network I/O off the sampling loop."""
 
-    def __init__(self, client: ApiClient, path: Path = DEFAULT_QUEUE_PATH, max_events=10000, max_bytes=10 * 1024 * 1024, event_route="/api/computer-activity/ingest/"):
-        self.client, self.path = client, path
+    def __init__(self, client: ApiClient, path: Path = DEFAULT_QUEUE_PATH, max_events=10000, max_bytes=10 * 1024 * 1024, event_route="/api/computer-activity/ingest/", owner_getter=None):
+        self.client, self.base_path = client, Path(path)
+        self.owner_getter = owner_getter or (client.queue_owner if isinstance(client, ApiClient) else None)
+        self.owner = None
+        if self.owner_getter:
+            try: self.owner = self.owner_getter()
+            except (AgentError, OSError, ValueError): pass
+        self.path = self._owned_path(self.owner) if self.owner_getter else self.base_path
         self.event_route = event_route
         self.max_events, self.max_bytes = max_events, max_bytes
-        self.pending, dropped = bounded_queue(_read_json_list(path), max_events, max_bytes)
+        self.pending, dropped = bounded_queue(_read_json_list(self.path), max_events, max_bytes)
         if dropped:
             print(f"Queue limit: discarded {dropped} oldest/oversized events.", file=sys.stderr)
-            _write_json_list(path, self.pending)
+            _write_json_list(self.path, self.pending)
         self.lock = threading.Lock()
         self.completed = threading.Condition(self.lock)
         self.cycles = 0
@@ -419,6 +471,26 @@ class PendingUploader:
         self.ready = threading.Event()
         self.stopping = threading.Event()
         self.thread = threading.Thread(target=self._run, name="activity-upload", daemon=True)
+        self.last_upload_at = None
+        self.last_error = ''
+        self.unverified_count = len(_read_json_list(self.base_path)) if self.owner_getter else 0
+
+    def _owned_path(self, owner):
+        return self.base_path.with_name(self.base_path.stem + '.' + (owner or 'unverified') + self.base_path.suffix)
+
+    def _ensure_owner(self):
+        if not self.owner_getter:
+            return
+        owner = self.owner_getter()
+        if not isinstance(owner, str) or not owner:
+            raise AgentError('A verified local login is required before queueing activity.')
+        with self.lock:
+            if self.owner is None:
+                self.owner = owner
+                self.path = self._owned_path(owner)
+                self.pending, _ = bounded_queue(_read_json_list(self.path), self.max_events, self.max_bytes)
+            elif self.owner != owner:
+                raise AccountChangedError('Queue account changed; restart this uploader. Other account data is preserved.')
 
     def start(self):
         if self.started:
@@ -431,6 +503,7 @@ class PendingUploader:
         self.append_many([payload])
 
     def append_many(self, payloads):
+        self._ensure_owner()
         with self.lock:
             self.pending, dropped = bounded_queue(self.pending + list(payloads), self.max_events, self.max_bytes)
             if dropped:
@@ -445,12 +518,14 @@ class PendingUploader:
             self.ready.wait()
             self.ready.clear()
             try:
+                self._ensure_owner()
                 while True:
                     with self.lock:
                         payload = self.pending[0] if self.pending else None
                     if payload is None:
                         break
                     try:
+                        self._ensure_owner()
                         self.client.ingest(payload)
                     except ApiError as exc:
                         if exc.status not in PERMANENT_EVENT_STATUSES or exc.route not in (None, self.event_route):
@@ -463,11 +538,18 @@ class PendingUploader:
                         print(f"Rejected event moved to {rejected.name}; continuing queue.", file=sys.stderr)
                         continue
                     with self.lock:
+                        self.last_upload_at = datetime.now().astimezone().isoformat()
+                        self.last_error = ''
                         # A full queue may have evicted this in-flight row.
                         if self.pending and self.pending[0] is payload:
                             self.pending.pop(0)
                         _write_json_list(self.path, self.pending)
             except (AgentError, OSError, ValueError) as exc:
+                with self.lock:
+                    self.last_error = ('login_changed' if isinstance(exc, AccountChangedError) else
+                                       'authentication' if isinstance(exc, ApiError) and exc.status == 401 else
+                                       'permission' if isinstance(exc, ApiError) and exc.status == 403 else
+                                       'storage' if isinstance(exc, OSError) else 'network')
                 print(f"Upload paused; queue retained: {exc}", file=sys.stderr)
             with self.completed:
                 self.cycles += 1
@@ -505,6 +587,10 @@ def run_agent(config: dict[str, Any], client: ApiClient) -> None:
     recorded_until = None
     uploader = PendingUploader(client, max_events=config.get("max_queue_events", 10000), max_bytes=config.get("max_queue_bytes", 10 * 1024 * 1024))
     uploader.start()
+    runtime = None
+    if isinstance(client, ApiClient) and config.get('device_id'):
+        runtime = AgentRuntime(client, config['device_id'], uploader, is_paused)
+        runtime.start()
     last_upload = time.monotonic()
     poll_interval = config.get("poll_interval_seconds", 1)
     max_gap = config.get("max_sample_gap_seconds", 10)
@@ -526,6 +612,18 @@ def run_agent(config: dict[str, Any], client: ApiClient) -> None:
     try:
         while True:
             tick_started = time.monotonic()
+            if isinstance(client, ApiClient):
+                client.queue_owner()  # Stop this collector if another account replaced its login.
+                if uploader.last_error == 'authentication':
+                    raise AgentError('Agent login expired or was revoked. Stop and reconnect this device.')
+            if runtime:
+                remote = runtime.snapshot()
+                productive_apps = remote.get('productive_apps')
+                if isinstance(productive_apps, list) and productive_apps != config['productive_apps']:
+                    if last_observed_at is not None:
+                        close_segment(last_observed_at)
+                        segment_started_at = last_observed_at
+                    config['productive_apps'] = productive_apps
             if is_paused():
                 if last_observed_at is not None:
                     close_segment(last_observed_at)
@@ -575,6 +673,7 @@ def run_agent(config: dict[str, Any], client: ApiClient) -> None:
         if last_observed_at is not None and not is_paused():
             close_segment(last_observed_at)
     finally:
+        if runtime: runtime.stop()
         uploader.stop()
         print("Desktop agent stopped. Unsent segments are retained locally.")
 
@@ -602,7 +701,11 @@ def main() -> None:
             print("Desktop agent resumed.")
             return
         if args.status:
-            print(json.dumps({"paused": is_paused(), "queued_events": len(_read_json_list(DEFAULT_QUEUE_PATH))}))
+            config = load_config(args.config)
+            worker = PendingUploader(ApiClient(config['api_url'], DEFAULT_TOKEN_PATH))
+            print(json.dumps({"paused": is_paused(), "queued_events": len(worker.pending),
+                              "unverified_legacy_events": worker.unverified_count,
+                              "account_queue_ready": worker.owner is not None, "queue_file": str(worker.path)}))
             return
         config = load_config(args.config)
         client = ApiClient(config["api_url"], DEFAULT_TOKEN_PATH)
@@ -628,8 +731,9 @@ def main() -> None:
             save_config(args.config, config)
             print("Desktop-agent login and device enrollment saved locally. Start monitoring with: python3 agent/main.py")
             return
-        run_agent(config, client)
-    except AgentError as exc:
+        with collector_lock('computer'):
+            run_agent(config, client)
+    except (AgentError, AlreadyRunningError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
 

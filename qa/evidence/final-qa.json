@@ -1,9 +1,9 @@
 {
-  "performed_at": "2026-11-06T16:24:07.010584+08:00",
+  "performed_at": "2026-11-07T09:15:45.149480+08:00",
   "source": {
-    "git_head": "33d26b29f2e6d4813d6da3df893b72d725d32b90",
+    "git_head": "ea5b730f0660e773e8e2820688961eb60294dc29",
     "working_tree_dirty": true,
-    "source_sha256": "5f451247bb8aa949fcabb47cc3b21cbc161bbb76d33e8bc88281373332918030"
+    "source_sha256": "1cfb4a035c106d2dd93476764d020f6b7949f00da59bf2f800816613df42cdba"
   },
   "status": "passed",
   "scope": "Disposable test databases, synthetic OS observations and synthetic AI data; no webcam capture.",
@@ -17,10 +17,10 @@
       ],
       "status": "passed",
       "exit_code": 0,
-      "seconds": 0.298,
+      "seconds": 0.297,
       "tests_reported": null,
       "tests_skipped": 0,
-      "log": ".runtime/qa/20261106T162407010584/django-check.log"
+      "log": ".runtime/qa/20261107T091545149480/django-check.log"
     },
     {
       "name": "migration-check",
@@ -33,10 +33,10 @@
       ],
       "status": "passed",
       "exit_code": 0,
-      "seconds": 0.294,
+      "seconds": 0.293,
       "tests_reported": null,
       "tests_skipped": 0,
-      "log": ".runtime/qa/20261106T162407010584/migration-check.log"
+      "log": ".runtime/qa/20261107T091545149480/migration-check.log"
     },
     {
       "name": "python-camera-ai",
@@ -48,10 +48,10 @@
       ],
       "status": "passed",
       "exit_code": 0,
-      "seconds": 3.187,
-      "tests_reported": 69,
+      "seconds": 2.566,
+      "tests_reported": 81,
       "tests_skipped": 0,
-      "log": ".runtime/qa/20261106T162407010584/python-camera-ai.log"
+      "log": ".runtime/qa/20261107T091545149480/python-camera-ai.log"
     },
     {
       "name": "computer-agent",
@@ -67,10 +67,10 @@
       ],
       "status": "passed",
       "exit_code": 0,
-      "seconds": 0.129,
+      "seconds": 0.13,
       "tests_reported": 28,
       "tests_skipped": 0,
-      "log": ".runtime/qa/20261106T162407010584/computer-agent.log"
+      "log": ".runtime/qa/20261107T091545149480/computer-agent.log"
     },
     {
       "name": "alternative-agent",
@@ -84,10 +84,10 @@
       ],
       "status": "passed",
       "exit_code": 0,
-      "seconds": 3.756,
-      "tests_reported": 22,
+      "seconds": 3.779,
+      "tests_reported": 23,
       "tests_skipped": 0,
-      "log": ".runtime/qa/20261106T162407010584/alternative-agent.log"
+      "log": ".runtime/qa/20261107T091545149480/alternative-agent.log"
     },
     {
       "name": "django-integration",
@@ -102,10 +102,10 @@
       ],
       "status": "passed",
       "exit_code": 0,
-      "seconds": 6.931,
-      "tests_reported": 80,
+      "seconds": 9.008,
+      "tests_reported": 100,
       "tests_skipped": 3,
-      "log": ".runtime/qa/20261106T162407010584/django-integration.log"
+      "log": ".runtime/qa/20261107T091545149480/django-integration.log"
     },
     {
       "name": "frontend-unit",
@@ -119,7 +119,7 @@
       "seconds": 0.188,
       "tests_reported": null,
       "tests_skipped": 0,
-      "log": ".runtime/qa/20261106T162407010584/frontend-unit.log"
+      "log": ".runtime/qa/20261107T091545149480/frontend-unit.log"
     },
     {
       "name": "frontend-lint",
@@ -130,10 +130,10 @@
       ],
       "status": "passed",
       "exit_code": 0,
-      "seconds": 0.132,
+      "seconds": 0.183,
       "tests_reported": null,
       "tests_skipped": 0,
-      "log": ".runtime/qa/20261106T162407010584/frontend-lint.log"
+      "log": ".runtime/qa/20261107T091545149480/frontend-lint.log"
     },
     {
       "name": "frontend-build",
@@ -144,10 +144,10 @@
       ],
       "status": "passed",
       "exit_code": 0,
-      "seconds": 0.239,
+      "seconds": 0.255,
       "tests_reported": null,
       "tests_skipped": 0,
-      "log": ".runtime/qa/20261106T162407010584/frontend-build.log"
+      "log": ".runtime/qa/20261107T091545149480/frontend-build.log"
     },
     {
       "name": "frontend-browser",
@@ -160,10 +160,10 @@
       ],
       "status": "passed",
       "exit_code": 0,
-      "seconds": 6.589,
-      "tests_reported": 12,
+      "seconds": 8.063,
+      "tests_reported": 17,
       "tests_skipped": 0,
-      "log": ".runtime/qa/20261106T162407010584/frontend-browser.log"
+      "log": ".runtime/qa/20261107T091545149480/frontend-browser.log"
     },
     {
       "name": "browser-django",
@@ -173,16 +173,17 @@
       ],
       "status": "passed",
       "exit_code": 0,
-      "seconds": 3.499,
+      "seconds": 6.284,
       "tests_reported": 1,
       "tests_skipped": 0,
-      "log": ".runtime/qa/20261106T162407010584/browser-django.log"
+      "log": ".runtime/qa/20261107T091545149480/browser-django.log"
     }
   ],
   "manual_remaining": [
     "Independent real camera precision/recall validation",
     "Human defense rehearsal",
-    "Team PR evidence links and remote CI run after code publication"
+    "Team PR evidence links and remote CI run after code publication",
+    "Native macOS app GUI startup/Quit verification; run --native on macOS"
   ],
   "agent_correctness": {
     "data_kind": "synthetic OS observations; actual sampler code",
@@ -571,5 +572,5 @@
     "limitation": "No independent human labels; prediction counts are not precision/recall."
   },
   "release_readiness": "automated_checks_passed_manual_validation_pending",
-  "finished_at": "2026-11-06T16:24:33.293082+08:00"
+  "finished_at": "2026-11-07T09:16:17.256981+08:00"
 }

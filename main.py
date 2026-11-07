@@ -27,19 +27,30 @@ def main():
     if not args.consent and input('Camera uses frames in RAM only. Save presence/confidence locally? [y/N]: ').strip().lower() not in {'y', 'yes', 'тийм'}:
         print('Camera consent was not granted; camera not opened.')
         return
-    if (args.mode or config.get('camera_mode', 'presence')) == 'presence':
+    mode = args.mode or config.get('camera_mode', 'presence')
+    if mode not in {'presence','activity'}: parser.error('camera_mode must be presence or activity.')
+    from agent.process_lock import collector_lock, AlreadyRunningError
+    try:
+        with collector_lock('camera'):
+            run_monitor(config, mode, args.seconds)
+    except AlreadyRunningError as exc:
+        raise SystemExit(str(exc)) from exc
+
+
+def run_monitor(config, mode, seconds):
+    if mode == 'presence':
         from src.presence import PresenceMonitor
-        PresenceMonitor(config).run(seconds=args.seconds)
+        PresenceMonitor(config).run(seconds=seconds)
         return
     from src.monitor import WorkerActivityMonitor
-    from src.multi_monitor import MultiPersonMonitor
 
     if config.get("multi_person"):
+        from src.multi_monitor import MultiPersonMonitor
         monitor = MultiPersonMonitor(config)
     else:
         monitor = WorkerActivityMonitor(config)
 
-    monitor.run()
+    monitor.run(seconds=seconds)
 
 
 if __name__ == "__main__":

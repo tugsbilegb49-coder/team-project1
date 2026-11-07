@@ -21,7 +21,8 @@ def validate_presence(present, confidence):
 class PresenceLogger:
     fields = ('timestamp', 'present', 'confidence')
 
-    def __init__(self, path, max_bytes=5 * 1024 * 1024, backup_count=3, retention_days=7, clock=None):
+    def __init__(self, path, max_bytes=5 * 1024 * 1024, backup_count=3, retention_days=7, clock=None, fields=None):
+        if fields is not None: self.fields = tuple(fields)
         if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 256:
             raise ValueError('Presence log max_bytes must be at least 256.')
         if isinstance(backup_count, bool) or not isinstance(backup_count, int) or not 0 <= backup_count <= 100:
@@ -33,6 +34,10 @@ class PresenceLogger:
         self.max_bytes, self.backup_count, self.retention_days = max_bytes, backup_count, retention_days
         self.clock = clock or (lambda: datetime.now(ZoneInfo('Asia/Ulaanbaatar')))
         self.header = self._csv_line(self.fields)
+        if self.path.exists() and self.path.stat().st_size:
+            with self.path.open('rb') as existing:
+                if existing.readline().rstrip(b'\r\n') != self.header.encode().rstrip(b'\n'):
+                    raise ValueError('Existing CSV schema differs. Choose a separate log file for this camera mode.')
         self.stream = None
         self.day = None
         self._prune()
@@ -112,7 +117,12 @@ class PresenceLogger:
 
     def log(self, present, confidence, timestamp=None):
         validate_presence(present, confidence)
-        row = self._csv_line(((timestamp or self.clock()).isoformat(), int(present), round(confidence, 6)))
+        self.write_row(((timestamp or self.clock()).isoformat(), int(present), round(confidence, 6)))
+
+    def write_row(self, values):
+        row = self._csv_line(values)
+        if len(self.header.encode())+len(row.encode()) > self.max_bytes:
+            raise ValueError('CSV row exceeds the configured file size limit.')
         if self.day != self.clock().date() or self.path.stat().st_size + len(row.encode('utf-8')) > self.max_bytes:
             self._rotate()
         self.stream.write(row)
@@ -148,6 +158,8 @@ class PresenceMonitor:
         detector, cap = None, None
         logger, uploader = None, None
         guard = None
+        runtime = None
+        applied_version = None
         paused_frame = np.zeros((160, 640, 3), dtype=np.uint8)
         try:
             logger = PresenceLogger(self.config.get('presence_log_file', 'data/presence.csv'),
@@ -163,11 +175,28 @@ class PresenceMonitor:
                     sync.get('max_queue_events', 10000), sync.get('max_queue_bytes', 10485760))
                 guard = uploader.consent_guard
                 guard.start()
+                device_id = uploader._device_id()
+                if isinstance(device_id, str) and device_id:
+                    from agent.main import ApiClient
+                    from agent.runtime import AgentRuntime
+                    runtime = AgentRuntime(ApiClient(uploader.api_url, uploader.token_file), device_id,
+                        uploader._worker, lambda: self.paused() or not guard.allowed(), kind='camera')
+                    runtime.start()
             start = time.monotonic()
             next_sample = start
             print('Presence demo: q = stop. Frames/video are never saved. Pause uses agent/control.json.')
             result = None
             while seconds is None or time.monotonic() - start < seconds:
+                remote = runtime.snapshot() if runtime else {}
+                if remote.get('version') is not None and remote['version'] != applied_version:
+                    self.config['confidence_threshold'] = remote['camera_threshold']
+                    if detector is not None:
+                        detector.confidence_threshold = remote['camera_threshold']
+                    logger.close()
+                    logger = PresenceLogger(self.config.get('presence_log_file', 'data/presence.csv'),
+                        max_bytes=remote['presence_log_max_bytes'], backup_count=remote['presence_log_backups'],
+                        retention_days=remote['presence_log_retention_days'])
+                    applied_version = remote['version']
                 # Process quit in every state, including before authorization.
                 if cv2.waitKey(1) & 0xff == ord('q'):
                     break
@@ -216,6 +245,7 @@ class PresenceMonitor:
             if cap is not None:
                 cap.release()
             cv2.destroyAllWindows()
+            if runtime: runtime.stop()
             if uploader:
                 uploader.close()
             if logger:

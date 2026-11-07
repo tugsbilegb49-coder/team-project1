@@ -18,18 +18,20 @@ class CSVActivityLogger:
     format works for both single-person and multi-person (DeepSORT) modes.
     """
 
-    def __init__(self, log_file: str, multi_person: bool = False):
+    def __init__(self, log_file: str, multi_person: bool = False, **limits):
         self.log_file = log_file
         self.multi_person = multi_person
-        os.makedirs(os.path.dirname(log_file) or ".", exist_ok=True)
-        is_new = not os.path.exists(log_file)
-        self._f = open(log_file, "a", newline="")
-        self._writer = csv.writer(self._f)
-        if is_new:
-            header = ["timestamp", "state", "duration_seconds"]
-            if multi_person:
-                header.insert(1, "person_id")
-            self._writer.writerow(header)
+        self.header = ['timestamp','state','duration_seconds']
+        if multi_person: self.header.insert(1,'person_id')
+        from src.presence import PresenceLogger
+        self._csv = PresenceLogger(log_file, fields=self.header, **limits)
+
+    def configure(self, settings):
+        from src.presence import PresenceLogger
+        self._csv.close()
+        self._csv = PresenceLogger(self.log_file, fields=self.header,
+            max_bytes=settings['presence_log_max_bytes'], backup_count=settings['presence_log_backups'],
+            retention_days=settings['presence_log_retention_days'])
 
     def log(self, state: str, duration_seconds: float, person_id=None, timestamp=None) -> None:
         recorded = timestamp or datetime.now()
@@ -41,17 +43,25 @@ class CSVActivityLogger:
         if self.multi_person:
             row.append(person_id)
         row += [state, round(duration_seconds, 1)]
-        self._writer.writerow(row)
-        self._f.flush()
+        self._csv.write_row(row)
 
     def close(self) -> None:
-        self._f.close()
+        self._csv.close()
 
 
 def load_log(log_file: str) -> pd.DataFrame:
     if not os.path.exists(log_file):
         return pd.DataFrame(columns=["timestamp", "state", "duration_seconds"])
-    df = pd.read_csv(log_file, parse_dates=["timestamp"])
+    from pathlib import Path
+    path=Path(log_file)
+    files=[path]
+    for candidate in path.parent.glob(path.name+'.*'):
+        suffix=candidate.name[len(path.name)+1:]
+        if suffix.isdecimal() and str(int(suffix))==suffix and 1<=int(suffix)<=100: files.append(candidate)
+    df = pd.concat([pd.read_csv(file,parse_dates=['timestamp']) for file in files],ignore_index=True)
+    if df.empty:
+        df['date'] = pd.Series(dtype=object)
+        return df
     df["date"] = df["timestamp"].dt.date
     return df
 

@@ -12,6 +12,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent"))
 from token_store import read_tokens, save_tokens, StaleTokenError
+from identity import queue_identity
 import urllib.error
 import urllib.request
 
@@ -28,15 +29,32 @@ class BatchSender:
         self.token_file = token_file
         self.api_url = api_url
         self.api_token = api_token
-        self.spool_file = spool_file
+        self.spool_base = Path(spool_file)
+        self.owner = None
+        if self.token_file:
+            try: self.owner = queue_identity(read_tokens(self.token_file), self.api_url)
+            except (OSError, ValueError): pass
+        self.spool_file = str(self._owned_path(self.owner)) if self.token_file else spool_file
         self.timeout = timeout
         self.max_spool_batches = max_spool_batches
         os.makedirs(os.path.dirname(os.path.abspath(spool_file)), exist_ok=True)
+
+    def _owned_path(self, owner):
+        return self.spool_base.with_name(self.spool_base.stem+'.'+(owner or 'unverified')+self.spool_base.suffix)
+
+    def _check_owner(self, tokens):
+        owner = queue_identity(tokens, self.api_url)
+        if self.owner is None:
+            self.owner = owner
+            self.spool_file = str(self._owned_path(owner))
+        elif self.owner != owner:
+            raise StaleTokenError('Sender account changed. Restart; the old account spool is preserved.')
 
     def _token(self, refresh=False):
         if not self.token_file:
             return self.api_token
         tokens = read_tokens(self.token_file)
+        self._check_owner(tokens)
         if refresh:
             expected_refresh = tokens["refresh"]
             base = self.api_url.split("/api/")[0]
@@ -47,6 +65,10 @@ class BatchSender:
                 tokens.update(json.load(response))
             save_tokens(self.token_file, tokens, expected_refresh=expected_refresh)
         return tokens["access"]
+
+    def check_account(self):
+        if self.token_file:
+            self._check_owner(read_tokens(self.token_file))
 
     def post(self, batch, retry=True):
         """True: сервер хүлээж авсан эсвэл буцаагдсан (дахин илгээх утгагүй). False: дахин оролдоно."""
@@ -64,6 +86,8 @@ class BatchSender:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 return 200 <= response.status < 300
         except urllib.error.HTTPError as e:
+            # All branches below either consume the response or only need its status.
+            e.close()
             if e.code == 401 and self.token_file and retry:
                 try:
                     self._token(refresh=True)
@@ -76,7 +100,7 @@ class BatchSender:
                 return False
             if 400 <= e.code < 500 and e.code not in (408, 429):
                 # Contract/auth алдаа: дахин илгээвэл ч мөн л буцаагдана.
-                log.error("API rejected batch %s: HTTP %s %s", batch.get("period_start"), e.code, e.read()[:300])
+                log.error("API rejected batch %s: HTTP %s", batch.get("period_start"), e.code)
                 return True
             log.warning("API error HTTP %s, will retry", e.code)
             return False
@@ -86,6 +110,13 @@ class BatchSender:
 
     def send(self, batch):
         """Эхлээд хуучин spool-оо, дараа нь шинэ batch-ийг илгээнэ."""
+        if self.token_file:
+            try: self.check_account()
+            except StaleTokenError:
+                raise
+            except (OSError, ValueError):
+                self.spool_only(batch)
+                return 0, len(self._read_spool())
         pending = self._read_spool() + [batch]
         sent = 0
         for item in pending:

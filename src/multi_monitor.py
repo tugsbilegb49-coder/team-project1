@@ -21,12 +21,14 @@ from src.logger import CSVActivityLogger, print_summary
 class MultiPersonMonitor:
     def __init__(self, config: dict):
         self.config = config
-        self.cap = cv2.VideoCapture(config["camera_index"])
-        if not self.cap.isOpened():
-            raise RuntimeError(
-                f"Could not open webcam at index {config['camera_index']}. "
-                "Check `camera_index` in config.yaml."
-            )
+        self.session = None
+        self.api_uploader = None
+        sync = config.get('api_sync', {})
+        if sync.get('enabled'):
+            from src.api_logger import CameraEventUploader
+            self.api_uploader = CameraEventUploader(sync.get('api_url','http://127.0.0.1:8000'),
+                sync.get('token_file','agent/.agent_tokens.json'), sync.get('device_config_file','agent/config.json'),
+                config.get('multi_control_queue_file','data/.pending_multi_control.json'))
 
         self.detector = ObjectDetector(
             model_name=config["model_name"],
@@ -49,11 +51,23 @@ class MultiPersonMonitor:
     def _get_tracker(self, track_id: int) -> ActivityTracker:
         if track_id not in self.trackers:
             self.trackers[track_id] = ActivityTracker(
-                on_segment=lambda state, duration, end, tid=track_id: self.logger.log(
-                    state, duration, person_id=tid, timestamp=datetime.fromtimestamp(end).astimezone()),
+                on_segment=lambda state, duration, end, tid=track_id: self._record_segment(state,duration,end,tid),
                 max_gap_seconds=self.config.get("max_camera_gap_seconds", 10)
             )
         return self.trackers[track_id]
+
+    def _record_segment(self, state, duration, end, track_id):
+        from src.camera_session import locally_paused
+        if locally_paused(self.config) or (self.api_uploader and not self.api_uploader.consent_guard.allowed()):
+            return
+        self.logger.log(state,duration,person_id=track_id,timestamp=datetime.fromtimestamp(end).astimezone())
+
+    def _reset_timers(self):
+        for tracker in self.trackers.values(): tracker.reset_timer()
+
+    def _apply_settings(self, settings):
+        self.detector.confidence_threshold=settings['camera_threshold']
+        self.logger.configure(settings)
 
     def _process_frame(self, frame):
         detections = self.detector.detect_with_boxes(frame)
@@ -96,29 +110,27 @@ class MultiPersonMonitor:
 
         return tracked_people, active_ids
 
-    def run(self):
+    def run(self, seconds=None):
+        from src.camera_session import CameraSession
         print("Multi-person monitoring started. Press 'q' in the video window to stop.")
         tracked_people = {}
+        guard = self.api_uploader.consent_guard if self.api_uploader else None
+        if guard: guard.start()
+        self.session = CameraSession(self.config,guard,seconds,self._reset_timers,self.api_uploader,self._apply_settings)
         try:
-            while True:
-                ok, frame = self.cap.read()
-                if not ok:
-                    break
-
+            for frame in self.session.frames():
                 self.frame_count += 1
                 if self.frame_count % self.detect_every_n == 0:
                     tracked_people, _ = self._process_frame(frame)
-
+                if not self.session.allowed(): continue
                 self._draw_overlay(frame, tracked_people)
                 cv2.imshow("Worker Activity Monitor (multi-person)", frame)
 
-                if cv2.waitKey(1) & 0xFF == ord("q"):
-                    break
         finally:
             for tracker in self.trackers.values():
                 tracker.finalize()
-            self.cap.release()
-            cv2.destroyAllWindows()
+            self.session.close()
+            if self.api_uploader: self.api_uploader.close()
             self.logger.close()
             if self.gaze is not None:
                 self.gaze.close()

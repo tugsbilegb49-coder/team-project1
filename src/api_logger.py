@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 import json
+import threading
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -18,6 +19,7 @@ from agent.intervals import split_interval
 from agent.queue_limits import bounded_queue
 from agent.main import PendingUploader, AgentError, ApiError
 from agent.token_store import read_tokens, save_tokens, StaleTokenError
+from agent.identity import queue_identity
 
 
 class CameraAPISyncError(RuntimeError):
@@ -28,6 +30,10 @@ class CameraEventUploader:
     event_route = "/api/activity-events/ingest/"
 
     def __init__(self, api_url: str, token_file: str, device_config_file: str = "agent/config.json", queue_file: str = "data/.pending_camera_events.json", max_queue_events: int = 10000, max_queue_bytes: int = 10 * 1024 * 1024):
+        from src.consent import ConsentGuard
+        self.consent_guard = ConsentGuard(self._check_consent)
+        self.bound_owner = None
+        self.identity_lock = threading.Lock()
         bounded_queue([], max_queue_events, max_queue_bytes)
         self.max_queue_events, self.max_queue_bytes = max_queue_events, max_queue_bytes
         self.api_url = api_url.rstrip("/")
@@ -36,6 +42,12 @@ class CameraEventUploader:
         self.queue_file = Path(queue_file)
         owner = self
         class UploadClient:
+            def queue_owner(self):
+                try:
+                    return queue_identity(owner._session_tokens(), owner.api_url)
+                except CameraAPISyncError as exc:
+                    raise AgentError(str(exc)) from exc
+
             def ingest(self, payload):
                 try:
                     owner._send(payload)
@@ -44,7 +56,8 @@ class CameraEventUploader:
                         raise ApiError(exc.status, str(exc), route=getattr(exc, "route", None)) from exc
                     raise AgentError(str(exc)) from exc
         self._worker = PendingUploader(UploadClient(), self.queue_file,
-            max_events=max_queue_events, max_bytes=max_queue_bytes, event_route=self.event_route)
+            max_events=max_queue_events, max_bytes=max_queue_bytes, event_route=self.event_route,
+            owner_getter=UploadClient().queue_owner)
         self._worker.start()
 
     def _device_id(self) -> str | None:
@@ -61,7 +74,19 @@ class CameraEventUploader:
         return self._worker.flush(timeout)
 
     def close(self):
-        return self._worker.stop()
+        guard_stopped = self.consent_guard.stop()
+        return self._worker.stop() and guard_stopped
+
+    def _session_tokens(self):
+        tokens = self._read_tokens()
+        owner = queue_identity(tokens, self.api_url)
+        with self.identity_lock:
+            if self.bound_owner is None:
+                self.bound_owner = owner
+            if self.bound_owner != owner:
+                self.consent_guard.invalidate()
+                raise CameraAPISyncError('Camera account changed. Restart camera; other account queues are preserved.')
+        return tokens
 
     def _read_tokens(self) -> dict[str, str]:
         if not self.token_file.is_file():
@@ -128,10 +153,12 @@ class CameraEventUploader:
         return tokens
 
     def _send(self, payload: dict[str, Any]) -> None:
-        tokens = self._read_tokens()
+        tokens = self._session_tokens()
         try:
             self._post(self.event_route, payload, tokens["access"])
         except CameraAPISyncError as exc:
+            if getattr(exc, 'status', None) in {401, 403}:
+                self.consent_guard.invalidate()
             if getattr(exc, "status", None) != 401:
                 raise
             tokens = self._refresh(tokens)
@@ -156,18 +183,10 @@ class CameraEventUploader:
             queue.append(payload)
         try:
             self._worker.append_many(queue)
-        except OSError as exc:
+        except (OSError, AgentError) as exc:
             raise CameraAPISyncError(f"Could not persist camera queue: {exc}") from exc
         self._worker.request_flush()
 
-
-class PresenceEventUploader(CameraEventUploader):
-    event_route = "/api/camera-presence/ingest/"
-
-    def __init__(self, *args, **kwargs):
-        from src.consent import ConsentGuard
-        self.consent_guard = ConsentGuard(self._check_consent)
-        super().__init__(*args, **kwargs)
 
     def _get_consent(self, access):
         request = Request(self.api_url+'/api/consents/status/',
@@ -188,7 +207,7 @@ class PresenceEventUploader(CameraEventUploader):
         return data['active']
 
     def _check_consent(self):
-        tokens = self._read_tokens()
+        tokens = self._session_tokens()
         try:
             return self._get_consent(tokens['access'])
         except CameraAPISyncError as exc:
@@ -197,17 +216,9 @@ class PresenceEventUploader(CameraEventUploader):
             tokens = self._refresh(tokens)
             return self._get_consent(tokens['access'])
 
-    def _send(self, payload):
-        try:
-            return super()._send(payload)
-        except CameraAPISyncError as exc:
-            if getattr(exc, 'status', None) in {401, 403}:
-                self.consent_guard.invalidate()
-            raise
 
-    def close(self):
-        guard_stopped = self.consent_guard.stop()
-        return super().close() and guard_stopped
+class PresenceEventUploader(CameraEventUploader):
+    event_route = "/api/camera-presence/ingest/"
 
     def log(self, present, confidence, timestamp=None):
         from src.presence import validate_presence
@@ -219,6 +230,6 @@ class PresenceEventUploader(CameraEventUploader):
             payload['device_id'] = device_id
         try:
             self._worker.append(payload)
-        except OSError as exc:
+        except (OSError, AgentError) as exc:
             raise CameraAPISyncError(f"Could not persist presence queue: {exc}") from exc
         self._worker.request_flush()

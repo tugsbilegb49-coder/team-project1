@@ -1,6 +1,9 @@
 #!/bin/zsh
 cd -- "${0:A:h}" || exit 1
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+if (( $# == 0 )); then
+  set -- --desktop
+fi
 if [[ -x .venv/bin/python ]]; then
   .venv/bin/python worktrack.py "$@"
 else

@@ -2,6 +2,7 @@
 """Interactive local launcher for the WorkTrack web app and monitoring agent."""
 import argparse
 import errno
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -20,6 +22,13 @@ ROOT = Path(__file__).resolve().parent
 API = 'http://127.0.0.1:8000'
 WEB = 'http://127.0.0.1:5173'
 RUNTIME = ROOT / '.runtime'
+
+
+def open_browser():
+    if sys.platform == 'darwin':
+        try: subprocess.run(['/usr/bin/open',WEB],timeout=5,check=False)
+        except (OSError,subprocess.TimeoutExpired): print(f'Browser-оос {WEB} нээнэ үү.',flush=True)
+    else: webbrowser.open(WEB)
 
 
 def check_http(url):
@@ -67,21 +76,34 @@ def wait_ready(url, process, timeout=30):
     raise RuntimeError(f'{url} асах хугацаа хэтэрлээ. .runtime дахь log-ийг шалгана уу.')
 
 
-def bootstrap():
+def bootstrap(interactive=True):
     python = ROOT / '.venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
     if not python.exists():
         print('Python virtual environment үүсгэж байна…', flush=True)
         subprocess.run([sys.executable, '-m', 'venv', str(ROOT / '.venv')], check=True)
     if Path(sys.prefix).resolve() != (ROOT / '.venv').resolve():
         os.execv(str(python), [str(python), str(Path(__file__).resolve()), *sys.argv[1:]])
-    probe = subprocess.run([str(python), '-c', 'import django, rest_framework, corsheaders, dotenv, rest_framework_simplejwt; from zoneinfo import ZoneInfo; ZoneInfo("Asia/Ulaanbaatar")'], capture_output=True)
-    if probe.returncode:
+    state_file = RUNTIME / 'dependencies.json'
+    try: state = json.loads(state_file.read_text())
+    except (OSError, ValueError): state = {}
+    def digest(names):
+        value = hashlib.sha256()
+        for name in names: value.update((ROOT/name).read_bytes())
+        return value.hexdigest()
+    backend_digest = digest(['backend/requirements.txt'])
+    probe = subprocess.run([str(python), '-c', 'import django, rest_framework, corsheaders, dotenv, rest_framework_simplejwt, psycopg, openpyxl; from zoneinfo import ZoneInfo; ZoneInfo("Asia/Ulaanbaatar")'], capture_output=True)
+    if probe.returncode or state.get('backend') != backend_digest:
         subprocess.run([str(python), '-m', 'pip', 'install', '-r', 'backend/requirements.txt'], cwd=ROOT, check=True)
     npm = shutil.which('npm')
     if not npm:
         raise RuntimeError('Node.js/npm суулгаад Start WorkTrack.command-ийг дахин нээнэ үү.')
-    if not (ROOT / 'node_modules/vite/bin/vite.js').exists():
+    frontend_digest = digest(['package.json','package-lock.json'])
+    if not (ROOT / 'node_modules/vite/bin/vite.js').exists() or state.get('frontend') != frontend_digest:
+        if check_http(WEB):
+            raise RuntimeError('Frontend dependency шинэчлэх шаардлагатай. Өмнөх frontend/launcher цонхыг Ctrl+C-ээр зогсоогоод дахин нээнэ үү.')
         subprocess.run([npm, 'ci', '--include=dev'], cwd=ROOT, check=True)
+    from agent.token_store import atomic_json_write
+    atomic_json_write(state_file, {'backend':backend_digest,'frontend':frontend_digest})
     env = ROOT / 'backend/.env'
     if not env.exists():
         sample = (ROOT / 'backend/.env.example').read_text()
@@ -92,6 +114,8 @@ def bootstrap():
         'from django.contrib.auth import get_user_model; print(get_user_model().objects.filter(is_active=True,is_superuser=True).exists())'],
         cwd=ROOT, capture_output=True, text=True, check=True)
     if probe.stdout.strip().splitlines()[-1] != 'True':
+        if not interactive:
+            raise RuntimeError('Эхний admin үүсээгүй байна. Нэг удаа .venv/bin/python manage.py createsuperuser ажиллуулаад WorkTrack-аа дахин нээнэ үү.')
         print('Эхний admin account үүсгэнэ үү. Нууц үг бичихэд дэлгэц дээр харагдахгүй.', flush=True)
         subprocess.run([str(python), 'manage.py', 'createsuperuser'], cwd=ROOT, check=True)
     return python, npm
@@ -158,6 +182,9 @@ def main():
     parser = argparse.ArgumentParser(description='WorkTrack: backend + frontend + agent нэг дор асаах')
     parser.add_argument('--web-only', action='store_true', help='Backend/frontend болон онооны scheduler асаах; agent/camera асаахгүй')
     parser.add_argument('--camera', action='store_true', help='Camera monitor мөн асаах')
+    parser.add_argument('--desktop', action='store_true', help='Вебээс төхөөрөмж холбох, agent/camera удирдах')
+    parser.add_argument('--no-browser', action='store_true', help='Browser автоматаар нээхгүй')
+    parser.add_argument('--app-id', help=argparse.SUPPRESS)
     args = parser.parse_args()
     def interrupted(signum, frame):
         raise KeyboardInterrupt
@@ -176,11 +203,13 @@ def main():
         except BlockingIOError:
             print('WorkTrack launcher аль хэдийн ажиллаж байна.')
             if backend_is_current():
-                webbrowser.open(WEB)
+                open_browser()
             else:
                 print('Backend асаж дуустал хүлээнэ үү.')
             return
     processes, logs = [], []
+    desktop, controller = None, None
+    shutdown = threading.Event()
 
     def start(name, command):
         log = (RUNTIME / f'{name}.log').open('a')
@@ -192,7 +221,12 @@ def main():
 
     try:
         existing_backend = backend_is_current()  # Refuse stale servers before running migrations.
-        python, npm = bootstrap()
+        python, npm = bootstrap(interactive=not args.desktop)
+        if args.desktop:
+            os.environ.setdefault('WORKTRACK_DESKTOP_URL','http://127.0.0.1:8766')
+            if sys.platform=='darwin' and not (ROOT/'WorkTrack.app').exists():
+                from desktop.build_macos_app import build
+                build()
         if not existing_backend:
             wait_ready(API + '/api/health/', start('backend', [str(python), 'manage.py', 'runserver', '127.0.0.1:8000', '--noreload']))
             if not backend_is_current():
@@ -201,7 +235,12 @@ def main():
             wait_ready(WEB, start('frontend', [npm, 'run', 'dev', '--', '--host', '127.0.0.1', '--port', '5173', '--strictPort']))
         start('scheduler', [str(python), '-u', 'manage.py', 'run_score_scheduler'])
         start('backup', [str(python), '-u', 'manage.py', 'run_backup_scheduler'])
-        if not args.web_only:
+        if args.desktop:
+            from desktop.service import DesktopController, DesktopServer
+            controller=DesktopController(ROOT,API,python,shutdown.set)
+            desktop=DesktopServer(('127.0.0.1',8766),controller,{WEB,'http://localhost:5173'})
+            desktop.start()
+        elif not args.web_only:
             if setup_agent():
                 start('agent', [str(python), '-u', 'agent/main.py'])
                 camera = args.camera or input('Camera мөн асаах уу? [y/N]: ').strip().lower() in {'y', 'yes', 'тийм'}
@@ -212,8 +251,8 @@ def main():
                         subprocess.run([str(python), '-m', 'pip', 'install', '-r', 'requirements.txt'], cwd=ROOT, check=True)
                     start('camera', [str(python), '-u', 'main.py', '--consent'])
         print(f'\nWorkTrack: {WEB}\nЗогсоох: энэ цонхонд Ctrl+C. Оноо автоматаар 60 секунд тутам шинэчлэгдэнэ.\nLog: .runtime/\nЦонхоо нээлттэй байлгана уу.', flush=True)
-        webbrowser.open(WEB)
-        while True:
+        if not args.no_browser: open_browser()
+        while not shutdown.is_set():
             for name, process in processes:
                 if process.poll() is not None:
                     raise RuntimeError(f'{name} зогслоо. .runtime/{name}.log файлыг шалгана уу.')
@@ -221,6 +260,8 @@ def main():
     except KeyboardInterrupt:
         print('\nWorkTrack-ийг зогсоож байна…')
     finally:
+        if desktop: desktop.close()
+        if controller: controller.close()
         for _, process in reversed(processes):
             stop_process(process)
         for log in logs:
