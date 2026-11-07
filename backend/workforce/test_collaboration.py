@@ -54,7 +54,7 @@ class TaskCollaborationTests(TestCase):
         self.assertEqual(self.task.transfer_count, 0)
         self.assertEqual(self.accept(request_id, self.admin).status_code, 403)
         self.assertEqual(self.accept(request_id, self.c).status_code, 404)
-        accepted = self.accept(request_id, self.b, self.now+timedelta(seconds=30))
+        accepted = self.accept(request_id, self.b, self.now + timedelta(seconds=30))
         self.assertEqual(accepted.status_code, 200, accepted.data)
         self.assertEqual(accepted.data['employee'], self.b.pk)
         self.assertEqual(accepted.data['transfer_count'], 1)
@@ -75,7 +75,9 @@ class TaskCollaborationTests(TestCase):
         self.assertEqual(self.accept(second, self.c).status_code, 200)
         self.assertEqual(self.post('transfer-request', {'recipient': self.a.pk}, user=self.c).status_code, 409)
         self.client.force_authenticate(self.admin)
-        self.assertEqual(self.client.patch(f'/api/tasks/{self.task.pk}/', {'employee': self.a.pk}, format='json').status_code, 400)
+        self.assertEqual(
+            self.client.patch(f'/api/tasks/{self.task.pk}/', {'employee': self.a.pk}, format='json').status_code, 400
+        )
         self.task.refresh_from_db()
         self.assertEqual((self.task.employee_id, self.task.transfer_count), (self.c.pk, 2))
         self.assertEqual(TaskTransfer.objects.filter(status='ACCEPTED').count(), 2)
@@ -84,9 +86,13 @@ class TaskCollaborationTests(TestCase):
         first = self.request_transfer(self.b)
         self.assertEqual(self.post('transfer-request', {'recipient': self.c.pk}).status_code, 409)
         self.assertEqual(self.post('transfer-respond', {'request_id': first, 'decision': 'decline'}).status_code, 403)
-        self.assertEqual(self.post('transfer-respond', {'request_id': first, 'decision': 'decline'}, user=self.b).status_code, 200)
+        self.assertEqual(
+            self.post('transfer-respond', {'request_id': first, 'decision': 'decline'}, user=self.b).status_code, 200
+        )
         second = self.request_transfer(self.c)
-        self.assertEqual(self.post('transfer-respond', {'request_id': second, 'decision': 'cancel'}, user=self.b).status_code, 404)
+        self.assertEqual(
+            self.post('transfer-respond', {'request_id': second, 'decision': 'cancel'}, user=self.b).status_code, 404
+        )
         self.assertEqual(self.post('transfer-respond', {'request_id': second, 'decision': 'cancel'}).status_code, 200)
         self.task.refresh_from_db()
         self.assertEqual(self.task.transfer_count, 0)
@@ -101,7 +107,9 @@ class TaskCollaborationTests(TestCase):
         self.client.force_authenticate(self.foreign)
         self.assertEqual(self.client.get(f'/api/tasks/{self.task.pk}/').status_code, 404)
         self.assertEqual(self.client.get(f'/api/tasks/{self.task.pk}/transfer-recipients/').status_code, 404)
-        self.assertEqual(self.post('transfer-request', {'recipient': self.foreign.pk}, user=self.admin).status_code, 200)
+        self.assertEqual(
+            self.post('transfer-request', {'recipient': self.foreign.pk}, user=self.admin).status_code, 200
+        )
 
     def test_percent_is_personal_total_bounded_and_stale_update_rejected(self):
         self.assertEqual(self.post('progress', {'percent': 35, 'expected_percent': 0}).status_code, 200)
@@ -110,47 +118,56 @@ class TaskCollaborationTests(TestCase):
         self.assertEqual(self.accept(request_id, self.b).status_code, 200)
         for value in (66, -1, 'NaN', 'Infinity', '0.001'):
             with self.subTest(value=value):
-                self.assertEqual(self.post('progress', {'percent': value, 'expected_percent': 0}, user=self.b).status_code, 400)
+                self.assertEqual(
+                    self.post('progress', {'percent': value, 'expected_percent': 0}, user=self.b).status_code, 400
+                )
         response = self.post('progress', {'percent': 65, 'expected_percent': 0}, user=self.b)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Decimal(response.data['collaboration']['progress_percent']), 100)
         self.assertEqual(TaskContribution.objects.get(employee=self.a).percent, 35)
-        self.assertEqual(self.post('progress', {'percent': 10, 'expected_percent': 65}, user=self.admin).status_code, 403)
+        self.assertEqual(
+            self.post('progress', {'percent': 10, 'expected_percent': 65}, user=self.admin).status_code, 403
+        )
 
     def test_timer_is_one_task_per_user_idempotent_and_counts_server_time(self):
         other = Task.objects.create(title='Another task', employee=self.a)
         first = self.post('work-start')
         session_id = first.data['session']['id']
-        second = self.post('work-start', at=self.now+timedelta(seconds=10))
+        second = self.post('work-start', at=self.now + timedelta(seconds=10))
         self.assertEqual(second.data['session']['id'], session_id)
         self.assertEqual(TaskWorkSession.objects.count(), 1)
         self.assertEqual(self.post('work-start', task=other).status_code, 409)
         self.assertEqual(self.post('work-stop', {'session_id': session_id}, user=self.admin).status_code, 403)
-        self.assertEqual(self.post('work-stop', {'session_id': session_id}, at=self.now+timedelta(seconds=45)).status_code, 200)
-        self.assertEqual((TaskWorkSession.objects.get().ended_at-self.now).total_seconds(), 45)
-        self.assertEqual(self.post('work-start', task=other, at=self.now+timedelta(seconds=45)).status_code, 201)
+        self.assertEqual(
+            self.post('work-stop', {'session_id': session_id}, at=self.now + timedelta(seconds=45)).status_code, 200
+        )
+        self.assertEqual((TaskWorkSession.objects.get().ended_at - self.now).total_seconds(), 45)
+        self.assertEqual(self.post('work-start', task=other, at=self.now + timedelta(seconds=45)).status_code, 201)
 
     def test_heartbeat_extends_lease_but_sleep_or_disconnect_does_not_count_forever(self):
         session_id = self.post('work-start').data['session']['id']
         self.client.force_authenticate(self.a)
-        with patch('django.utils.timezone.now', return_value=self.now+timedelta(seconds=60)):
+        with patch('django.utils.timezone.now', return_value=self.now + timedelta(seconds=60)):
             beat = self.client.post('/api/tasks/work-session/', {'session_id': session_id}, format='json')
         self.assertTrue(beat.data['session']['running'])
-        with patch('django.utils.timezone.now', return_value=self.now+timedelta(hours=2)):
+        with patch('django.utils.timezone.now', return_value=self.now + timedelta(hours=2)):
             result = self.client.post('/api/tasks/work-session/', {'session_id': session_id}, format='json')
             self.assertIsNone(result.data['session'])
             task = self.client.get(f'/api/tasks/{self.task.pk}/').data
         self.assertEqual(task['collaboration']['total_seconds'], 150)
-        restarted = self.post('work-start', at=self.now+timedelta(hours=2))
+        restarted = self.post('work-start', at=self.now + timedelta(hours=2))
         self.assertNotEqual(restarted.data['session']['id'], session_id)
         # A delayed old stop must not stop the new session.
-        self.assertEqual(self.post('work-stop', {'session_id': session_id}, at=self.now+timedelta(hours=2)).data['session']['id'], restarted.data['session']['id'])
+        self.assertEqual(
+            self.post('work-stop', {'session_id': session_id}, at=self.now + timedelta(hours=2)).data['session']['id'],
+            restarted.data['session']['id'],
+        )
 
     def test_completion_cancels_pending_request_and_stops_timer(self):
         self.post('work-start')
         request_id = self.request_transfer(self.b)
         self.client.force_authenticate(self.manager)
-        with patch('django.utils.timezone.now', return_value=self.now+timedelta(seconds=20)):
+        with patch('django.utils.timezone.now', return_value=self.now + timedelta(seconds=20)):
             response = self.client.patch(f'/api/tasks/{self.task.pk}/', {'status': 'DONE'}, format='json')
         self.assertEqual(response.status_code, 200)
         self.assertIsNotNone(TaskWorkSession.objects.get().ended_at)
@@ -171,7 +188,9 @@ class TaskCollaborationTests(TestCase):
 
     def test_clients_cannot_submit_elapsed_seconds_or_impersonate_a_contributor(self):
         self.assertEqual(self.post('work-start', {'started_at': '2000-01-01'}).status_code, 400)
-        self.assertEqual(self.post('progress', {'percent': 20, 'expected_percent': 0, 'employee': self.b.pk}).status_code, 400)
+        self.assertEqual(
+            self.post('progress', {'percent': 20, 'expected_percent': 0, 'employee': self.b.pk}).status_code, 400
+        )
         self.assertEqual(self.post('work-start', user=self.manager).status_code, 403)
         self.assertFalse(TaskWorkSession.objects.exists())
         self.assertFalse(AuditEntry.objects.exists())

@@ -5,8 +5,11 @@ from django.db import models
 
 class CameraPresence(models.Model):
     """Camera metadata only; no images, embeddings, boxes or identity recognition."""
+
     employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='camera_presence')
-    device = models.ForeignKey('users.Device', on_delete=models.SET_NULL, null=True, blank=True, related_name='presence_events')
+    device = models.ForeignKey(
+        'users.Device', on_delete=models.SET_NULL, null=True, blank=True, related_name='presence_events'
+    )
     timestamp = models.DateTimeField()
     present = models.BooleanField()
     confidence = models.FloatField()
@@ -18,46 +21,46 @@ class CameraPresence(models.Model):
 
 class ActivityEvent(models.Model):
     class State(models.TextChoices):
-        WORKING = "WORKING", "Working"
-        PHONE = "PHONE", "Phone"
-        IDLE = "IDLE", "Idle"
-        AWAY = "AWAY", "Away"
+        WORKING = 'WORKING', 'Working'
+        PHONE = 'PHONE', 'Phone'
+        IDLE = 'IDLE', 'Idle'
+        AWAY = 'AWAY', 'Away'
 
-    employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="activity_events")
+    employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='activity_events')
     device = models.ForeignKey(
-        "users.Device", on_delete=models.SET_NULL, null=True, blank=True, related_name="camera_events"
+        'users.Device', on_delete=models.SET_NULL, null=True, blank=True, related_name='camera_events'
     )
     timestamp = models.DateTimeField()
     state = models.CharField(max_length=10, choices=State.choices)
     duration_seconds = models.FloatField(validators=[MinValueValidator(0)])
-    source_person_id = models.CharField(max_length=64, blank=True, default="")
+    source_person_id = models.CharField(max_length=64, blank=True, default='')
     imported_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["-timestamp"]
+        ordering = ['-timestamp']
         constraints = [
             models.UniqueConstraint(
-                fields=["employee", "timestamp", "state", "duration_seconds", "source_person_id"],
-                name="unique_imported_activity_event",
+                fields=['employee', 'timestamp', 'state', 'duration_seconds', 'source_person_id'],
+                name='unique_imported_activity_event',
             ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.employee} {self.state} @ {self.timestamp}"
+        return f'{self.employee} {self.state} @ {self.timestamp}'
 
 
 class ComputerActivity(models.Model):
     """A privacy-minimised foreground-application time segment from the desktop agent."""
 
     class Category(models.TextChoices):
-        WORK = "WORK", "Work"
-        COMMUNICATION = "COMMUNICATION", "Communication"
-        BROWSER = "BROWSER", "Browser"
-        OTHER = "OTHER", "Other"
+        WORK = 'WORK', 'Work'
+        COMMUNICATION = 'COMMUNICATION', 'Communication'
+        BROWSER = 'BROWSER', 'Browser'
+        OTHER = 'OTHER', 'Other'
 
-    employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="computer_activities")
+    employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='computer_activities')
     device = models.ForeignKey(
-        "users.Device", on_delete=models.SET_NULL, null=True, blank=True, related_name="computer_activities"
+        'users.Device', on_delete=models.SET_NULL, null=True, blank=True, related_name='computer_activities'
     )
     started_at = models.DateTimeField()
     duration_seconds = models.FloatField(validators=[MinValueValidator(0)])
@@ -66,34 +69,43 @@ class ComputerActivity(models.Model):
     imported_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["-started_at"]
+        ordering = ['-started_at']
         constraints = [
             models.UniqueConstraint(
-                fields=["employee", "started_at", "duration_seconds", "application", "category"],
-                name="unique_computer_activity_segment",
+                fields=['employee', 'started_at', 'duration_seconds', 'application', 'category'],
+                name='unique_computer_activity_segment',
             ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.employee} - {self.application} ({self.duration_seconds:.0f}s)"
+        return f'{self.employee} - {self.application} ({self.duration_seconds:.0f}s)'
 
 
 class ArchivedMonthlyActivity(models.Model):
     """Monthly totals retained when raw application segments expire."""
-    employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='archived_monthly_activity')
+
+    employee = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='archived_monthly_activity'
+    )
     month = models.DateField()
     application = models.CharField(max_length=120)
     seconds = models.FloatField(default=0)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=['employee', 'month', 'application'], name='unique_archived_month_app')]
+        constraints = [
+            models.UniqueConstraint(fields=['employee', 'month', 'application'], name='unique_archived_month_app')
+        ]
 
 
 class ArchivedActivityReceipt(models.Model):
     """A content hash prevents an offline retry from re-adding expired raw data."""
-    employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='archived_activity_receipts')
+
+    employee = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='archived_activity_receipts'
+    )
     fingerprint = models.CharField(max_length=64)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=['employee', 'fingerprint'], name='unique_archived_activity_receipt')]
-
+        constraints = [
+            models.UniqueConstraint(fields=['employee', 'fingerprint'], name='unique_archived_activity_receipt')
+        ]

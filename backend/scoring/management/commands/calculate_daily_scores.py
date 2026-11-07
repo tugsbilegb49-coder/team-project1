@@ -8,24 +8,24 @@ from scoring.services import calculate_daily_score, ScoreNotReady
 
 
 class Command(BaseCommand):
-    help = "Calculate or refresh daily productivity scores for active employees."
+    help = 'Calculate or refresh daily productivity scores for active employees.'
 
     def add_arguments(self, parser):
-        parser.add_argument("--date", default=timezone.localdate().isoformat(), help="ISO date (YYYY-MM-DD)")
-        parser.add_argument("--employee", help="Optional username to calculate for one employee")
+        parser.add_argument('--date', default=timezone.localdate().isoformat(), help='ISO date (YYYY-MM-DD)')
+        parser.add_argument('--employee', help='Optional username to calculate for one employee')
 
     def handle(self, *args, **options):
         try:
-            score_date = date.fromisoformat(options["date"])
+            score_date = date.fromisoformat(options['date'])
         except ValueError as exc:
-            raise CommandError("Use --date YYYY-MM-DD") from exc
+            raise CommandError('Use --date YYYY-MM-DD') from exc
 
         user_model = get_user_model()
         users = user_model.objects.filter(is_active=True)
-        if options.get("employee"):
-            users = users.filter(username=options["employee"])
+        if options.get('employee'):
+            users = users.filter(username=options['employee'])
             if not users.exists():
-                raise CommandError("Employee username was not found.")
+                raise CommandError('Employee username was not found.')
 
         count = 0
         skipped = 0
@@ -34,8 +34,8 @@ class Command(BaseCommand):
                 result = calculate_daily_score(employee, score_date)
             except ScoreNotReady as exc:
                 skipped += 1
-                self.stderr.write(f"Skipped {employee.username}: {exc} Task IDs: {exc.task_ids}")
+                self.stderr.write(f'Skipped {employee.username}: {exc} Task IDs: {exc.task_ids}')
                 continue
             count += 1
-            self.stdout.write(f"{employee.username}: {result.score} ({result.category})")
-        self.stdout.write(self.style.SUCCESS(f"Calculated {count} score(s) for {score_date}; skipped {skipped}."))
+            self.stdout.write(f'{employee.username}: {result.score} ({result.category})')
+        self.stdout.write(self.style.SUCCESS(f'Calculated {count} score(s) for {score_date}; skipped {skipped}.'))

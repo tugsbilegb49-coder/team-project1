@@ -1,4 +1,5 @@
 """Private atomic token writes with cross-process compare-and-swap protection."""
+
 from contextlib import contextmanager
 import json
 import os
@@ -12,72 +13,84 @@ class StaleTokenError(RuntimeError):
 
 
 def atomic_json_write(path, value):
-    path=Path(path)
-    path.parent.mkdir(parents=True,exist_ok=True)
-    fd,name=tempfile.mkstemp(prefix=path.name+'.',suffix='.tmp',dir=path.parent)
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix=path.name + '.', suffix='.tmp', dir=path.parent)
     try:
-        with os.fdopen(fd,'w',encoding='utf-8') as stream:
-            os.chmod(name,0o600)
-            json.dump(value,stream,ensure_ascii=False)
+        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+            os.chmod(name, 0o600)
+            json.dump(value, stream, ensure_ascii=False)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(name,path)
+        os.replace(name, path)
     finally:
         Path(name).unlink(missing_ok=True)
 
 
 def read_tokens(path):
-    value=json.loads(Path(path).read_text(encoding='utf-8'))
-    if not isinstance(value,dict) or any(not isinstance(value.get(key),str) or not value[key] for key in ('access','refresh')):
+    value = json.loads(Path(path).read_text(encoding='utf-8'))
+    if not isinstance(value, dict) or any(
+        not isinstance(value.get(key), str) or not value[key] for key in ('access', 'refresh')
+    ):
         raise ValueError('Saved login does not contain valid token strings.')
     return value
 
 
 @contextmanager
 def token_lock(path):
-    path=Path(path)
-    path.parent.mkdir(parents=True,exist_ok=True)
-    lock=path.with_name(path.name+'.lock')
-    fd=os.open(lock,os.O_RDWR|os.O_CREAT,0o600)
-    with os.fdopen(fd,'r+b') as stream:
-        if os.name=='nt':
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock = path.with_name(path.name + '.lock')
+    fd = os.open(lock, os.O_RDWR | os.O_CREAT, 0o600)
+    with os.fdopen(fd, 'r+b') as stream:
+        if os.name == 'nt':
             import msvcrt
-            if os.fstat(stream.fileno()).st_size==0:
-                stream.write(b'0');stream.flush()
-            deadline=time.monotonic()+30
+
+            if os.fstat(stream.fileno()).st_size == 0:
+                stream.write(b'0')
+                stream.flush()
+            deadline = time.monotonic() + 30
             while True:
                 try:
-                    stream.seek(0);msvcrt.locking(stream.fileno(),msvcrt.LK_NBLCK,1)
+                    stream.seek(0)
+                    msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
                     break
                 except OSError:
-                    if time.monotonic()>deadline: raise
-                    time.sleep(.05)
+                    if time.monotonic() > deadline:
+                        raise
+                    time.sleep(0.05)
         else:
             import fcntl
-            fcntl.flock(stream.fileno(),fcntl.LOCK_EX)
+
+            fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
         try:
             yield
         finally:
-            if os.name=='nt':
-                stream.seek(0);msvcrt.locking(stream.fileno(),msvcrt.LK_UNLCK,1)
+            if os.name == 'nt':
+                stream.seek(0)
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
             else:
-                fcntl.flock(stream.fileno(),fcntl.LOCK_UN)
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
 
 def save_tokens(path, tokens, expected_refresh=None):
     with token_lock(path):
         if expected_refresh is not None:
-            try: current=read_tokens(path)
-            except (OSError,ValueError): raise StaleTokenError('Login changed or was removed; refresh result discarded.')
-            if current['refresh']!=expected_refresh:
+            try:
+                current = read_tokens(path)
+            except (OSError, ValueError):
+                raise StaleTokenError('Login changed or was removed; refresh result discarded.')
+            if current['refresh'] != expected_refresh:
                 raise StaleTokenError('A newer login replaced this session; refresh result discarded.')
-        atomic_json_write(path,tokens)
+        atomic_json_write(path, tokens)
 
 
 def remove_tokens(path, expected_refresh):
     with token_lock(path):
-        try: current=read_tokens(path)
-        except FileNotFoundError: return
-        if current['refresh']!=expected_refresh:
+        try:
+            current = read_tokens(path)
+        except FileNotFoundError:
+            return
+        if current['refresh'] != expected_refresh:
             raise StaleTokenError('A newer login exists; it was not removed.')
         Path(path).unlink(missing_ok=True)

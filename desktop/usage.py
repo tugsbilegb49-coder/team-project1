@@ -3,6 +3,7 @@
 Intervals are unioned when reporting, so overlapping launcher processes never
 double-count a device's usage. No account credentials or activity content is stored.
 """
+
 from datetime import datetime
 import math
 import os
@@ -23,7 +24,7 @@ def month_start(year, month):
 
 
 def next_month(year, month):
-    return (year+1, 1) if month == 12 else (year, month+1)
+    return (year + 1, 1) if month == 12 else (year, month + 1)
 
 
 def union_seconds(intervals, start, end):
@@ -31,7 +32,7 @@ def union_seconds(intervals, start, end):
     for left, right in sorted(intervals):
         left, right = max(left, start, cursor), min(right, end)
         if right > left:
-            total += right-left
+            total += right - left
             cursor = right
     return total
 
@@ -56,7 +57,9 @@ class LauncherUsage:
             os.close(fd)
             self.path.chmod(0o600)
             with self._connect() as db:
-                db.execute('CREATE TABLE IF NOT EXISTS intervals (id INTEGER PRIMARY KEY, session TEXT NOT NULL, started REAL NOT NULL, ended REAL NOT NULL, CHECK (ended >= started))')
+                db.execute(
+                    'CREATE TABLE IF NOT EXISTS intervals (id INTEGER PRIMARY KEY, session TEXT NOT NULL, started REAL NOT NULL, ended REAL NOT NULL, CHECK (ended >= started))'
+                )
                 db.execute('CREATE INDEX IF NOT EXISTS usage_ended ON intervals(ended)')
                 columns = {row[1] for row in db.execute('PRAGMA table_info(intervals)')}
                 for name, kind in [('scope', 'TEXT'), ('device', 'TEXT'), ('event_id', 'TEXT'), ('synced_end', 'REAL')]:
@@ -82,6 +85,7 @@ class LauncherUsage:
                     yield db
             finally:
                 db.close()
+
         return connection()
 
     def _run(self):
@@ -90,8 +94,10 @@ class LauncherUsage:
 
     def _insert(self, db, now):
         scope, device = self.binding or (None, None)
-        return db.execute('INSERT INTO intervals(session, started, ended, scope, device, event_id) VALUES (?, ?, ?, ?, ?, ?)',
-                          (self.session, now, now, scope, device, str(uuid4()))).lastrowid
+        return db.execute(
+            'INSERT INTO intervals(session, started, ended, scope, device, event_id) VALUES (?, ?, ?, ?, ?, ?)',
+            (self.session, now, now, scope, device, str(uuid4())),
+        ).lastrowid
 
     def bind(self, scope=None, device=None):
         """Only a verified account can own NEW intervals; never relabel history."""
@@ -105,34 +111,41 @@ class LauncherUsage:
 
     def pending(self, scope, device=None):
         with self.lock, self._connect() as db:
-            return [dict(zip(('id', 'device_id', 'event_id', 'started_at', 'ended_at'), row)) for row in db.execute(
-                'SELECT id, device, event_id, started, ended FROM intervals WHERE scope=? AND (? IS NULL OR device=?) AND ended>started '
-                'AND (synced_end IS NULL OR ended>synced_end) ORDER BY id LIMIT 100', (scope, device, device))]
+            return [
+                dict(zip(('id', 'device_id', 'event_id', 'started_at', 'ended_at'), row))
+                for row in db.execute(
+                    'SELECT id, device, event_id, started, ended FROM intervals WHERE scope=? AND (? IS NULL OR device=?) AND ended>started '
+                    'AND (synced_end IS NULL OR ended>synced_end) ORDER BY id LIMIT 100',
+                    (scope, device, device),
+                )
+            ]
 
     def acknowledge(self, rows):
         with self.lock, self._connect() as db:
             for row in rows:
-                db.execute('UPDATE intervals SET synced_end=MAX(COALESCE(synced_end,0),?) WHERE id=? AND event_id=?',
-                           (row['ended_at'], row['id'], row['event_id']))
+                db.execute(
+                    'UPDATE intervals SET synced_end=MAX(COALESCE(synced_end,0),?) WHERE id=? AND event_id=?',
+                    (row['ended_at'], row['id'], row['event_id']),
+                )
 
     def checkpoint(self):
         with self.lock:
             if self.closed:
                 return
             now, mono = self.clock(), self.monotonic()
-            delta, elapsed = now-self.wall, mono-self.mono
-            contiguous = (0 <= delta <= MAX_GAP_SECONDS and 0 <= elapsed <= MAX_GAP_SECONDS
-                          and abs(delta-elapsed) <= 2)
+            delta, elapsed = now - self.wall, mono - self.mono
+            contiguous = 0 <= delta <= MAX_GAP_SECONDS and 0 <= elapsed <= MAX_GAP_SECONDS and abs(delta - elapsed) <= 2
             try:
                 if not math.isfinite(now) or not math.isfinite(mono):
                     raise ValueError('Invalid clock')
                 with self._connect() as db:
                     if contiguous and self.segment is not None:
-                        changed = db.execute('UPDATE intervals SET ended=? WHERE id=? AND session=?',
-                                             (now, self.segment, self.session)).rowcount
+                        changed = db.execute(
+                            'UPDATE intervals SET ended=? WHERE id=? AND session=?', (now, self.segment, self.session)
+                        ).rowcount
                         if changed != 1:
                             raise sqlite3.DatabaseError('Usage interval was removed')
-                        if now-self.segment_start >= 3600:
+                        if now - self.segment_start >= 3600:
                             self.segment = self._insert(db, now)
                             self.segment_start = now
                     else:
@@ -153,7 +166,15 @@ class LauncherUsage:
             now = self.clock()
             try:
                 with self._connect() as db:
-                    intervals = list(db.execute('SELECT started, ended FROM intervals WHERE scope=? ORDER BY started, ended', (scope,))) if scope else []
+                    intervals = (
+                        list(
+                            db.execute(
+                                'SELECT started, ended FROM intervals WHERE scope=? ORDER BY started, ended', (scope,)
+                            )
+                        )
+                        if scope
+                        else []
+                    )
                 if any(not math.isfinite(start) or not math.isfinite(end) or end < start for start, end in intervals):
                     raise ValueError('Invalid usage history')
                 first = min((row[0] for row in intervals), default=now)
@@ -164,17 +185,28 @@ class LauncherUsage:
                 while (year, month) <= (current.year, current.month):
                     following = next_month(year, month)
                     end = month_start(*following)
-                    months.append({'month': f'{year:04d}-{month:02d}',
-                                   'seconds': union_seconds(intervals, month_start(year, month), min(end, now))})
+                    months.append(
+                        {
+                            'month': f'{year:04d}-{month:02d}',
+                            'seconds': union_seconds(intervals, month_start(year, month), min(end, now)),
+                        }
+                    )
                     year, month = following
-                return {'available': True, 'timezone': 'Asia/Ulaanbaatar', 'as_of': now,
-                        'recorded_since': datetime.fromtimestamp(first, ZONE).isoformat() if intervals else None,
-                        'current_month': f'{current.year:04d}-{current.month:02d}',
-                        'month_ends_at': month_start(*next_month(current.year, current.month)),
-                        'running': not self.closed and bool(self.binding and self.binding[0] == scope),
-                        'months': list(reversed(months))}
+                return {
+                    'available': True,
+                    'timezone': 'Asia/Ulaanbaatar',
+                    'as_of': now,
+                    'recorded_since': datetime.fromtimestamp(first, ZONE).isoformat() if intervals else None,
+                    'current_month': f'{current.year:04d}-{current.month:02d}',
+                    'month_ends_at': month_start(*next_month(current.year, current.month)),
+                    'running': not self.closed and bool(self.binding and self.binding[0] == scope),
+                    'months': list(reversed(months)),
+                }
             except (OSError, sqlite3.Error, ValueError, OverflowError):
-                return {'available': False, 'error': 'Сарын хугацааны түүхийг уншиж чадсангүй. WorkTrack-аа дахин асаана уу.'}
+                return {
+                    'available': False,
+                    'error': 'Сарын хугацааны түүхийг уншиж чадсангүй. WorkTrack-аа дахин асаана уу.',
+                }
 
     def close(self):
         self.stop.set()

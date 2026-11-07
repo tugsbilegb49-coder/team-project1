@@ -23,7 +23,7 @@ class AdminPasswordResetTests(TestCase):
         cache.clear()
         self.client = APIClient()
         self.admin_token = RefreshToken.for_user(self.admin)
-        self.client.credentials(HTTP_AUTHORIZATION='Bearer '+str(self.admin_token.access_token))
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer ' + str(self.admin_token.access_token))
         self.worker_tokens = [RefreshToken.for_user(self.worker), RefreshToken.for_user(self.worker)]
         self.path = f'/api/users/{self.worker.pk}/'
 
@@ -39,14 +39,28 @@ class AdminPasswordResetTests(TestCase):
         self.assertEqual(Task.objects.get(pk=self.task.pk).employee_id, self.worker.pk)
         for token in self.worker_tokens:
             client = APIClient()
-            client.credentials(HTTP_AUTHORIZATION='Bearer '+str(token.access_token))
+            client.credentials(HTTP_AUTHORIZATION='Bearer ' + str(token.access_token))
             self.assertEqual(client.get('/api/users/me/').status_code, 401)
-            self.assertEqual(APIClient().post('/api/auth/refresh/', {'refresh': str(token)}, format='json').status_code, 401)
+            self.assertEqual(
+                APIClient().post('/api/auth/refresh/', {'refresh': str(token)}, format='json').status_code, 401
+            )
         self.assertEqual(self.client.get('/api/users/me/').status_code, 200)
-        self.assertEqual(APIClient().post('/api/auth/refresh/', {'refresh': str(self.admin_token)}, format='json').status_code, 200)
+        self.assertEqual(
+            APIClient().post('/api/auth/refresh/', {'refresh': str(self.admin_token)}, format='json').status_code, 200
+        )
         login = APIClient()
-        self.assertEqual(login.post('/api/auth/login/', {'username': self.worker.username, 'password': self.old_password}, format='json').status_code, 401)
-        self.assertEqual(login.post('/api/auth/login/', {'username': self.worker.username, 'password': self.new_password}, format='json').status_code, 200)
+        self.assertEqual(
+            login.post(
+                '/api/auth/login/', {'username': self.worker.username, 'password': self.old_password}, format='json'
+            ).status_code,
+            401,
+        )
+        self.assertEqual(
+            login.post(
+                '/api/auth/login/', {'username': self.worker.username, 'password': self.new_password}, format='json'
+            ).status_code,
+            200,
+        )
         audit = AuditEntry.objects.get(action='password_change')
         self.assertEqual(audit.actor_id, self.admin.pk)
         self.assertEqual(audit.object_id, str(self.worker.pk))
@@ -57,7 +71,12 @@ class AdminPasswordResetTests(TestCase):
             self.client.force_authenticate(actor)
             for target in (self.worker, actor, self.admin):
                 with self.subTest(actor=actor.role, target=target.username):
-                    self.assertEqual(self.client.patch(f'/api/users/{target.pk}/', {'password': self.new_password}, format='json').status_code, 403)
+                    self.assertEqual(
+                        self.client.patch(
+                            f'/api/users/{target.pk}/', {'password': self.new_password}, format='json'
+                        ).status_code,
+                        403,
+                    )
         self.worker.refresh_from_db()
         self.assertTrue(self.worker.check_password(self.old_password))
         self.assertFalse(AuditEntry.objects.exists())
@@ -66,17 +85,23 @@ class AdminPasswordResetTests(TestCase):
         self.assertEqual(APIClient().patch(self.path, {'password': self.new_password}, format='json').status_code, 401)
 
     def test_invalid_password_does_not_change_account_or_revoke_tokens(self):
-        for password in ('', 'short', '12345678', 'x'*257):
+        for password in ('', 'short', '12345678', 'x' * 257):
             with self.subTest(password_length=len(password)):
                 self.assertEqual(self.client.patch(self.path, {'password': password}, format='json').status_code, 400)
         self.worker.refresh_from_db()
         self.assertTrue(self.worker.check_password(self.old_password))
         self.assertFalse(AuditEntry.objects.exists())
-        self.assertEqual(APIClient().post('/api/auth/refresh/', {'refresh': str(self.worker_tokens[0])}, format='json').status_code, 200)
+        self.assertEqual(
+            APIClient().post('/api/auth/refresh/', {'refresh': str(self.worker_tokens[0])}, format='json').status_code,
+            200,
+        )
 
     def test_profile_update_does_not_revoke_sessions(self):
         self.assertEqual(self.client.patch(self.path, {'first_name': 'Updated name'}, format='json').status_code, 200)
-        self.assertEqual(APIClient().post('/api/auth/refresh/', {'refresh': str(self.worker_tokens[0])}, format='json').status_code, 200)
+        self.assertEqual(
+            APIClient().post('/api/auth/refresh/', {'refresh': str(self.worker_tokens[0])}, format='json').status_code,
+            200,
+        )
         self.assertFalse(AuditEntry.objects.filter(action='password_change').exists())
 
     def test_superuser_without_admin_role_can_reset(self):

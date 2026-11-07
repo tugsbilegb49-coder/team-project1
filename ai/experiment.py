@@ -1,4 +1,5 @@
 """Reproducible Random Forest experiment with participant-disjoint holdout."""
+
 import argparse
 from collections import Counter
 import csv
@@ -20,9 +21,11 @@ def demo_rows(seed=42):
     for participant in range(1, 6):
         for number in range(90):
             latent = rng.uniform(0, 1)
-            values = [round(min(1, max(0, latent + rng.gauss(0, .20))), 5) for _ in FEATURES]
-            label = LABELS[min(2, int(min(.999, max(0, latent + rng.gauss(0, .10))) * 3))]
-            rows.append(dict(zip(FIELDS, (f'demo-{participant:02}', f'{participant}-{number}', 'synthetic', *values, label))))
+            values = [round(min(1, max(0, latent + rng.gauss(0, 0.20))), 5) for _ in FEATURES]
+            label = LABELS[min(2, int(min(0.999, max(0, latent + rng.gauss(0, 0.10))) * 3))]
+            rows.append(
+                dict(zip(FIELDS, (f'demo-{participant:02}', f'{participant}-{number}', 'synthetic', *values, label)))
+            )
     return rows
 
 
@@ -59,28 +62,43 @@ def experiment(rows, data_kind='synthetic', seed=42):
     from sklearn.ensemble import RandomForestClassifier
     from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
     from sklearn.model_selection import GroupShuffleSplit
+
     x = np.array([[float(row[name]) for name in FEATURES] for row in rows])
     y = np.array([row['label'] for row in rows])
     groups = np.array([row['participant_id'] for row in rows])
-    train, test = next(GroupShuffleSplit(n_splits=1, test_size=.4, random_state=seed).split(x, y, groups))
+    train, test = next(GroupShuffleSplit(n_splits=1, test_size=0.4, random_state=seed).split(x, y, groups))
     if set(y[train]) != set(LABELS) or set(y[test]) != set(LABELS):
         raise ValueError('This participant split lacks class coverage. Collect more labeled participants/windows.')
-    forest = RandomForestClassifier(n_estimators=200, max_depth=6, min_samples_leaf=3,
-                                    class_weight='balanced', random_state=seed, n_jobs=1)
+    forest = RandomForestClassifier(
+        n_estimators=200, max_depth=6, min_samples_leaf=3, class_weight='balanced', random_state=seed, n_jobs=1
+    )
     forest.fit(x[train], y[train])
     predicted = forest.predict(x[test])
     report = classification_report(y[test], predicted, labels=LABELS, output_dict=True, zero_division=0)
     majority = Counter(y[train]).most_common(1)[0][0]
     return {
-        'status': 'experimental', 'data_kind': data_kind,
-        'limitation': 'Synthetic demonstration only; not evidence of real employee productivity.' if data_kind == 'synthetic' else 'Small consented research sample; not validated for employment decisions.',
-        'seed': seed, 'sklearn_version': sklearn.__version__, 'model': forest.get_params(),
-        'features': list(FEATURES), 'labels': list(LABELS), 'samples': len(rows),
-        'split': {'method': 'GroupShuffleSplit by participant', 'train_samples': len(train), 'test_samples': len(test),
-                  'train_participants': len(set(groups[train])), 'test_participants': len(set(groups[test])),
-                  'participant_overlap': len(set(groups[train]) & set(groups[test]))},
+        'status': 'experimental',
+        'data_kind': data_kind,
+        'limitation': 'Synthetic demonstration only; not evidence of real employee productivity.'
+        if data_kind == 'synthetic'
+        else 'Small consented research sample; not validated for employment decisions.',
+        'seed': seed,
+        'sklearn_version': sklearn.__version__,
+        'model': forest.get_params(),
+        'features': list(FEATURES),
+        'labels': list(LABELS),
+        'samples': len(rows),
+        'split': {
+            'method': 'GroupShuffleSplit by participant',
+            'train_samples': len(train),
+            'test_samples': len(test),
+            'train_participants': len(set(groups[train])),
+            'test_participants': len(set(groups[test])),
+            'participant_overlap': len(set(groups[train]) & set(groups[test])),
+        },
         'accuracy': float(accuracy_score(y[test], predicted)),
-        'macro_f1': report['macro avg']['f1-score'], 'weighted_f1': report['weighted avg']['f1-score'],
+        'macro_f1': report['macro avg']['f1-score'],
+        'weighted_f1': report['weighted avg']['f1-score'],
         'baseline_accuracy': float(accuracy_score(y[test], [majority] * len(test))),
         'per_class': {name: report[name] for name in LABELS},
         'confusion_matrix': confusion_matrix(y[test], predicted, labels=LABELS).tolist(),
@@ -110,7 +128,8 @@ def main():
         args.write_demo.parent.mkdir(parents=True, exist_ok=True)
         with args.write_demo.open('w', newline='', encoding='utf-8') as stream:
             writer = csv.DictWriter(stream, fieldnames=FIELDS)
-            writer.writeheader(); writer.writerows(rows)
+            writer.writeheader()
+            writer.writerows(rows)
     try:
         result = experiment(rows, args.data_kind)
     except ValueError as exc:
@@ -118,7 +137,9 @@ def main():
     result['dataset_sha256'] = checksum
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
-    print(f"EXPERIMENTAL ({args.data_kind}): Accuracy={result['accuracy']:.3f}, macro F1={result['macro_f1']:.3f}; {args.output}")
+    print(
+        f'EXPERIMENTAL ({args.data_kind}): Accuracy={result["accuracy"]:.3f}, macro F1={result["macro_f1"]:.3f}; {args.output}'
+    )
 
 
 if __name__ == '__main__':

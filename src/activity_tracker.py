@@ -12,15 +12,19 @@ import math
 from collections import defaultdict
 from typing import Set, Dict, Optional, Callable
 
-STATE_PHONE = "PHONE"
-STATE_WORKING = "WORKING"
-STATE_IDLE = "IDLE"
-STATE_AWAY = "AWAY"
+STATE_PHONE = 'PHONE'
+STATE_WORKING = 'WORKING'
+STATE_IDLE = 'IDLE'
+STATE_AWAY = 'AWAY'
 
 
-def classify(labels: Set[str], person_label: str = "person",
-             laptop_label: str = "laptop", phone_label: str = "cell phone",
-             looking_at_phone: Optional[bool] = None) -> str:
+def classify(
+    labels: Set[str],
+    person_label: str = 'person',
+    laptop_label: str = 'laptop',
+    phone_label: str = 'cell phone',
+    looking_at_phone: Optional[bool] = None,
+) -> str:
     """Turn a set of detected object labels into an activity state.
 
     If `looking_at_phone` is provided (True/False) it overrides the naive
@@ -52,13 +56,21 @@ class ActivityTracker:
     e.g. to write a log line.
     """
 
-    def __init__(self, initial_state: str = STATE_AWAY,
-                 on_transition: Optional[Callable[[str, float], None]] = None,
-                 clock: Callable[[], float] = time.time,
-                 max_gap_seconds: Optional[float] = None,
-                 on_segment: Optional[Callable[[str, float, float], None]] = None):
-        if max_gap_seconds is not None and (isinstance(max_gap_seconds, bool) or not isinstance(max_gap_seconds, (int, float)) or not math.isfinite(max_gap_seconds) or max_gap_seconds <= 0):
-            raise ValueError("max_gap_seconds must be a finite positive number.")
+    def __init__(
+        self,
+        initial_state: str = STATE_AWAY,
+        on_transition: Optional[Callable[[str, float], None]] = None,
+        clock: Callable[[], float] = time.time,
+        max_gap_seconds: Optional[float] = None,
+        on_segment: Optional[Callable[[str, float, float], None]] = None,
+    ):
+        if max_gap_seconds is not None and (
+            isinstance(max_gap_seconds, bool)
+            or not isinstance(max_gap_seconds, (int, float))
+            or not math.isfinite(max_gap_seconds)
+            or max_gap_seconds <= 0
+        ):
+            raise ValueError('max_gap_seconds must be a finite positive number.')
         self.state = initial_state
         self._clock = clock
         self.state_start = self._clock()
@@ -102,7 +114,9 @@ class ActivityTracker:
     def finalize(self) -> None:
         """Call at shutdown to flush the time spent in the current state."""
         now = self._clock()
-        if self.max_gap_seconds is not None and (now < self.last_observed or now - self.last_observed > self.max_gap_seconds):
+        if self.max_gap_seconds is not None and (
+            now < self.last_observed or now - self.last_observed > self.max_gap_seconds
+        ):
             now = self.last_observed
         self._emit(now)
         self.last_observed = now

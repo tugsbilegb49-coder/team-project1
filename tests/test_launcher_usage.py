@@ -20,7 +20,7 @@ class Clock:
         self.mono += seconds if awake is None else awake
 
     def ledger(self, path):
-        return LauncherUsage(path, clock=lambda:self.wall, monotonic=lambda:self.mono, autostart=False)
+        return LauncherUsage(path, clock=lambda: self.wall, monotonic=lambda: self.mono, autostart=False)
 
 
 def total(ledger, scope='alice', month='2026-11'):
@@ -28,7 +28,7 @@ def total(ledger, scope='alice', month='2026-11'):
 
 
 def test_restart_excludes_closed_time_and_isolates_accounts(tmp_path):
-    path, clock = tmp_path/'usage.sqlite3', Clock()
+    path, clock = tmp_path / 'usage.sqlite3', Clock()
     first = clock.ledger(path)
     clock.advance(5)  # Unlinked time never assigned to a future account.
     first.bind('alice', 'laptop')
@@ -51,13 +51,16 @@ def test_restart_excludes_closed_time_and_isolates_accounts(tmp_path):
 @pytest.mark.parametrize('awake', [0, 20])
 def test_sleep_and_clock_jump_do_not_add_unobserved_time(tmp_path, awake):
     clock = Clock()
-    ledger = clock.ledger(tmp_path/'usage.sqlite3')
+    ledger = clock.ledger(tmp_path / 'usage.sqlite3')
     ledger.bind('alice', 'laptop')
-    clock.advance(5); ledger.checkpoint()
-    clock.advance(20, awake); ledger.checkpoint()
+    clock.advance(5)
+    ledger.checkpoint()
+    clock.advance(20, awake)
+    ledger.checkpoint()
     clock.advance(5)
     assert total(ledger) == 10
-    clock.advance(3600, 1); ledger.checkpoint()
+    clock.advance(3600, 1)
+    ledger.checkpoint()
     clock.advance(5)
     assert total(ledger) == 15  # A wall-clock jump must not invent an hour.
     ledger.close()
@@ -65,24 +68,28 @@ def test_sleep_and_clock_jump_do_not_add_unobserved_time(tmp_path, awake):
 
 def test_month_boundary_union_and_idempotent_upload_ack(tmp_path):
     clock = Clock('2026-10-31T23:59:55')
-    path = tmp_path/'usage.sqlite3'
+    path = tmp_path / 'usage.sqlite3'
     first, second = clock.ledger(path), clock.ledger(path)
-    first.bind('alice', 'laptop'); second.bind('alice', 'laptop')
+    first.bind('alice', 'laptop')
+    second.bind('alice', 'laptop')
     clock.advance(10)
-    first.checkpoint(); second.checkpoint()
+    first.checkpoint()
+    second.checkpoint()
     assert total(first, month='2026-10') == 5
     assert total(first) == 5  # Overlapping launches count once.
     rows = first.pending('alice', 'laptop')
-    clock.advance(5); first.checkpoint()
+    clock.advance(5)
+    first.checkpoint()
     first.acknowledge(rows)  # An older in-flight upload must not ack new time.
     assert len(first.pending('alice', 'laptop')) == 1
     first.acknowledge(first.pending('alice', 'laptop'))
     assert not first.pending('alice', 'laptop')
-    first.close(); second.close()
+    first.close()
+    second.close()
 
 
 def test_corrupt_ledger_is_reported_and_not_erased(tmp_path):
-    path = tmp_path/'usage.sqlite3'
+    path = tmp_path / 'usage.sqlite3'
     path.write_bytes(b'not a sqlite database')
     ledger = Clock().ledger(path)
     assert not ledger.snapshot('alice')['available']
@@ -92,48 +99,60 @@ def test_corrupt_ledger_is_reported_and_not_erased(tmp_path):
 
 def test_hourly_rotation_bounds_uploaded_intervals(tmp_path):
     clock = Clock()
-    ledger = clock.ledger(tmp_path/'usage.sqlite3')
+    ledger = clock.ledger(tmp_path / 'usage.sqlite3')
     ledger.bind('alice', 'laptop')
     for _ in range(721):
-        clock.advance(5); ledger.checkpoint()
+        clock.advance(5)
+        ledger.checkpoint()
     rows = ledger.pending('alice')
     assert len(rows) == 2
-    assert sum(row['ended_at']-row['started_at'] for row in rows) == 3605
-    assert max(row['ended_at']-row['started_at'] for row in rows) <= 3615
+    assert sum(row['ended_at'] - row['started_at'] for row in rows) == 3605
+    assert max(row['ended_at'] - row['started_at'] for row in rows) <= 3615
     ledger.close()
 
 
 def test_sync_retains_offline_queue_retries_and_never_sends_to_other_account(tmp_path, monkeypatch):
     import threading
+
     clock = Clock()
-    ledger = clock.ledger(tmp_path/'usage.sqlite3')
-    config = tmp_path/'config.json'
-    config.write_text(json.dumps({'api_url':'http://local', 'device_id':'laptop'}))
-    controller = SimpleNamespace(lock=threading.RLock(), closed=False, owner={'user_id':1}, api='http://local',
-        tokens=tmp_path/'tokens', config=config, usage=ledger)
+    ledger = clock.ledger(tmp_path / 'usage.sqlite3')
+    config = tmp_path / 'config.json'
+    config.write_text(json.dumps({'api_url': 'http://local', 'device_id': 'laptop'}))
+    controller = SimpleNamespace(
+        lock=threading.RLock(),
+        closed=False,
+        owner={'user_id': 1},
+        api='http://local',
+        tokens=tmp_path / 'tokens',
+        config=config,
+        usage=ledger,
+    )
     client = Mock()
-    client.get.return_value = {'id':1}
-    monkeypatch.setattr('desktop.usage_sync.ApiClient', lambda *args:client)
+    client.get.return_value = {'id': 1}
+    monkeypatch.setattr('desktop.usage_sync.ApiClient', lambda *args: client)
     sync = UsageSync(controller, autostart=False)
     sync.cycle()
     scope = usage_scope(controller.api, 1)
-    clock.advance(5); ledger.checkpoint()
+    clock.advance(5)
+    ledger.checkpoint()
     client.get.side_effect = AgentError('offline')
     sync.cycle()
     assert ledger.pending(scope)
-    clock.advance(5); ledger.checkpoint()
+    clock.advance(5)
+    ledger.checkpoint()
     client.get.side_effect = None
     sync.cycle()
     assert not ledger.pending(scope)
     assert len(client._authenticated_post.call_args.args[1]['intervals']) == 1
-    clock.advance(5); ledger.checkpoint()
-    client.get.return_value = {'id':2}
+    clock.advance(5)
+    ledger.checkpoint()
+    client.get.return_value = {'id': 2}
     client._authenticated_post.reset_mock()
     sync.cycle()
     assert not client._authenticated_post.called
     assert ledger.pending(scope)
     assert ledger.binding is None
-    client.get.return_value = {'id':1}
+    client.get.return_value = {'id': 1}
     client._authenticated_post.side_effect = ApiError(403, 'revoked')
     sync.cycle()
     assert ledger.binding is None

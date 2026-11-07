@@ -20,11 +20,14 @@ class CameraPresenceIngestSerializer(serializers.Serializer):
 
     def to_internal_value(self, data):
         from collections.abc import Mapping
+
         if not isinstance(data, Mapping):
             raise serializers.ValidationError({'non_field_errors': ['Expected a JSON object.']})
         extra = set(data) - set(self.fields)
         if extra:
-            raise serializers.ValidationError({'non_field_errors': ['Only timestamp, present, confidence and device_id are accepted.']})
+            raise serializers.ValidationError(
+                {'non_field_errors': ['Only timestamp, present, confidence and device_id are accepted.']}
+            )
         if not isinstance(data.get('present'), bool):
             raise serializers.ValidationError({'present': 'Use a JSON boolean.'})
         if isinstance(data.get('confidence'), bool):
@@ -33,12 +36,14 @@ class CameraPresenceIngestSerializer(serializers.Serializer):
 
     def validate_confidence(self, value):
         import math
+
         if not math.isfinite(value):
             raise serializers.ValidationError('Use a finite confidence between 0 and 1.')
         return value
 
     def validate_timestamp(self, value):
         from django.utils import timezone
+
         if value > timezone.now():
             raise serializers.ValidationError('Presence cannot be in the future.')
         return value
@@ -46,7 +51,11 @@ class CameraPresenceIngestSerializer(serializers.Serializer):
 
 class SegmentValidationMixin:
     def validate(self, attrs):
-        fields = ('started_at', 'duration_seconds') if self.Meta.model is ComputerActivity else ('timestamp', 'duration_seconds')
+        fields = (
+            ('started_at', 'duration_seconds')
+            if self.Meta.model is ComputerActivity
+            else ('timestamp', 'duration_seconds')
+        )
         data = {name: attrs.get(name, getattr(self.instance, name, None)) for name in fields}
         if all(value is not None for value in data.values()):
             interval(self.Meta.model, data)
@@ -77,15 +86,21 @@ class SegmentValidationMixin:
 
 
 class ActivityEventSerializer(SegmentValidationMixin, serializers.ModelSerializer):
-    employee_name = serializers.CharField(source="employee.username", read_only=True)
+    employee_name = serializers.CharField(source='employee.username', read_only=True)
 
     class Meta:
         model = ActivityEvent
         fields = [
-            "id", "employee", "employee_name", "timestamp", "state",
-            "duration_seconds", "source_person_id", "imported_at",
+            'id',
+            'employee',
+            'employee_name',
+            'timestamp',
+            'state',
+            'duration_seconds',
+            'source_person_id',
+            'imported_at',
         ]
-        read_only_fields = ["id", "imported_at"]
+        read_only_fields = ['id', 'imported_at']
 
 
 class ActivityEventIngestSerializer(SegmentValidationMixin, serializers.ModelSerializer):
@@ -93,21 +108,27 @@ class ActivityEventIngestSerializer(SegmentValidationMixin, serializers.ModelSer
 
     class Meta:
         model = ActivityEvent
-        fields = ["timestamp", "state", "duration_seconds", "device_id"]
+        fields = ['timestamp', 'state', 'duration_seconds', 'device_id']
 
     device_id = serializers.UUIDField(required=False, allow_null=True, write_only=True)
 
 
 class ComputerActivitySerializer(SegmentValidationMixin, serializers.ModelSerializer):
-    employee_name = serializers.CharField(source="employee.username", read_only=True)
+    employee_name = serializers.CharField(source='employee.username', read_only=True)
 
     class Meta:
         model = ComputerActivity
         fields = [
-            "id", "employee", "employee_name", "started_at", "duration_seconds",
-            "application", "category", "imported_at",
+            'id',
+            'employee',
+            'employee_name',
+            'started_at',
+            'duration_seconds',
+            'application',
+            'category',
+            'imported_at',
         ]
-        read_only_fields = ["id", "imported_at"]
+        read_only_fields = ['id', 'imported_at']
 
 
 class ComputerActivityIngestSerializer(SegmentValidationMixin, serializers.ModelSerializer):
@@ -115,7 +136,6 @@ class ComputerActivityIngestSerializer(SegmentValidationMixin, serializers.Model
 
     class Meta:
         model = ComputerActivity
-        fields = ["started_at", "duration_seconds", "application", "category", "device_id"]
+        fields = ['started_at', 'duration_seconds', 'application', 'category', 'device_id']
 
     device_id = serializers.UUIDField(required=False, allow_null=True, write_only=True)
-

@@ -1,4 +1,5 @@
 """Bound JSON offline queues by both event count and encoded file size."""
+
 import json
 
 

@@ -9,7 +9,7 @@ class Department(models.Model):
     description = models.TextField(blank=True)
 
     class Meta:
-        ordering = ["name"]
+        ordering = ['name']
 
     def __str__(self) -> str:
         return self.name
@@ -17,9 +17,9 @@ class Department(models.Model):
 
 class User(AbstractUser):
     class Role(models.TextChoices):
-        ADMIN = "ADMIN", "Admin"
-        MANAGER = "MANAGER", "Manager"
-        EMPLOYEE = "EMPLOYEE", "Employee"
+        ADMIN = 'ADMIN', 'Admin'
+        MANAGER = 'MANAGER', 'Manager'
+        EMPLOYEE = 'EMPLOYEE', 'Employee'
 
     role = models.CharField(max_length=12, choices=Role.choices, default=Role.EMPLOYEE)
     department = models.ForeignKey(
@@ -27,7 +27,7 @@ class User(AbstractUser):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="members",
+        related_name='members',
     )
 
     @property
@@ -40,14 +40,14 @@ class User(AbstractUser):
 
 
 class ConsentRecord(models.Model):
-    employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="consents")
+    employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='consents')
     granted = models.BooleanField(default=False)
     policy_version = models.CharField(max_length=40)
     recorded_at = models.DateTimeField(auto_now_add=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        ordering = ["-recorded_at"]
+        ordering = ['-recorded_at']
 
     @property
     def is_active(self) -> bool:
@@ -58,7 +58,7 @@ class Device(models.Model):
     """A user-approved workstation running the local monitoring agent."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="devices")
+    employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='devices')
     name = models.CharField(max_length=120)
     platform = models.CharField(max_length=40)
     enabled = models.BooleanField(default=True)
@@ -66,13 +66,13 @@ class Device(models.Model):
     last_seen_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        ordering = ["name"]
+        ordering = ['name']
         constraints = [
-            models.UniqueConstraint(fields=["employee", "name"], name="unique_employee_device_name"),
+            models.UniqueConstraint(fields=['employee', 'name'], name='unique_employee_device_name'),
         ]
 
     def __str__(self) -> str:
-        return f"{self.employee} - {self.name}"
+        return f'{self.employee} - {self.name}'
 
 
 def default_productive_apps():
@@ -81,7 +81,7 @@ def default_productive_apps():
 
 class MonitoringSettings(models.Model):
     productive_apps = models.JSONField(default=default_productive_apps)
-    camera_threshold = models.FloatField(default=.45)
+    camera_threshold = models.FloatField(default=0.45)
     presence_log_max_bytes = models.PositiveIntegerField(default=5242880)
     presence_log_backups = models.PositiveSmallIntegerField(default=3)
     presence_log_retention_days = models.PositiveSmallIntegerField(default=7)
@@ -89,7 +89,9 @@ class MonitoringSettings(models.Model):
     automatic_retention = models.BooleanField(default=False)
     version = models.PositiveIntegerField(default=1)
     updated_at = models.DateTimeField(auto_now=True)
-    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+'
+    )
 
 
 class AgentHeartbeat(models.Model):
@@ -108,9 +110,13 @@ class AgentHeartbeat(models.Model):
 
 
 class AuditEntry(models.Model):
-    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='audit_actions')
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='audit_actions'
+    )
     actor_label = models.CharField(max_length=150)
-    employee = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='audit_entries')
+    employee = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='audit_entries'
+    )
     action = models.CharField(max_length=30)
     resource = models.CharField(max_length=40)
     object_id = models.CharField(max_length=64)
@@ -123,6 +129,7 @@ class AuditEntry(models.Model):
 
 class LauncherInterval(models.Model):
     """Client-observed awake launcher time, not a measure of productive work."""
+
     employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='launcher_intervals')
     device = models.ForeignKey(Device, null=True, on_delete=models.SET_NULL, related_name='launcher_intervals')
     event_id = models.UUIDField()
@@ -133,6 +140,7 @@ class LauncherInterval(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=['employee', 'event_id'], name='unique_employee_launcher_interval'),
-            models.CheckConstraint(condition=models.Q(ended_at__gte=models.F('started_at')), name='launcher_interval_order'),
+            models.CheckConstraint(
+                condition=models.Q(ended_at__gte=models.F('started_at')), name='launcher_interval_order'
+            ),
         ]
-

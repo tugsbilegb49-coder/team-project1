@@ -19,21 +19,22 @@ SLEEP_GAP_SECONDS = 10
 def get_foreground_app():
     """Идэвхтэй цонхны процессын нэр (жишээ: 'chrome.exe'). Цонхны гарчгийг авахгүй."""
     try:
-        if sys.platform == "win32":
+        if sys.platform == 'win32':
             user32 = ctypes.windll.user32
             hwnd = user32.GetForegroundWindow()
             if not hwnd:
-                return "unknown"
+                return 'unknown'
             pid = ctypes.c_ulong()
             user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
             return psutil.Process(pid.value).name().lower()
-        if sys.platform == "darwin":
+        if sys.platform == 'darwin':
             from AppKit import NSWorkspace  # pip install pyobjc-framework-Cocoa
+
             app = NSWorkspace.sharedWorkspace().frontmostApplication()
-            return app.localizedName() if app else "unknown"
+            return app.localizedName() if app else 'unknown'
     except Exception:
-        return "unknown"
-    return "unknown"
+        return 'unknown'
+    return 'unknown'
 
 
 class ActivityCollector:
@@ -119,11 +120,11 @@ class ActivityCollector:
         """Одоогийн тоолуурыг буцааж, тэглэнэ."""
         with self._lock:
             stats = {
-                "active_seconds": self.active_seconds,
-                "idle_seconds": self.idle_seconds,
-                "keyboard_events": self.keyboard_events,
-                "mouse_events": self.mouse_events,
-                "apps": dict(self.apps),
+                'active_seconds': self.active_seconds,
+                'idle_seconds': self.idle_seconds,
+                'keyboard_events': self.keyboard_events,
+                'mouse_events': self.mouse_events,
+                'apps': dict(self.apps),
             }
             self._reset()
         return stats

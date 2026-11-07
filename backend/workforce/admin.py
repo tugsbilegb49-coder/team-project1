@@ -8,10 +8,10 @@ from users.audit_admin import AuditedAdminMixin
 @admin.register(Task)
 class TaskAdmin(AuditedAdminMixin, admin.ModelAdmin):
     audit_resource = 'task'
-    audit_fields = ('employee_id','title','status','due_date','quality_score','completed_at')
-    list_display = ("title", "employee", "status", "due_date", "quality_score")
-    list_filter = ("status", "due_date")
-    search_fields = ("title", "employee__username")
+    audit_fields = ('employee_id', 'title', 'status', 'due_date', 'quality_score', 'completed_at')
+    list_display = ('title', 'employee', 'status', 'due_date', 'quality_score')
+    list_filter = ('status', 'due_date')
+    search_fields = ('title', 'employee__username')
 
     def get_readonly_fields(self, request, obj=None):
         return ('employee', 'transfer_count') if obj else ('transfer_count',)
@@ -24,5 +24,5 @@ class TaskAdmin(AuditedAdminMixin, admin.ModelAdmin):
         super().save_model(request, obj, form, change)
         if obj.status == Task.Status.DONE:
             from .workflow import close_task
-            close_task(obj)
 
+            close_task(obj)

@@ -12,19 +12,25 @@ from users.views import ConsentRecordViewSet, DeviceViewSet, UserViewSet
 from workforce.views import DepartmentViewSet, TaskViewSet
 from activity.views import ActivityEventViewSet, ComputerActivityViewSet, CameraPresenceViewSet
 from scoring.views import ProductivityScoreViewSet
-from users.operations import AgentStatusViewSet, AuditViewSet, MonitoringSettingsView, NotificationsView, ReportExportView
+from users.operations import (
+    AgentStatusViewSet,
+    AuditViewSet,
+    MonitoringSettingsView,
+    NotificationsView,
+    ReportExportView,
+)
 
 
 router = DefaultRouter()
-router.register("users", UserViewSet, basename="user")
-router.register("consents", ConsentRecordViewSet, basename="consent")
-router.register("devices", DeviceViewSet, basename="device")
-router.register("departments", DepartmentViewSet, basename="department")
-router.register("tasks", TaskViewSet, basename="task")
-router.register("activity-events", ActivityEventViewSet, basename="activity-event")
+router.register('users', UserViewSet, basename='user')
+router.register('consents', ConsentRecordViewSet, basename='consent')
+router.register('devices', DeviceViewSet, basename='device')
+router.register('departments', DepartmentViewSet, basename='department')
+router.register('tasks', TaskViewSet, basename='task')
+router.register('activity-events', ActivityEventViewSet, basename='activity-event')
 router.register('camera-presence', CameraPresenceViewSet, basename='camera-presence')
-router.register("computer-activity", ComputerActivityViewSet, basename="computer-activity")
-router.register("scores", ProductivityScoreViewSet, basename="score")
+router.register('computer-activity', ComputerActivityViewSet, basename='computer-activity')
+router.register('scores', ProductivityScoreViewSet, basename='score')
 router.register('agent-status', AgentStatusViewSet, basename='agent-status')
 router.register('audit', AuditViewSet, basename='audit')
 
@@ -37,12 +43,11 @@ urlpatterns = [
     path('api/monitoring-settings/', MonitoringSettingsView.as_view()),
     path('api/notifications/', NotificationsView.as_view()),
     path('api/reports/export/', ReportExportView.as_view()),
-    path("api/health/", HealthView.as_view()),
-    path("api/v1/activity", ActivityBatchView.as_view()),
-    path("admin/", admin.site.urls),
-    path("api/auth/login/", LoginView.as_view(), name="token-obtain-pair"),
-    path("api/auth/logout/", LogoutView.as_view(), name="token-logout"),
-    path("api/auth/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
-    path("api/", include(router.urls)),
+    path('api/health/', HealthView.as_view()),
+    path('api/v1/activity', ActivityBatchView.as_view()),
+    path('admin/', admin.site.urls),
+    path('api/auth/login/', LoginView.as_view(), name='token-obtain-pair'),
+    path('api/auth/logout/', LogoutView.as_view(), name='token-logout'),
+    path('api/auth/refresh/', TokenRefreshView.as_view(), name='token-refresh'),
+    path('api/', include(router.urls)),
 ]
-

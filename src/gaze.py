@@ -34,6 +34,7 @@ import cv2
 
 try:
     import mediapipe as mp
+
     _HAS_MEDIAPIPE = True
 except ImportError:
     _HAS_MEDIAPIPE = False
@@ -41,31 +42,34 @@ except ImportError:
 
 # Generic 3D face model points (in mm, arbitrary head-centered frame).
 # Order must match the MediaPipe landmark indices below.
-_MODEL_POINTS_3D = np.array([
-    (0.0, 0.0, 0.0),        # Nose tip
-    (0.0, -63.6, -12.5),    # Chin
-    (-43.3, 32.7, -26.0),   # Left eye, left corner
-    (43.3, 32.7, -26.0),    # Right eye, right corner
-    (-28.9, -28.9, -24.1),  # Left mouth corner
-    (28.9, -28.9, -24.1),   # Right mouth corner
-], dtype=np.float64)
+_MODEL_POINTS_3D = np.array(
+    [
+        (0.0, 0.0, 0.0),  # Nose tip
+        (0.0, -63.6, -12.5),  # Chin
+        (-43.3, 32.7, -26.0),  # Left eye, left corner
+        (43.3, 32.7, -26.0),  # Right eye, right corner
+        (-28.9, -28.9, -24.1),  # Left mouth corner
+        (28.9, -28.9, -24.1),  # Right mouth corner
+    ],
+    dtype=np.float64,
+)
 
 # Corresponding MediaPipe Face Mesh landmark indices (468-point model).
 _LANDMARK_IDS = {
-    "nose_tip": 1,
-    "chin": 152,
-    "left_eye_corner": 33,
-    "right_eye_corner": 263,
-    "left_mouth_corner": 61,
-    "right_mouth_corner": 291,
+    'nose_tip': 1,
+    'chin': 152,
+    'left_eye_corner': 33,
+    'right_eye_corner': 263,
+    'left_mouth_corner': 61,
+    'right_mouth_corner': 291,
 }
 
 
 @dataclass
 class HeadPose:
     pitch: float  # degrees, positive = looking down
-    yaw: float    # degrees, positive = turned right
-    roll: float   # degrees, positive = tilted right
+    yaw: float  # degrees, positive = turned right
+    roll: float  # degrees, positive = tilted right
 
 
 def _rotation_matrix_to_euler(rmat: np.ndarray) -> Tuple[float, float, float]:
@@ -99,27 +103,39 @@ def estimate_head_pose(landmarks, frame_shape: Tuple[int, int]) -> Optional[Head
     """
     h, w = frame_shape[:2]
 
-    image_points = np.array([
-        (landmarks[_LANDMARK_IDS["nose_tip"]].x * w, landmarks[_LANDMARK_IDS["nose_tip"]].y * h),
-        (landmarks[_LANDMARK_IDS["chin"]].x * w, landmarks[_LANDMARK_IDS["chin"]].y * h),
-        (landmarks[_LANDMARK_IDS["left_eye_corner"]].x * w, landmarks[_LANDMARK_IDS["left_eye_corner"]].y * h),
-        (landmarks[_LANDMARK_IDS["right_eye_corner"]].x * w, landmarks[_LANDMARK_IDS["right_eye_corner"]].y * h),
-        (landmarks[_LANDMARK_IDS["left_mouth_corner"]].x * w, landmarks[_LANDMARK_IDS["left_mouth_corner"]].y * h),
-        (landmarks[_LANDMARK_IDS["right_mouth_corner"]].x * w, landmarks[_LANDMARK_IDS["right_mouth_corner"]].y * h),
-    ], dtype=np.float64)
+    image_points = np.array(
+        [
+            (landmarks[_LANDMARK_IDS['nose_tip']].x * w, landmarks[_LANDMARK_IDS['nose_tip']].y * h),
+            (landmarks[_LANDMARK_IDS['chin']].x * w, landmarks[_LANDMARK_IDS['chin']].y * h),
+            (landmarks[_LANDMARK_IDS['left_eye_corner']].x * w, landmarks[_LANDMARK_IDS['left_eye_corner']].y * h),
+            (landmarks[_LANDMARK_IDS['right_eye_corner']].x * w, landmarks[_LANDMARK_IDS['right_eye_corner']].y * h),
+            (landmarks[_LANDMARK_IDS['left_mouth_corner']].x * w, landmarks[_LANDMARK_IDS['left_mouth_corner']].y * h),
+            (
+                landmarks[_LANDMARK_IDS['right_mouth_corner']].x * w,
+                landmarks[_LANDMARK_IDS['right_mouth_corner']].y * h,
+            ),
+        ],
+        dtype=np.float64,
+    )
 
     # Approximate camera intrinsics (no calibration available at runtime).
     focal_length = w
     center = (w / 2, h / 2)
-    camera_matrix = np.array([
-        [focal_length, 0, center[0]],
-        [0, focal_length, center[1]],
-        [0, 0, 1],
-    ], dtype=np.float64)
+    camera_matrix = np.array(
+        [
+            [focal_length, 0, center[0]],
+            [0, focal_length, center[1]],
+            [0, 0, 1],
+        ],
+        dtype=np.float64,
+    )
     dist_coeffs = np.zeros((4, 1))  # assume no lens distortion
 
     success, rotation_vec, _translation_vec = cv2.solvePnP(
-        _MODEL_POINTS_3D, image_points, camera_matrix, dist_coeffs,
+        _MODEL_POINTS_3D,
+        image_points,
+        camera_matrix,
+        dist_coeffs,
         flags=cv2.SOLVEPNP_ITERATIVE,
     )
     if not success:
@@ -134,13 +150,9 @@ class GazeEstimator:
     """Runs MediaPipe Face Mesh + solvePnP head-pose estimation on frames
     or on cropped person regions (for multi-person mode)."""
 
-    def __init__(self, downward_pitch_threshold: float = 15.0,
-                 max_yaw_for_screen: float = 35.0):
+    def __init__(self, downward_pitch_threshold: float = 15.0, max_yaw_for_screen: float = 35.0):
         if not _HAS_MEDIAPIPE:
-            raise ImportError(
-                "mediapipe is required for gaze estimation. "
-                "Install it with `pip install mediapipe`."
-            )
+            raise ImportError('mediapipe is required for gaze estimation. Install it with `pip install mediapipe`.')
         self.downward_pitch_threshold = downward_pitch_threshold
         self.max_yaw_for_screen = max_yaw_for_screen
         self.face_mesh = mp.solutions.face_mesh.FaceMesh(
@@ -170,8 +182,7 @@ class GazeEstimator:
         pose = self.estimate(frame_bgr)
         if pose is None:
             return None
-        return (abs(pose.pitch) < self.downward_pitch_threshold and
-                abs(pose.yaw) < self.max_yaw_for_screen)
+        return abs(pose.pitch) < self.downward_pitch_threshold and abs(pose.yaw) < self.max_yaw_for_screen
 
     def close(self):
         self.face_mesh.close()

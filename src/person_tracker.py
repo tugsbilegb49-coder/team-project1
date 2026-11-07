@@ -34,8 +34,8 @@ class PersonTracker:
         # deep_sort_realtime expects ([x, y, w, h], confidence, class_name)
         formatted = []
         for box in person_boxes:
-            x1, y1, x2, y2 = box["xyxy"]
-            formatted.append(([x1, y1, x2 - x1, y2 - y1], box["confidence"], "person"))
+            x1, y1, x2, y2 = box['xyxy']
+            formatted.append(([x1, y1, x2 - x1, y2 - y1], box['confidence'], 'person'))
 
         tracks = self.tracker.update_tracks(formatted, frame=frame)
 

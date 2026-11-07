@@ -19,13 +19,16 @@ def test_random_forest_holdout_excludes_training_participants_and_is_reproducibl
 
 def test_invalid_or_mislabeled_data_is_rejected():
     rows = demo_rows()
-    with pytest.raises(ValueError): validate_rows(rows, 'real')
+    with pytest.raises(ValueError):
+        validate_rows(rows, 'real')
     for value in (float('nan'), float('inf'), -1, 2):
         invalid = copy.deepcopy(rows)
         invalid[0]['active_ratio'] = value
-        with pytest.raises(ValueError): validate_rows(invalid, 'synthetic')
+        with pytest.raises(ValueError):
+            validate_rows(invalid, 'synthetic')
     rows[1]['sample_id'] = rows[0]['sample_id']
-    with pytest.raises(ValueError): validate_rows(rows, 'synthetic')
+    with pytest.raises(ValueError):
+        validate_rows(rows, 'synthetic')
 
 
 def test_actual_agent_events_match_independent_expected_cases():

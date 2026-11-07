@@ -31,16 +31,19 @@ class MonthlyTests(TestCase):
         self.client.force_authenticate(self.employee)
         self.now = dt('2026-11-15T12:00:00')
         self.time = patch('users.monthly.timezone.now', return_value=self.now)
-        self.time.start(); self.addCleanup(self.time.stop)
+        self.time.start()
+        self.addCleanup(self.time.stop)
 
     def upload(self, items, **extra):
-        return self.client.post('/api/launcher-usage/', {'device_id': str(self.device.pk), 'intervals': items, **extra}, format='json')
+        return self.client.post(
+            '/api/launcher-usage/', {'device_id': str(self.device.pk), 'intervals': items, **extra}, format='json'
+        )
 
     def interval(self, start='2026-11-01T01:00:00', end='2026-11-01T01:10:00'):
         return {'event_id': str(uuid4()), 'started_at': dt(start).isoformat(), 'ended_at': dt(end).isoformat()}
 
     def report(self, month='2026-11'):
-        response = self.client.get('/api/reports/monthly/', {'month':month})
+        response = self.client.get('/api/reports/monthly/', {'month': month})
         self.assertEqual(response.status_code, 200, response.data)
         return response.data['employees']
 
@@ -64,8 +67,12 @@ class MonthlyTests(TestCase):
         self.client.force_authenticate(self.employee)
         self.assertEqual(self.upload([], employee_id=self.other.pk).status_code, 400)
         self.assertEqual(self.upload([self.interval(end='2026-11-01T03:00:00')]).status_code, 400)
-        self.assertEqual(self.upload([self.interval(start='2026-12-01T00:00:00', end='2026-12-01T00:00:05')]).status_code, 400)
-        self.assertEqual(self.upload([self.interval(start='2026-09-01T00:00:00', end='2026-09-01T00:00:05')]).status_code, 400)
+        self.assertEqual(
+            self.upload([self.interval(start='2026-12-01T00:00:00', end='2026-12-01T00:00:05')]).status_code, 400
+        )
+        self.assertEqual(
+            self.upload([self.interval(start='2026-09-01T00:00:00', end='2026-09-01T00:00:05')]).status_code, 400
+        )
         Device.objects.filter(pk=self.device.pk).update(enabled=False)
         self.assertEqual(self.upload([]).status_code, 403)
         Device.objects.filter(pk=self.device.pk).update(enabled=True)
@@ -77,8 +84,13 @@ class MonthlyTests(TestCase):
     def test_month_splits_and_device_overlap_is_not_double_counted(self):
         self.assertEqual(self.upload([self.interval('2026-10-31T23:59:50', '2026-11-01T00:00:10')]).status_code, 200)
         device = Device.objects.create(employee=self.employee, name='Second', platform='test')
-        LauncherInterval.objects.create(employee=self.employee, device=device, event_id=uuid4(),
-            started_at=dt('2026-11-01T00:00:05'), ended_at=dt('2026-11-01T00:00:20'))
+        LauncherInterval.objects.create(
+            employee=self.employee,
+            device=device,
+            event_id=uuid4(),
+            started_at=dt('2026-11-01T00:00:05'),
+            ended_at=dt('2026-11-01T00:00:20'),
+        )
         self.assertEqual(self.report('2026-10')[0]['launcher_seconds'], 10)
         self.assertEqual(self.report()[0]['launcher_seconds'], 20)
         self.assertEqual(self.report('2026-12')[0]['launcher_seconds'], 0)
@@ -87,26 +99,45 @@ class MonthlyTests(TestCase):
         self.assertEqual({row['employee'] for row in self.report()}, {self.employee.pk})
         self.client.force_authenticate(self.manager)
         self.assertEqual({row['employee'] for row in self.report()}, {self.employee.pk, self.manager.pk})
-        self.manager.department = None; self.manager.save()
+        self.manager.department = None
+        self.manager.save()
         self.assertEqual({row['employee'] for row in self.report()}, {self.manager.pk})
         self.client.force_authenticate(self.admin)
         self.assertEqual(len(self.report()), 4)
 
     def test_invalid_month_is_not_silently_current_month(self):
         for month in ('2026-13', '26-11', '2026-1', '2026-11-01', '9999-12'):
-            self.assertEqual(self.client.get('/api/reports/monthly/', {'month':month}).status_code, 400)
+            self.assertEqual(self.client.get('/api/reports/monthly/', {'month': month}).status_code, 400)
 
     def test_apps_tasks_and_transfers_are_separate_and_month_clipped(self):
-        ComputerActivity.objects.create(employee=self.employee, started_at=dt('2026-10-31T23:59:50'),
-            duration_seconds=30, application='Code')
-        ComputerActivity.objects.create(employee=self.employee, started_at=dt('2026-11-01T00:01:00'),
-            duration_seconds=40, application='Idle')
-        task = Task.objects.create(employee=self.employee, title='Completed work', status='DONE', completed_at=dt('2026-11-02'))
-        contribution = TaskContribution.objects.create(task=task, employee=self.employee, employee_name='worker', percent=35)
-        TaskWorkSession.objects.create(contribution=contribution, employee=self.employee,
-            started_at=dt('2026-10-31T23:59:50'), last_heartbeat=dt('2026-11-01T00:00:20'), ended_at=dt('2026-11-01T00:00:30'))
-        TaskTransfer.objects.create(task=task, from_employee=self.other, to_employee=self.employee,
-            from_name='other', to_name='worker', status='ACCEPTED', responded_at=dt('2026-11-01'))
+        ComputerActivity.objects.create(
+            employee=self.employee, started_at=dt('2026-10-31T23:59:50'), duration_seconds=30, application='Code'
+        )
+        ComputerActivity.objects.create(
+            employee=self.employee, started_at=dt('2026-11-01T00:01:00'), duration_seconds=40, application='Idle'
+        )
+        task = Task.objects.create(
+            employee=self.employee, title='Completed work', status='DONE', completed_at=dt('2026-11-02')
+        )
+        contribution = TaskContribution.objects.create(
+            task=task, employee=self.employee, employee_name='worker', percent=35
+        )
+        TaskWorkSession.objects.create(
+            contribution=contribution,
+            employee=self.employee,
+            started_at=dt('2026-10-31T23:59:50'),
+            last_heartbeat=dt('2026-11-01T00:00:20'),
+            ended_at=dt('2026-11-01T00:00:30'),
+        )
+        TaskTransfer.objects.create(
+            task=task,
+            from_employee=self.other,
+            to_employee=self.employee,
+            from_name='other',
+            to_name='worker',
+            status='ACCEPTED',
+            responded_at=dt('2026-11-01'),
+        )
         row = self.report()[0]
         self.assertEqual((row['application_seconds'], row['idle_seconds'], row['tracked_seconds']), (20, 40, 60))
         self.assertEqual(row['task_seconds'], 30)
@@ -119,13 +150,18 @@ class MonthlyTests(TestCase):
     def test_abandoned_task_timer_is_capped_at_heartbeat_lease(self):
         task = Task.objects.create(employee=self.employee, title='No browser')
         contribution = TaskContribution.objects.create(task=task, employee=self.employee, employee_name='worker')
-        TaskWorkSession.objects.create(contribution=contribution, employee=self.employee,
-            started_at=dt('2026-11-01'), last_heartbeat=dt('2026-11-01')+timedelta(seconds=10))
+        TaskWorkSession.objects.create(
+            contribution=contribution,
+            employee=self.employee,
+            started_at=dt('2026-11-01'),
+            last_heartbeat=dt('2026-11-01') + timedelta(seconds=10),
+        )
         self.assertEqual(self.report()[0]['task_seconds'], 100)
 
     def test_retention_preserves_month_totals_exactly_once_including_cross_month(self):
-        ComputerActivity.objects.create(employee=self.employee, started_at=dt('2026-08-31T23:59:50'),
-            duration_seconds=30, application='Code')
+        ComputerActivity.objects.create(
+            employee=self.employee, started_at=dt('2026-08-31T23:59:50'), duration_seconds=30, application='Code'
+        )
         before = self.report('2026-09')[0]['application_seconds']
         call_command('cleanup_activity', days=1, apply=True, stdout=StringIO())
         self.assertFalse(ComputerActivity.objects.exists())
@@ -135,9 +171,16 @@ class MonthlyTests(TestCase):
         call_command('cleanup_activity', days=1, apply=True, stdout=StringIO())
         self.assertEqual(self.report('2026-09')[0]['application_seconds'], before)
         # A long-offline queue can replay an already archived segment.
-        response = self.client.post('/api/computer-activity/ingest/', {
-            'started_at': dt('2026-08-31T23:59:50').isoformat(), 'duration_seconds':30,
-            'application':'Code', 'category':'WORK'}, format='json')
+        response = self.client.post(
+            '/api/computer-activity/ingest/',
+            {
+                'started_at': dt('2026-08-31T23:59:50').isoformat(),
+                'duration_seconds': 30,
+                'application': 'Code',
+                'category': 'WORK',
+            },
+            format='json',
+        )
         self.assertEqual(response.status_code, 200, response.data)
         self.assertFalse(ComputerActivity.objects.exists())
         self.assertEqual(self.report('2026-09')[0]['application_seconds'], before)

@@ -25,7 +25,7 @@ class DepartmentViewSet(viewsets.ModelViewSet):
         return queryset.none()
 
     def get_permissions(self):
-        if self.action in {"create", "update", "partial_update", "destroy"}:
+        if self.action in {'create', 'update', 'partial_update', 'destroy'}:
             return [IsSystemAdmin()]
         return [IsAuthenticated()]
 
@@ -35,18 +35,27 @@ class TaskViewSet(TaskActions, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return workflow.visible_tasks(self.request.user).select_related('employee', 'assigned_by', 'employee__department').prefetch_related('contributions__sessions', 'transfers')
+        return (
+            workflow.visible_tasks(self.request.user)
+            .select_related('employee', 'assigned_by', 'employee__department')
+            .prefetch_related('contributions__sessions', 'transfers')
+        )
 
     def get_permissions(self):
-        if self.action in {"create", "update", "partial_update", "destroy"}:
+        if self.action in {'create', 'update', 'partial_update', 'destroy'}:
             return [IsAdminOrManager()]
         return [IsAuthenticated()]
 
     def _ensure_employee_in_manager_department(self, employee):
         user = self.request.user
-        if not user.is_admin_role and user.is_manager and (not user.department_id or employee.department_id != user.department_id):
+        if (
+            not user.is_admin_role
+            and user.is_manager
+            and (not user.department_id or employee.department_id != user.department_id)
+        ):
             from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied("Managers can only manage employees in their own department.")
+
+            raise PermissionDenied('Managers can only manage employees in their own department.')
 
     @transaction.atomic
     def update(self, request, *args, **kwargs):
@@ -66,27 +75,37 @@ class TaskViewSet(TaskActions, viewsets.ModelViewSet):
 
     @transaction.atomic
     def perform_create(self, serializer):
-        employee = serializer.validated_data["employee"]
+        employee = serializer.validated_data['employee']
         self._ensure_employee_in_manager_department(employee)
-        completed_at = timezone.now() if serializer.validated_data.get("status") == Task.Status.DONE else None
+        completed_at = timezone.now() if serializer.validated_data.get('status') == Task.Status.DONE else None
         task = serializer.save(assigned_by=self.request.user, completed_at=completed_at)
         from users.operations import audit_update
-        audit_update(self.request.user, 'task', task, {}, ('employee_id','title','status','due_date','quality_score'), task.employee, action='create')
+
+        audit_update(
+            self.request.user,
+            'task',
+            task,
+            {},
+            ('employee_id', 'title', 'status', 'due_date', 'quality_score'),
+            task.employee,
+            action='create',
+        )
 
     @transaction.atomic
     def perform_update(self, serializer):
         from users.operations import audit_update, snapshot
-        fields = ('employee_id','title','status','due_date','quality_score','completed_at')
+
+        fields = ('employee_id', 'title', 'status', 'due_date', 'quality_score', 'completed_at')
         before = snapshot(serializer.instance, fields)
-        employee = serializer.validated_data.get("employee", serializer.instance.employee)
+        employee = serializer.validated_data.get('employee', serializer.instance.employee)
         self._ensure_employee_in_manager_department(employee)
         task = serializer.save()
         if task.status != Task.Status.DONE and task.completed_at is not None:
             task.completed_at = None
-            task.save(update_fields=["completed_at", "updated_at"])
+            task.save(update_fields=['completed_at', 'updated_at'])
         if task.status == Task.Status.DONE and task.completed_at is None:
             task.completed_at = timezone.now()
-            task.save(update_fields=["completed_at", "updated_at"])
+            task.save(update_fields=['completed_at', 'updated_at'])
         if task.status == Task.Status.DONE:
             workflow.close_task(task)
         audit_update(self.request.user, 'task', task, before, fields, task.employee)
@@ -94,6 +113,6 @@ class TaskViewSet(TaskActions, viewsets.ModelViewSet):
     @transaction.atomic
     def perform_destroy(self, instance):
         from users.operations import audit_event
+
         audit_event(self.request.user, 'task', instance.pk, 'delete', {}, instance.employee)
         instance.delete()
-

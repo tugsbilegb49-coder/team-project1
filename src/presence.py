@@ -1,4 +1,5 @@
 """Presence-only capture: frames stay in RAM; only scalar results leave the loop."""
+
 import csv
 from datetime import datetime, timedelta
 import io
@@ -14,7 +15,12 @@ from zoneinfo import ZoneInfo
 def validate_presence(present, confidence):
     if not isinstance(present, bool):
         raise ValueError('present must be a boolean.')
-    if isinstance(confidence, bool) or not isinstance(confidence, (int, float)) or not math.isfinite(confidence) or not 0 <= confidence <= 1:
+    if (
+        isinstance(confidence, bool)
+        or not isinstance(confidence, (int, float))
+        or not math.isfinite(confidence)
+        or not 0 <= confidence <= 1
+    ):
         raise ValueError('confidence must be finite and between 0 and 1.')
 
 
@@ -22,7 +28,8 @@ class PresenceLogger:
     fields = ('timestamp', 'present', 'confidence')
 
     def __init__(self, path, max_bytes=5 * 1024 * 1024, backup_count=3, retention_days=7, clock=None, fields=None):
-        if fields is not None: self.fields = tuple(fields)
+        if fields is not None:
+            self.fields = tuple(fields)
         if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 256:
             raise ValueError('Presence log max_bytes must be at least 256.')
         if isinstance(backup_count, bool) or not isinstance(backup_count, int) or not 0 <= backup_count <= 100:
@@ -54,13 +61,13 @@ class PresenceLogger:
         return buffer.getvalue()
 
     def _backup(self, number):
-        return self.path.with_name(self.path.name+'.'+str(number))
+        return self.path.with_name(self.path.name + '.' + str(number))
 
     def _prune(self):
         cutoff = (self.clock() - timedelta(days=self.retention_days)).timestamp()
         candidates = [(self.path, 0)]
-        for path in self.path.parent.glob(self.path.name+'.*'):
-            suffix = path.name[len(self.path.name)+1:]
+        for path in self.path.parent.glob(self.path.name + '.*'):
+            suffix = path.name[len(self.path.name) + 1 :]
             # Only the numbered files this logger creates, never manual archives.
             if suffix.isdecimal() and str(int(suffix)) == suffix and 1 <= int(suffix) <= 100:
                 candidates.append((path, int(suffix)))
@@ -81,7 +88,7 @@ class PresenceLogger:
             tail = stream.read()
         while len(header) + len(tail) > self.max_bytes:
             tail = tail.partition(b'\n')[2]
-        fd, temporary = tempfile.mkstemp(prefix=path.name+'.', suffix='.tmp', dir=path.parent)
+        fd, temporary = tempfile.mkstemp(prefix=path.name + '.', suffix='.tmp', dir=path.parent)
         try:
             with os.fdopen(fd, 'wb') as stream:
                 stream.write(header + tail)
@@ -121,7 +128,7 @@ class PresenceLogger:
 
     def write_row(self, values):
         row = self._csv_line(values)
-        if len(self.header.encode())+len(row.encode()) > self.max_bytes:
+        if len(self.header.encode()) + len(row.encode()) > self.max_bytes:
             raise ValueError('CSV row exceeds the configured file size limit.')
         if self.day != self.clock().date() or self.path.stat().st_size + len(row.encode('utf-8')) > self.max_bytes:
             self._rotate()
@@ -137,7 +144,12 @@ class PresenceMonitor:
     def __init__(self, config):
         self.config = config
         interval = config.get('presence_interval_seconds', 1)
-        if isinstance(interval, bool) or not isinstance(interval, (int, float)) or not math.isfinite(interval) or interval <= 0:
+        if (
+            isinstance(interval, bool)
+            or not isinstance(interval, (int, float))
+            or not math.isfinite(interval)
+            or interval <= 0
+        ):
             raise ValueError('presence_interval_seconds must be positive.')
         self.interval = interval
         self.control = Path(config.get('control_file', 'agent/control.json'))
@@ -155,6 +167,7 @@ class PresenceMonitor:
         import numpy as np
         from src.detector import ObjectDetector
         from src.api_logger import PresenceEventUploader, CameraAPISyncError
+
         detector, cap = None, None
         logger, uploader = None, None
         guard = None
@@ -162,25 +175,36 @@ class PresenceMonitor:
         applied_version = None
         paused_frame = np.zeros((160, 640, 3), dtype=np.uint8)
         try:
-            logger = PresenceLogger(self.config.get('presence_log_file', 'data/presence.csv'),
+            logger = PresenceLogger(
+                self.config.get('presence_log_file', 'data/presence.csv'),
                 max_bytes=self.config.get('presence_log_max_bytes', 5 * 1024 * 1024),
                 backup_count=self.config.get('presence_log_backups', 3),
-                retention_days=self.config.get('presence_log_retention_days', 7))
+                retention_days=self.config.get('presence_log_retention_days', 7),
+            )
             sync = self.config.get('api_sync', {})
             if sync.get('enabled'):
-                uploader = PresenceEventUploader(sync.get('api_url', 'http://127.0.0.1:8000'),
+                uploader = PresenceEventUploader(
+                    sync.get('api_url', 'http://127.0.0.1:8000'),
                     sync.get('token_file', 'agent/.agent_tokens.json'),
                     sync.get('device_config_file', 'agent/config.json'),
                     self.config.get('presence_queue_file', 'data/.pending_presence_events.json'),
-                    sync.get('max_queue_events', 10000), sync.get('max_queue_bytes', 10485760))
+                    sync.get('max_queue_events', 10000),
+                    sync.get('max_queue_bytes', 10485760),
+                )
                 guard = uploader.consent_guard
                 guard.start()
                 device_id = uploader._device_id()
                 if isinstance(device_id, str) and device_id:
                     from agent.main import ApiClient
                     from agent.runtime import AgentRuntime
-                    runtime = AgentRuntime(ApiClient(uploader.api_url, uploader.token_file), device_id,
-                        uploader._worker, lambda: self.paused() or not guard.allowed(), kind='camera')
+
+                    runtime = AgentRuntime(
+                        ApiClient(uploader.api_url, uploader.token_file),
+                        device_id,
+                        uploader._worker,
+                        lambda: self.paused() or not guard.allowed(),
+                        kind='camera',
+                    )
                     runtime.start()
             start = time.monotonic()
             next_sample = start
@@ -188,6 +212,7 @@ class PresenceMonitor:
             result = None
             while seconds is None or time.monotonic() - start < seconds:
                 from src.camera_capture import check_session
+
                 check_session()
                 remote = runtime.snapshot() if runtime else {}
                 if remote.get('version') is not None and remote['version'] != applied_version:
@@ -195,12 +220,15 @@ class PresenceMonitor:
                     if detector is not None:
                         detector.confidence_threshold = remote['camera_threshold']
                     logger.close()
-                    logger = PresenceLogger(self.config.get('presence_log_file', 'data/presence.csv'),
-                        max_bytes=remote['presence_log_max_bytes'], backup_count=remote['presence_log_backups'],
-                        retention_days=remote['presence_log_retention_days'])
+                    logger = PresenceLogger(
+                        self.config.get('presence_log_file', 'data/presence.csv'),
+                        max_bytes=remote['presence_log_max_bytes'],
+                        backup_count=remote['presence_log_backups'],
+                        retention_days=remote['presence_log_retention_days'],
+                    )
                     applied_version = remote['version']
                 # Process quit in every state, including before authorization.
-                if cv2.waitKey(1) & 0xff == ord('q'):
+                if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
                 if self.paused() or (guard is not None and not guard.allowed()):
                     if cap is not None:
@@ -208,10 +236,17 @@ class PresenceMonitor:
                         cap = None
                     result = None
                     placeholder = paused_frame.copy()
-                    cv2.putText(placeholder, 'Camera paused / consent pending. q = stop',
-                                (10, 60), cv2.FONT_HERSHEY_SIMPLEX, .6, (255, 255, 255), 1)
+                    cv2.putText(
+                        placeholder,
+                        'Camera paused / consent pending. q = stop',
+                        (10, 60),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6,
+                        (255, 255, 255),
+                        1,
+                    )
                     cv2.imshow('WorkTrack presence (no recording)', placeholder)
-                    time.sleep(.05)
+                    time.sleep(0.05)
                     continue
                 if detector is None:
                     detector = ObjectDetector(self.config['model_name'], self.config['confidence_threshold'])
@@ -220,8 +255,13 @@ class PresenceMonitor:
                     continue
                 if cap is None:
                     from src.camera_capture import open_camera
-                    cap = open_camera(self.config['camera_index'],permitted=lambda:not self.paused() and (guard is None or guard.allowed()))
-                    if cap is None:continue
+
+                    cap = open_camera(
+                        self.config['camera_index'],
+                        permitted=lambda: not self.paused() and (guard is None or guard.allowed()),
+                    )
+                    if cap is None:
+                        continue
                     if not cap.isOpened():
                         raise RuntimeError('Could not open webcam. Check camera permission and camera_index.')
                 ok, frame = cap.read()
@@ -243,14 +283,17 @@ class PresenceMonitor:
                 if self.paused() or (guard is not None and not guard.allowed()):
                     continue
                 if result:
-                    text = f"Person {'present' if result['present'] else 'absent'}  confidence={result['confidence']:.2f}"
-                    cv2.putText(frame, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, .7, (0, 255, 0), 2)
+                    text = (
+                        f'Person {"present" if result["present"] else "absent"}  confidence={result["confidence"]:.2f}'
+                    )
+                    cv2.putText(frame, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 cv2.imshow('WorkTrack presence (no recording)', frame)
         finally:
             if cap is not None:
                 cap.release()
             cv2.destroyAllWindows()
-            if runtime: runtime.stop()
+            if runtime:
+                runtime.stop()
             if uploader:
                 uploader.close()
             if logger:

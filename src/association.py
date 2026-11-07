@@ -53,7 +53,7 @@ def assign_objects_to_people(
     for obj_box in object_boxes:
         obj_center = _center(obj_box)
         best_id: Optional[int] = None
-        best_dist = float("inf")
+        best_dist = float('inf')
 
         for track_id, person_box in person_boxes.items():
             person_center = _center(person_box)

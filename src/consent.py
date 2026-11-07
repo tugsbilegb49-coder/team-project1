@@ -1,4 +1,5 @@
 """Background consent checks with a short, fail-closed authorization lease."""
+
 import math
 import threading
 import time
@@ -6,7 +7,13 @@ import time
 
 class ConsentGuard:
     def __init__(self, check, interval=1, ttl=3, clock=time.monotonic):
-        if any(isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0 for value in (interval, ttl)) or ttl < interval:
+        if (
+            any(
+                isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0
+                for value in (interval, ttl)
+            )
+            or ttl < interval
+        ):
             raise ValueError('Consent interval/TTL must be positive and TTL must cover the interval.')
         self.check, self.interval, self.ttl, self.clock = check, interval, ttl, clock
         self.lock = threading.Lock()
@@ -18,8 +25,12 @@ class ConsentGuard:
 
     def allowed(self):
         with self.lock:
-            return bool(not self.stopping.is_set() and self.granted and self.verified_at is not None
-                        and 0 <= self.clock() - self.verified_at <= self.ttl)
+            return bool(
+                not self.stopping.is_set()
+                and self.granted
+                and self.verified_at is not None
+                and 0 <= self.clock() - self.verified_at <= self.ttl
+            )
 
     def invalidate(self):
         with self.lock:

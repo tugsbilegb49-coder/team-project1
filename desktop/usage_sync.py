@@ -1,4 +1,5 @@
 """Upload durable launcher intervals for the verified, consenting device owner."""
+
 import hashlib
 import json
 import sqlite3
@@ -9,7 +10,7 @@ from agent.main import ApiClient, ApiError, AgentError, AccountChangedError
 
 
 def usage_scope(api, user_id):
-    return hashlib.sha256((api.rstrip('/')+'\0'+str(user_id)).encode()).hexdigest()
+    return hashlib.sha256((api.rstrip('/') + '\0' + str(user_id)).encode()).hexdigest()
 
 
 class UsageSync:
@@ -38,7 +39,9 @@ class UsageSync:
                 client = ApiClient(controller.api, controller.tokens)
                 user = client.get('/api/users/me/')
                 config = json.loads(controller.config.read_text())
-                if user['id'] != controller.owner['user_id'] or config.get('api_url', '').rstrip('/') != controller.api.rstrip('/'):
+                if user['id'] != controller.owner['user_id'] or config.get('api_url', '').rstrip(
+                    '/'
+                ) != controller.api.rstrip('/'):
                     raise AccountChangedError('Owner changed')
                 scope = usage_scope(controller.api, user['id'])
                 # Empty batches validate consent + enabled device even without new time.
@@ -49,9 +52,14 @@ class UsageSync:
                 for row in rows:
                     by_device.setdefault(row['device_id'], []).append(row)
                 for device, batch in by_device.items():
-                    payload = [{'event_id': row['event_id'],
-                                'started_at': datetime.fromtimestamp(row['started_at'], timezone.utc).isoformat(),
-                                'ended_at': datetime.fromtimestamp(row['ended_at'], timezone.utc).isoformat()} for row in batch]
+                    payload = [
+                        {
+                            'event_id': row['event_id'],
+                            'started_at': datetime.fromtimestamp(row['started_at'], timezone.utc).isoformat(),
+                            'ended_at': datetime.fromtimestamp(row['ended_at'], timezone.utc).isoformat(),
+                        }
+                        for row in batch
+                    ]
                     client._authenticated_post('/api/launcher-usage/', {'device_id': device, 'intervals': payload})
                     controller.usage.acknowledge(batch)
                 self.last_upload = datetime.now(timezone.utc).isoformat()

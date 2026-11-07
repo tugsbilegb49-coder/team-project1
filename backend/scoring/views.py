@@ -26,7 +26,7 @@ class ProductivityScoreViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        queryset = ProductivityScore.objects.select_related("employee", "employee__department")
+        queryset = ProductivityScore.objects.select_related('employee', 'employee__department')
         if user.is_admin_role:
             return queryset
         if user.is_manager and user.department_id:
@@ -41,61 +41,62 @@ class ProductivityScoreViewSet(viewsets.ReadOnlyModelViewSet):
             return
         if requester.pk == employee.pk:
             return
-        raise PermissionDenied("You cannot calculate a score for this employee.")
+        raise PermissionDenied('You cannot calculate a score for this employee.')
 
-    @action(detail=False, methods=["post"])
+    @action(detail=False, methods=['post'])
     def calculate(self, request):
-        employee_id = request.data.get("employee_id", request.user.pk)
+        employee_id = request.data.get('employee_id', request.user.pk)
         employee = get_object_or_404(User, pk=employee_id)
         self._can_calculate_for(employee)
         try:
-            score_date = date.fromisoformat(request.data.get("date", timezone.localdate().isoformat()))
+            score_date = date.fromisoformat(request.data.get('date', timezone.localdate().isoformat()))
         except (TypeError, ValueError) as exc:
-            raise ValidationError({"date": "Use ISO format: YYYY-MM-DD."}) from exc
+            raise ValidationError({'date': 'Use ISO format: YYYY-MM-DD.'}) from exc
 
         if score_date > timezone.localdate():
-            raise ValidationError({"date": "Future dates cannot be calculated."})
+            raise ValidationError({'date': 'Future dates cannot be calculated.'})
         try:
             score = calculate_daily_score(employee, score_date)
         except ScoreNotReady as exc:
             raise ValidationError({'detail': str(exc), 'task_ids': exc.task_ids}) from exc
         return Response(self.get_serializer(score).data, status=status.HTTP_201_CREATED)
 
-    @action(detail=False, methods=["get"])
+    @action(detail=False, methods=['get'])
     def dashboard(self, request):
         """Return dashboard-ready totals for one allowed employee and day."""
-        employee_id = request.query_params.get("employee_id", request.user.pk)
+        employee_id = request.query_params.get('employee_id', request.user.pk)
         employee = get_object_or_404(User, pk=employee_id)
         self._can_calculate_for(employee)
         try:
-            report_date = date.fromisoformat(request.query_params.get("date", timezone.localdate().isoformat()))
+            report_date = date.fromisoformat(request.query_params.get('date', timezone.localdate().isoformat()))
         except ValueError as exc:
-            raise ValidationError({"date": "Use ISO format: YYYY-MM-DD."}) from exc
+            raise ValidationError({'date': 'Use ISO format: YYYY-MM-DD.'}) from exc
 
         camera_rows = [
-            {"state": state, "seconds": seconds}
+            {'state': state, 'seconds': seconds}
             for state, seconds in sorted(camera_totals_for_day(employee, report_date).items())
         ]
         app_rows = (
             ComputerActivity.objects.filter(employee=employee, started_at__date=report_date)
-            .values("application", "category")
-            .annotate(seconds=Sum("duration_seconds"))
-            .order_by("-seconds", "application")
+            .values('application', 'category')
+            .annotate(seconds=Sum('duration_seconds'))
+            .order_by('-seconds', 'application')
         )
         category_rows = (
             ComputerActivity.objects.filter(employee=employee, started_at__date=report_date)
-            .values("category")
-            .annotate(seconds=Sum("duration_seconds"))
-            .order_by("category")
+            .values('category')
+            .annotate(seconds=Sum('duration_seconds'))
+            .order_by('category')
         )
         score = ProductivityScore.objects.filter(employee=employee, date=report_date).first()
-        return Response({
-            "employee": {"id": employee.pk, "username": employee.username},
-            "date": report_date.isoformat(),
-            "score": self.get_serializer(score).data if score else None,
-            "camera": list(camera_rows),
-            'presence': presence_summary_for_day(employee, report_date),
-            "applications": list(app_rows),
-            "application_categories": list(category_rows),
-        })
-
+        return Response(
+            {
+                'employee': {'id': employee.pk, 'username': employee.username},
+                'date': report_date.isoformat(),
+                'score': self.get_serializer(score).data if score else None,
+                'camera': list(camera_rows),
+                'presence': presence_summary_for_day(employee, report_date),
+                'applications': list(app_rows),
+                'application_categories': list(category_rows),
+            }
+        )

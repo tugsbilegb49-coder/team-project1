@@ -1,4 +1,5 @@
 """Local queue routing only; the server always verifies JWT authentication."""
+
 import base64
 import hashlib
 import json

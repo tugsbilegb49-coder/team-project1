@@ -4,12 +4,16 @@ from activity.backups import restore_backup, verify_backup
 
 
 class Command(BaseCommand):
-    help = 'Verify a backup by default; restore only with --apply --confirm-stopped. Creates a pre-restore safety backup.'
+    help = (
+        'Verify a backup by default; restore only with --apply --confirm-stopped. Creates a pre-restore safety backup.'
+    )
 
     def add_arguments(self, parser):
         parser.add_argument('backup')
         parser.add_argument('--apply', action='store_true')
-        parser.add_argument('--confirm-stopped', action='store_true', help='Confirm backend, scheduler and agents have been stopped.')
+        parser.add_argument(
+            '--confirm-stopped', action='store_true', help='Confirm backend, scheduler and agents have been stopped.'
+        )
 
     def handle(self, *args, **options):
         path = Path(options['backup']).expanduser().resolve()

@@ -1,4 +1,5 @@
 """Operational heartbeat and settings polling, off the activity sampling thread."""
+
 import threading
 
 
@@ -19,14 +20,27 @@ class AgentRuntime:
         try:
             data = self.client.get('/api/monitoring-settings/')
             if isinstance(data, dict) and isinstance(data.get('version'), int):
-                with self.lock: self.settings = dict(data)
+                with self.lock:
+                    self.settings = dict(data)
             with self.worker.lock:
-                state = {'queue_count': len(self.worker.pending), 'last_upload_at': self.worker.last_upload_at,
-                         'error_code': self.worker.last_error}
-                if getattr(self.worker, 'unverified_count', 0): state['error_code'] = 'legacy_queue'
-            self.client._authenticated_post('/api/agent-status/heartbeat/', {
-                'device_id': self.device_id, 'kind': self.kind, 'paused': bool(self.paused()),
-                'agent_version': '0.3.0', 'settings_version': self.snapshot().get('version', 0), **state})
+                state = {
+                    'queue_count': len(self.worker.pending),
+                    'last_upload_at': self.worker.last_upload_at,
+                    'error_code': self.worker.last_error,
+                }
+                if getattr(self.worker, 'unverified_count', 0):
+                    state['error_code'] = 'legacy_queue'
+            self.client._authenticated_post(
+                '/api/agent-status/heartbeat/',
+                {
+                    'device_id': self.device_id,
+                    'kind': self.kind,
+                    'paused': bool(self.paused()),
+                    'agent_version': '0.3.0',
+                    'settings_version': self.snapshot().get('version', 0),
+                    **state,
+                },
+            )
         except (OSError, RuntimeError, ValueError):
             # A failed heartbeat must not stop local sampling or erase configuration.
             return False
@@ -44,4 +58,5 @@ class AgentRuntime:
 
     def stop(self):
         self.stopping.set()
-        if self.thread: self.thread.join(timeout=3)
+        if self.thread:
+            self.thread.join(timeout=3)

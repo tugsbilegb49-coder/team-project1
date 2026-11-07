@@ -1,4 +1,5 @@
 """Time validation shared by admin CRUD and both uploader protocols."""
+
 from datetime import timedelta
 import math
 import hashlib
@@ -17,7 +18,11 @@ MAX_SEGMENT_SECONDS = 3600
 
 
 def activity_fingerprint(data):
-    identity = [data['started_at'].astimezone(utc.utc).isoformat(), float(data['duration_seconds']).hex(), data['application']]
+    identity = [
+        data['started_at'].astimezone(utc.utc).isoformat(),
+        float(data['duration_seconds']).hex(),
+        data['application'],
+    ]
     return hashlib.sha256(json.dumps(identity, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
 
 
@@ -74,7 +79,9 @@ def reject_overlap(model, employee, data, exclude_pk=None):
         tolerance = 0 if model is ComputerActivity else 0.1
         overlap = (min(old_end, end) - max(old_start, start)).total_seconds()
         if overlap > tolerance:
-            raise ValidationError({'duration_seconds': 'This employee already has overlapping activity in this stream.'})
+            raise ValidationError(
+                {'duration_seconds': 'This employee already has overlapping activity in this stream.'}
+            )
 
 
 @transaction.atomic

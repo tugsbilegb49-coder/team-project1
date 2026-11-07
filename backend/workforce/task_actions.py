@@ -59,7 +59,9 @@ class TaskActions:
     @action(detail=True, methods=['get'], url_path='transfer-recipients')
     def transfer_recipients(self, request, pk=None):
         rows = workflow.recipients(request.user, self.get_object())
-        return Response([{'id': user.pk, 'username': user.username, 'name': user.get_full_name() or user.username} for user in rows])
+        return Response(
+            [{'id': user.pk, 'username': user.username, 'name': user.get_full_name() or user.username} for user in rows]
+        )
 
     @action(detail=True, methods=['post'], url_path='transfer-request')
     @transaction.atomic
@@ -73,9 +75,23 @@ class TaskActions:
             raise workflow.Conflict('Дууссан эсвэл хоёр удаа шилжсэн даалгаврыг шилжүүлэхгүй.')
         if task.transfers.filter(status='PENDING').exists():
             raise workflow.Conflict('Энэ даалгаварт хүлээгдэж буй хүсэлт байна.')
-        transfer = TaskTransfer.objects.create(task=task, from_employee=task.employee, to_employee=recipient,
-            requested_by=request.user, from_name=task.employee.username, to_name=recipient.username, note=data['note'])
-        audit_event(request.user, 'task', task.pk, 'transfer_request', {'recipient': recipient.username, 'request_id': transfer.pk}, task.employee)
+        transfer = TaskTransfer.objects.create(
+            task=task,
+            from_employee=task.employee,
+            to_employee=recipient,
+            requested_by=request.user,
+            from_name=task.employee.username,
+            to_name=recipient.username,
+            note=data['note'],
+        )
+        audit_event(
+            request.user,
+            'task',
+            task.pk,
+            'transfer_request',
+            {'recipient': recipient.username, 'request_id': transfer.pk},
+            task.employee,
+        )
         return self.task_response(task)
 
     @action(detail=True, methods=['post'], url_path='transfer-respond')
@@ -89,16 +105,25 @@ class TaskActions:
         decision = data['decision']
         if decision in ('accept', 'decline') and transfer.to_employee_id != request.user.pk:
             raise PermissionDenied('Зөвхөн хүлээн авагч зөвшөөрөх эсвэл татгалзана.')
-        if decision == 'cancel' and not (request.user.pk in (transfer.requested_by_id, task.employee_id) or workflow.can_manage(request.user, task)):
+        if decision == 'cancel' and not (
+            request.user.pk in (transfer.requested_by_id, task.employee_id) or workflow.can_manage(request.user, task)
+        ):
             raise PermissionDenied('Хүсэлт цуцлах эрхгүй.')
         if transfer.status != 'PENDING':
             raise workflow.Conflict('Энэ хүсэлтийг аль хэдийн шийдвэрлэсэн.')
         now = timezone.now()
         if decision == 'accept':
-            if task.status == Task.Status.DONE or task.transfer_count >= 2 or task.employee_id != transfer.from_employee_id:
+            if (
+                task.status == Task.Status.DONE
+                or task.transfer_count >= 2
+                or task.employee_id != transfer.from_employee_id
+            ):
                 raise workflow.Conflict('Даалгаврын төлөв өөрчлөгдсөн. Шинэ хүсэлт шаардлагатай.')
             sender = transfer.requested_by
-            if not sender or (not sender.is_admin_role and (not task.employee.department_id or task.employee.department_id != request.user.department_id)):
+            if not sender or (
+                not sender.is_admin_role
+                and (not task.employee.department_id or task.employee.department_id != request.user.department_id)
+            ):
                 raise workflow.Conflict('Хэлтсийн тохиргоо өөрчлөгдсөн. Шинэ хүсэлт шаардлагатай.')
             workflow.contribution(task, task.employee)
             workflow.stop_task(task, now)
@@ -109,8 +134,14 @@ class TaskActions:
         transfer.status = {'accept': 'ACCEPTED', 'decline': 'DECLINED', 'cancel': 'CANCELLED'}[decision]
         transfer.responded_at = now
         transfer.save(update_fields=['status', 'responded_at'])
-        audit_event(request.user, 'task', task.pk, 'transfer_'+decision,
-                    {'from': transfer.from_name, 'to': transfer.to_name, 'request_id': transfer.pk}, task.employee)
+        audit_event(
+            request.user,
+            'task',
+            task.pk,
+            'transfer_' + decision,
+            {'from': transfer.from_name, 'to': transfer.to_name, 'request_id': transfer.pk},
+            task.employee,
+        )
         return self.task_response(task)
 
     @action(detail=True, methods=['post'], url_path='progress')
@@ -124,11 +155,20 @@ class TaskActions:
             raise workflow.Conflict('Хувь өөр цонхноос шинэчлэгдсэн. Жагсаалтаа шинэчилнэ үү.')
         other = task.contributions.exclude(pk=row.pk).aggregate(total=Sum('percent'))['total'] or Decimal(0)
         if other + data['percent'] > 100:
-            raise ValidationError({'percent': f'Бусад гишүүдийн хувийг оруулаад 100%-аас хэтрэхгүй. Таны дээд хэмжээ {100-other}%.'})
+            raise ValidationError(
+                {'percent': f'Бусад гишүүдийн хувийг оруулаад 100%-аас хэтрэхгүй. Таны дээд хэмжээ {100 - other}%.'}
+            )
         previous = row.percent
         row.percent = data['percent']
         row.save(update_fields=['percent'])
-        audit_event(request.user, 'task', task.pk, 'progress', {'percent': {'before': str(previous), 'after': str(row.percent)}}, request.user)
+        audit_event(
+            request.user,
+            'task',
+            task.pk,
+            'progress',
+            {'percent': {'before': str(previous), 'after': str(row.percent)}},
+            request.user,
+        )
         return self.task_response(task)
 
     @action(detail=True, methods=['post'], url_path='work-start')
@@ -163,7 +203,9 @@ class TaskActions:
         data = validated(SessionInput, request)
         task = self.locked_task()
         User.objects.select_for_update().get(pk=request.user.pk)
-        session = TaskWorkSession.objects.filter(pk=data['session_id'], employee=request.user, contribution__task=task).first()
+        session = TaskWorkSession.objects.filter(
+            pk=data['session_id'], employee=request.user, contribution__task=task
+        ).first()
         if not session:
             raise PermissionDenied('Зөвхөн өөрийн цагийг зогсооно.')
         if session.ended_at is None:
@@ -184,7 +226,11 @@ class TaskActions:
             session.refresh_from_db()
             now = timezone.now()
             if session.ended_at is None:
-                if session.last_heartbeat + timedelta(seconds=workflow.LEASE_SECONDS) <= now or task.employee_id != request.user.pk or task.status == Task.Status.DONE:
+                if (
+                    session.last_heartbeat + timedelta(seconds=workflow.LEASE_SECONDS) <= now
+                    or task.employee_id != request.user.pk
+                    or task.status == Task.Status.DONE
+                ):
                     workflow.finish(session, now)
                 else:
                     session.last_heartbeat = now

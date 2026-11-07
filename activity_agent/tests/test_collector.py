@@ -26,15 +26,15 @@ class IdleTimerTest(unittest.TestCase):
 
     def make(self, threshold):
         clock = FakeClock()
-        return ActivityCollector(threshold, clock=clock, app_resolver=lambda: "code.exe"), clock
+        return ActivityCollector(threshold, clock=clock, app_resolver=lambda: 'code.exe'), clock
 
     def check_idle(self, idle_minutes, threshold=60):
         collector, clock = self.make(threshold)
         collector.on_keyboard()
         run_seconds(collector, clock, idle_minutes * 60)
         stats = collector.flush()
-        self.assertAlmostEqual(stats["active_seconds"], threshold - 1, delta=1)
-        self.assertAlmostEqual(stats["idle_seconds"], idle_minutes * 60 - threshold + 1, delta=1)
+        self.assertAlmostEqual(stats['active_seconds'], threshold - 1, delta=1)
+        self.assertAlmostEqual(stats['idle_seconds'], idle_minutes * 60 - threshold + 1, delta=1)
         self.assertTrue(collector.is_idle())
 
     def test_idle_1_minute(self):
@@ -53,33 +53,33 @@ class IdleTimerTest(unittest.TestCase):
         collector.on_mouse()
         self.assertFalse(collector.is_idle())
         run_seconds(collector, clock, 10)
-        self.assertGreater(collector.flush()["active_seconds"], 9)
+        self.assertGreater(collector.flush()['active_seconds'], 9)
 
     def test_counts_only_no_content(self):
         collector, clock = self.make(60)
-        collector.on_keyboard("SECRET_KEY")
-        collector._on_click(123, 456, "left", True)
-        collector._on_click(123, 456, "left", False)
+        collector.on_keyboard('SECRET_KEY')
+        collector._on_click(123, 456, 'left', True)
+        collector._on_click(123, 456, 'left', False)
         collector.on_mouse_move(10, 20)
         stats = collector.flush()
-        self.assertEqual(stats["keyboard_events"], 1)
-        self.assertEqual(stats["mouse_events"], 1)
-        self.assertNotIn("SECRET_KEY", repr(stats))
-        self.assertNotIn("456", repr(stats))
+        self.assertEqual(stats['keyboard_events'], 1)
+        self.assertEqual(stats['mouse_events'], 1)
+        self.assertNotIn('SECRET_KEY', repr(stats))
+        self.assertNotIn('456', repr(stats))
 
     def test_app_seconds_only_when_active(self):
         collector, clock = self.make(60)
         collector.on_keyboard()
         run_seconds(collector, clock, 100)
         stats = collector.flush()
-        self.assertAlmostEqual(stats["apps"]["code.exe"], stats["active_seconds"])
+        self.assertAlmostEqual(stats['apps']['code.exe'], stats['active_seconds'])
 
     def test_sleep_gap_ignored(self):
         collector, clock = self.make(60)
         clock.now += 3600  # laptop sleep
         collector.tick()
         stats = collector.flush()
-        self.assertEqual(stats["active_seconds"] + stats["idle_seconds"], 0)
+        self.assertEqual(stats['active_seconds'] + stats['idle_seconds'], 0)
 
     def test_flush_resets(self):
         collector, clock = self.make(60)
@@ -87,9 +87,9 @@ class IdleTimerTest(unittest.TestCase):
         run_seconds(collector, clock, 5)
         collector.flush()
         stats = collector.flush()
-        self.assertEqual(stats["active_seconds"], 0)
-        self.assertEqual(stats["keyboard_events"], 0)
+        self.assertEqual(stats['active_seconds'], 0)
+        self.assertEqual(stats['keyboard_events'], 0)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()
