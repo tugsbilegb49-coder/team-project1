@@ -39,21 +39,24 @@ def port_open(port):
         return connection.connect_ex(('127.0.0.1', port)) == 0
 
 
+def parse_json(raw):
+    try:
+        return json.loads(raw) if raw else None
+    except ValueError:
+        return None  # e.g. the frontend's HTML page
+
+
 def request(url, data=None, headers=None):
-    """Return (status, parsed JSON or None) without raising for HTTP error codes."""
+    """Return (status, parsed JSON or None); status is None when nothing answered."""
     body = json.dumps(data).encode() if data is not None else None
     try:
         with urlopen(Request(url, data=body, headers=headers or {}), timeout=10) as response:
-            raw = response.read()
-            return response.status, json.loads(raw) if raw else None
+            return response.status, parse_json(response.read())
     except HTTPError as error:
         raw = error.read()
         error.close()
-        try:
-            return error.code, json.loads(raw)
-        except ValueError:
-            return error.code, None
-    except (URLError, OSError, ValueError):
+        return error.code, parse_json(raw)
+    except (URLError, OSError):
         return None, None
 
 
