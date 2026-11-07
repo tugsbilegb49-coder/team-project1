@@ -1,4 +1,81 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { passwordFeedback } from './passwordFeedback';
+
+function MemberPasswordReset({ member, busy, mutate }) {
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState(null);
+  const [saved, setSaved] = useState(false);
+  const button = useRef(null), input = useRef(null), confirmation = useRef(null), errorNote = useRef(null);
+  const formId = `reset-password-${member.id}`;
+
+  useEffect(() => {
+    if (open) input.current?.focus();
+  }, [open]);
+  useEffect(() => {
+    if (error && !busy) {
+      if (error.field === 'password') input.current?.focus();
+      if (error.field === 'confirm_password') confirmation.current?.focus();
+      errorNote.current?.scrollIntoView({block:'nearest'});
+    }
+  }, [error, busy]);
+
+  function close() {
+    setOpen(false);
+    setError(null);
+    button.current?.focus();
+  }
+
+  async function save(event) {
+    event.preventDefault();
+    if (busy) return;
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    setError(null);
+    if (data.get("password") !== data.get("confirm_password")) {
+      setError({field:'confirm_password', message:'Шинэ нууц үгүүд ижил байх ёстой.'});
+      return;
+    }
+    if (await mutate(`/api/users/${member.id}/`, "PATCH", { password: data.get("password") },
+      {onError:failure => setError(passwordFeedback(failure))})) {
+      form.reset();
+      close();
+      setSaved(true);
+    }
+  }
+
+  return <div className="member-password">
+    <button ref={button} type="button" disabled={busy} aria-expanded={open} aria-controls={formId}
+      onClick={() => { if (open) close(); else { setSaved(false); setOpen(true); } }}>
+      Нууц үг шинэчлэх
+    </button>
+    {open && <form id={formId} className="task-form" aria-label={`Нууц үг шинэчлэх — ${member.username}`} onSubmit={save}>
+      <p><strong>{member.username}</strong> хэрэглэгчийн нууц үгийг шинэчилнэ.
+        Ажилтан дахин нэвтэрч, agent төхөөрөмжөө дахин холбоно.</p>
+      <fieldset disabled={busy}>
+        <label htmlFor={`${formId}-new`}>Шинэ нууц үг</label>
+        <input ref={input} id={`${formId}-new`} name="password" type="password"
+          autoComplete="new-password" minLength={8} maxLength={256} required
+          aria-invalid={error?.field === 'password'}
+          aria-describedby={error?.field === 'password' ? `${formId}-error` : undefined}
+          onChange={() => setError(null)} />
+        {error?.field === 'password' && <p ref={errorNote} id={`${formId}-error`} className="field-error" role="alert">{error.message}</p>}
+        <label htmlFor={`${formId}-confirm`}>Шинэ нууц үг давтах</label>
+        <input ref={confirmation} id={`${formId}-confirm`} name="confirm_password" type="password"
+          autoComplete="new-password" minLength={8} maxLength={256} required
+          aria-invalid={error?.field === 'confirm_password'}
+          aria-describedby={error && error.field !== 'password' ? `${formId}-error` : undefined}
+          onChange={() => setError(null)} />
+        {error && error.field !== 'password' && <p ref={errorNote} id={`${formId}-error`} className="field-error" role="alert">{error.message}</p>}
+        <div className="desktop-actions">
+          <button type="submit">{busy ? "Хадгалж байна…" : "Шинэ нууц үг хадгалах"}</button>
+          <button type="button" onClick={close}>Болих</button>
+        </div>
+      </fieldset>
+    </form>}
+    {saved && <p role="status">Нууц үг шинэчлэгдлээ. Ажилтанд шинэ нууц үгийг хувийн сувгаар өгнө үү.
+      Нэвтэрсний дараа “Миний бүртгэл” хэсэгт өөрийн нууц үгээр сольж болно.</p>}
+  </div>;
+}
 
 export default function Members({ user, members, departments, busy, mutate }) {
   const [role, setRole] = useState("EMPLOYEE");
@@ -107,9 +184,10 @@ export default function Members({ user, members, departments, busy, mutate }) {
         </>
       )}
       {members.map((member) => (
-        <article className="task-item" key={member.id}>
-          <div>
+        <article className="task-item member-item" key={member.id}>
+          <div className="member-details">
             <h3>{member.name}</h3>
+            <p>Нэвтрэх нэр: <strong>{member.username}</strong></p>
             <p>
               {member.email} · {member.role}
               {!member.is_active ? " · Идэвхгүй" : ""}
@@ -141,6 +219,9 @@ export default function Members({ user, members, departments, busy, mutate }) {
               </label>
             ) : (
               <small>{member.department_name || "Хэлтэсгүй"}</small>
+            )}
+            {user.is_admin && member.id !== user.id && member.is_active && (
+              <MemberPasswordReset member={member} busy={busy} mutate={mutate} />
             )}
           </div>
           {user.is_admin && member.id !== user.id && member.is_active && (

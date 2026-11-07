@@ -7,6 +7,7 @@ from pathlib import Path
 import platform
 import subprocess
 import threading
+import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 
@@ -26,10 +27,14 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 class DesktopController:
-    def __init__(self, root, api, python, shutdown, spawn=None, stop=None):
+    def __init__(self, root, api, python, shutdown, spawn=None, stop=None, started_at=None, usage=None, sync=True):
         self.root, self.api, self.python = Path(root), api, str(python)
+        self.started_at = time.time() if started_at is None else started_at
         self.runtime = self.root/'.runtime'
         self.runtime.mkdir(exist_ok=True)
+        from desktop.usage import LauncherUsage
+        self.owns_usage = usage is None
+        self.usage = usage if usage is not None else LauncherUsage(self.runtime/'launcher-usage.sqlite3')
         self.tokens = self.root/'agent/.agent_tokens.json'
         self.config = self.root/'agent/config.json'
         self.control = self.root/'agent/control.json'
@@ -47,6 +52,8 @@ class DesktopController:
         self.closed = False
         try: self.owner = json.loads(self.metadata.read_text())
         except (OSError, ValueError): self.owner = None
+        from desktop.usage_sync import UsageSync
+        self.usage_sync = UsageSync(self, autostart=sync)
 
     def backend(self, route, access, payload=None):
         request = Request(self.api+route, headers={'Authorization': 'Bearer '+access, 'Content-Type': 'application/json'},
@@ -70,10 +77,15 @@ class DesktopController:
         return name in self.processes and self.processes[name].poll() is None
 
     def state(self, user):
+        from desktop.usage_sync import usage_scope
         linked = bool(self.owner and self.owner.get('user_id') == user['id'])
         camera=self.processes.get('camera')
         camera_code=camera.poll() if linked and camera is not None else None
         return {'available': True, 'linked': linked,
+            'launcher_started_at': self.started_at, 'launcher_uptime_seconds': max(0, time.time()-self.started_at),
+            'launcher_usage': {**self.usage.snapshot(usage_scope(self.api, user['id'])),
+                'sync_error': self.usage_sync.error if linked else 'unlinked',
+                'last_upload': self.usage_sync.last_upload if linked else None},
             'another_account': not linked and any(self._running(name) for name in self.processes),
             'username': user['username'] if linked else None,
             'device_name': self.owner.get('device_name') if linked else None,
@@ -149,6 +161,9 @@ class DesktopController:
                 config.update(api_url=self.api, username=linked['username'], device_id=linked['device_id'])
                 atomic_json_write(self.config, config)
                 self.owner = {'user_id':linked['user_id'],'device_name':name.strip()}
+                from desktop.usage_sync import usage_scope
+                self.usage.bind(usage_scope(self.api, linked['user_id']), linked['device_id'])
+                self.usage_sync.last_upload, self.usage_sync.error = None, ''
                 atomic_json_write(self.metadata,self.owner)
                 set_paused(True,self.control)
             else:
@@ -183,6 +198,7 @@ class DesktopController:
                         threading.Thread(target=self._prepare_camera,name='camera-setup',daemon=True).start()
                 elif action == 'disconnect':
                     self._stop_collectors()
+                    self.usage.bind()
                     self._client(user).logout()
                     self.metadata.unlink(missing_ok=True)
                     self.owner = None
@@ -193,8 +209,10 @@ class DesktopController:
             return self.state(user)
 
     def close(self):
+        self.usage_sync.close()
         with self.lock:
             self.closed = True
+            if self.owns_usage: self.usage.close()
             if self.processes: self._stop_collectors()
             if self.install_process: self.stop(self.install_process)
             for stream in self.logs: stream.close()
@@ -229,7 +247,10 @@ class DesktopHandler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control','no-store')
         self.send_header('X-Content-Type-Options','nosniff')
         self.send_header('Content-Length',str(len(body)))
-        self.end_headers(); self.wfile.write(body)
+        try:
+            self.end_headers(); self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # A browser may cancel a status poll while navigating away.
 
     def _handle(self, post=False):
         try:

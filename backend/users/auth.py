@@ -11,6 +11,7 @@ from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
@@ -43,7 +44,15 @@ class LoginAccountThrottle(SimpleRateThrottle):
         return self.cache_format % {'scope': self.scope, 'ident': identity}
 
 
+class LoginSerializer(TokenObtainPairSerializer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Match password creation/change: spaces are part of the password.
+        self.fields['password'].trim_whitespace = False
+
+
 class LoginView(TokenObtainPairView):
+    serializer_class = LoginSerializer
     throttle_classes = [LoginIPThrottle, LoginAccountThrottle]
 
 

@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { api, list, login, logout, hasAuth, onAuthCleared } from "./api";
 import Tasks from "./Tasks";
 import Members from "./Members";
+import { LauncherClock, TaskWorkClock } from './WorkClocks';
+import { useTaskWork } from './taskTime';
 import Today, { PasswordSettings } from './Today';
+import MonthlyReport from './MonthlyReport';
 import { AgentStatus, AuditHistory, MonitoringSettings, Notifications, ReportExport } from './Operations';
 import "./App.css";
 const statuses = {
@@ -38,6 +41,7 @@ function App() {
     running = useRef(false),
     reportRequest = useRef(0);
   const today = localToday();
+  const taskWork = useTaskWork(user);
   const validDate = /^\d{4}-\d{2}-\d{2}$/.test(date);
   const reportKey = `${user?.id}:${employee}:${date}`;
   const currentReport =
@@ -104,7 +108,7 @@ function App() {
     setRevision((value) => value + 1);
     return true;
   }
-  async function run(action) {
+  async function run(action, onError) {
     if (running.current) return false;
     const expected = session.current;
     running.current = true;
@@ -117,8 +121,10 @@ function App() {
         mounted.current &&
         expected === session.current &&
         failure.name !== "AbortError"
-      )
-        setError(failure.message);
+      ) {
+        if (onError) onError(failure);
+        else setError(failure.message);
+      }
       return false;
     } finally {
       if (mounted.current && expected === session.current) {
@@ -190,7 +196,7 @@ function App() {
       return load();
     });
   }
-  async function mutate(path, method, data) {
+  async function mutate(path, method, data, {onError} = {}) {
     return run(async () => {
       await api(path, {
         method,
@@ -205,7 +211,7 @@ function App() {
         );
         return true;
       }
-    });
+    }, onError);
   }
   if (!ready) return <main className="main">Уншиж байна…</main>;
   if (!user && hasAuth())
@@ -243,6 +249,8 @@ function App() {
           />
           {error && <p role="alert">{error}</p>}
           <button disabled={busy}>Нэвтрэх</button>
+          <p className="muted">Нэвтрэх нэр эсвэл нууц үгээ мартсан бол байгууллагынхаа админтай холбогдоно уу.
+            Админ таны нэвтрэх нэрийг шалгаж, нууц үгийг шинэчилж өгнө.</p>
         </form>
       </main>
     );
@@ -276,11 +284,14 @@ function App() {
         <p>
           {user.username} · {user.role}
         </p>
-        <button disabled={busy} onClick={() => run(() => logout())}>
+        <button disabled={busy} onClick={() => run(async () => {await taskWork.stop(); await logout();})}>
           Гарах
         </button>
       </aside>
       <main className="main" aria-busy={busy}>
+        {page !== 'today' && <LauncherClock key={`launcher:${user.id}`} user={user}/>}
+        <TaskWorkClock work={taskWork} busy={busy} navigate={setPage}
+          onStop={() => run(async () => {await taskWork.stop(); return load();})}/>
         <Notifications key={`notifications:${user.id}:${user.role}:${user.department}`} user={user} navigate={setPage}/>
         {user.role === "MANAGER" && !user.department && !user.is_admin && (
           <p role="alert">
@@ -290,8 +301,14 @@ function App() {
         )}
         {error && <p role="alert">{error}</p>}
         {busy && <p>Хадгалж байна…</p>}
+        {page === 'today' && (user.is_admin || user.role === 'MANAGER') && <MonthlyReport key={`monthly:${user.id}:${user.role}:${user.department}`} user={user}/>}
         {page === 'today' ? <Today key={`today:${user.id}`} user={user} navigate={setPage}/> : page === 'account' ? <PasswordSettings key={`password:${user.id}`}/> : page === "tasks" ? (
           <Tasks
+            user={user}
+            work={taskWork}
+            onStart={(id) => run(async () => {await taskWork.start(id); return load();})}
+            onAction={(id, action, data) => mutate(`/api/tasks/${id}/${action}/`, 'POST', data)}
+            onRefresh={() => run(load)}
             tasks={tasks}
             members={members}
             canManage={canManage}
@@ -332,6 +349,7 @@ function App() {
               </button>
             </header>
             {page === 'reports' && <ReportExport key={`${user.id}:${user.role}:${user.department}`} user={user} members={members} date={date}/>}
+            {page === 'reports' && <MonthlyReport key={`monthly:${user.id}:${user.role}:${user.department}`} user={user}/>}
             <section className="stats">
               <div className="stat-card">
                 <p>Нийт даалгавар</p>

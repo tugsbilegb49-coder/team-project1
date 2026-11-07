@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, clearAuth, desktop } from './api';
+import { LauncherClock } from './WorkClocks';
 
 function duration(seconds) {
   if(Number(seconds || 0)<60)return `${Math.floor(Number(seconds || 0))} сек`;
@@ -51,6 +52,8 @@ export function DesktopPanel({user}) {
               {step===1 && <><p>1. Энэ төхөөрөмж {user.username} account-д хугацаа бүртгэнэ.</p>
                 <label>Төхөөрөмжийн нэр<input required maxLength={120} value={deviceName} onChange={e=>setDeviceName(e.target.value)}/></label></>}
               {step===2 && <><p>2. Идэвхтэй аппын нэр, ашигласан хугацаа, idle хугацааг бүртгэнэ. Бичсэн текст, URL, screenshot хадгалахгүй.</p>
+                <p>Account-тай холбосны дараа WorkTrack нээлттэй байсан хугацаа мөн сарын тайланд админд харагдана.
+                  Ажил түр зогсоосон үед ч програмын нээлттэй цаг тоологдоно; бүрэн зогсоох бол WorkTrack-аа хаах эсвэл төхөөрөмжөө салгана.</p>
                 <p>Camera тусдаа товчоор асна. Зураг, видео хадгалахгүй; зөвхөн presence/confidence бүртгэнэ.</p>
                 <label className="toggle-field"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/>Мэдээлэл бүртгэхийг зөвшөөрч байна (2026-11)</label></>}
               {step===3 && <p>3. {deviceName} төхөөрөмжийг {user.username}-тай холбоно. Дараа нь “Ажил эхлүүлэх” дарна; camera автоматаар асахгүй.</p>}
@@ -102,14 +105,20 @@ export default function Today({user,navigate}) {
     load();const timer=setInterval(load,30000);return()=>{controller.abort();clearInterval(timer);};
   },[user.id]);
   return <section className="today-page"><header className="header"><div><h1>Миний өнөөдөр</h1><p>{user.username} · {result?.date || 'Өнөөдрийн мэдээлэл'}</p></div></header>
+    <section className="stats today-time-stats" aria-label="Хугацааны тойм">
+      <LauncherClock user={user} card/>
+      <article className="stat-card" aria-label="Өнөөдөр бүртгэгдсэн хугацаа">
+        <p>Өнөөдөр бүртгэгдсэн хугацаа</p><h2>{result ? duration(result.tracked_seconds) : '—'}</h2>
+        <small>Өнөөдрийн апп ашигласан болон идэвхгүй байсан (idle) хугацааны серверт хадгалагдсан нийлбэр.
+          30 секунд тутам шинэчлэгдэнэ.</small>
+      </article>
+    </section>
     <DesktopPanel key={user.id} user={user}/>
     {error && <p role="alert">{error}</p>}
     {!result && !error && <p>Өнөөдрийн мэдээлэл уншиж байна…</p>}
     {result && <>
-      <section className="stats"><article className="stat-card"><p>Бүртгэгдсэн хугацаа</p><h2>{duration(result.tracked_seconds)}</h2></article>
-        <article className="stat-card"><p>Дуусаагүй даалгавар</p><h2>{result.open_tasks}</h2></article>
+      <section className="stats today-task-stats"><article className="stat-card"><p>Дуусаагүй даалгавар</p><h2>{result.open_tasks}</h2></article>
         <article className="stat-card"><p>Хугацаа хэтэрсэн</p><h2>{result.overdue_tasks}</h2></article></section>
-      <p>Серверт илгээгдсэн хугацааг харуулна. 30 секунд тутам шинэчлэгдэнэ.</p>
       <section className="activity-detail-card"><h2>Өнөөдөр ашигласан аппууд</h2>
         <p>Сүүлд бүртгэгдсэн апп: {result.latest_application?.application || 'Одоогоор бүртгэлгүй'}</p>
         {result.applications.map(row=><div className="activity-row" key={row.application}><span>{row.application}</span><strong>{duration(row.seconds)}</strong></div>)}

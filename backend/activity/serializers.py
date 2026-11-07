@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.db import transaction
-from .validation import interval, lock_employee, reject_overlap
+from .validation import interval, lock_employee, reject_overlap, is_archived
 
 from .models import ActivityEvent, ComputerActivity, CameraPresence
 
@@ -56,6 +56,8 @@ class SegmentValidationMixin:
     def create(self, validated_data):
         employee = validated_data['employee']
         lock_employee(employee)
+        if self.Meta.model is ComputerActivity and is_archived(employee, validated_data):
+            raise serializers.ValidationError('This segment has already been included in an archived monthly total.')
         reject_overlap(self.Meta.model, employee, validated_data)
         return super().create(validated_data)
 
@@ -68,6 +70,8 @@ class SegmentValidationMixin:
             raise serializers.ValidationError({'employee': 'Activity ownership cannot be changed.'})
         data = {field.name: getattr(instance, field.name) for field in instance._meta.fields}
         data.update(validated_data)
+        if self.Meta.model is ComputerActivity and is_archived(employee, data):
+            raise serializers.ValidationError('This segment has already been included in an archived monthly total.')
         reject_overlap(self.Meta.model, employee, data, exclude_pk=instance.pk)
         return super().update(instance, validated_data)
 

@@ -13,7 +13,7 @@ def controller(tmp_path):
     (tmp_path/'agent').mkdir()
     (tmp_path/'agent/config.example.json').write_text(json.dumps({'productive_apps':[],'interval_seconds':30}))
     process=Mock();process.poll.return_value=None
-    value=DesktopController(tmp_path,'http://127.0.0.1:8000','python',Mock(),spawn=Mock(return_value=process),stop=Mock())
+    value=DesktopController(tmp_path,'http://127.0.0.1:8000','python',Mock(),spawn=Mock(return_value=process),stop=Mock(),sync=False)
     value.backend=Mock(return_value={'user_id':1,'username':'worker','device_id':'device','access':'test-access','refresh':'test-refresh'})
     yield value
     value.close()
@@ -24,6 +24,15 @@ USER={'id':1,'username':'worker'}
 
 def link(controller):
     return controller.act(USER,'access','connect',{'device_name':'Laptop','consent':True})
+
+
+def test_launcher_uptime_comes_from_process_start_not_browser_or_account(controller):
+    controller.started_at = 1000
+    with patch.object(controller.usage, 'snapshot', return_value={}), patch('desktop.service.time.time', return_value=1123):
+        assert controller.state(USER)['launcher_uptime_seconds'] == 123
+        assert controller.state({'id':2,'username':'other'})['launcher_started_at'] == 1000
+    with patch.object(controller.usage, 'snapshot', return_value={}), patch('desktop.service.time.time', return_value=1200):
+        assert controller.state(USER)['launcher_uptime_seconds'] == 200
 
 
 def test_onboarding_and_start_pause_camera_stop_use_only_owned_processes(controller):
@@ -56,6 +65,9 @@ def test_different_web_account_cannot_control_or_replace_running_collectors(cont
     with pytest.raises(DesktopError):controller.act(other,'access','connect',{'device_name':'Other','consent':True})
     state=controller.state(other)
     assert state['another_account'] and state['device_name'] is None
+    assert state['launcher_usage']['last_upload'] is None
+    assert not state['launcher_usage']['running']
+    assert state['launcher_usage']['months'][0]['seconds'] == 0
     assert not controller.stop.called
 
 

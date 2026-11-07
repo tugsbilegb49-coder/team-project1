@@ -48,6 +48,9 @@ class UserViewSet(viewsets.ModelViewSet):
         user = serializer.save()
         audit_update(self.request.user, 'user', user, before, fields, user)
         if changed_password:
+            from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
+            for token in OutstandingToken.objects.filter(user=user, expires_at__gt=timezone.now()).iterator():
+                BlacklistedToken.objects.get_or_create(token=token)
             audit_event(self.request.user, 'user', user.pk, 'password_change', {}, user)
 
     @transaction.atomic

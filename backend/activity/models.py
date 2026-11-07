@@ -77,3 +77,23 @@ class ComputerActivity(models.Model):
     def __str__(self) -> str:
         return f"{self.employee} - {self.application} ({self.duration_seconds:.0f}s)"
 
+
+class ArchivedMonthlyActivity(models.Model):
+    """Monthly totals retained when raw application segments expire."""
+    employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='archived_monthly_activity')
+    month = models.DateField()
+    application = models.CharField(max_length=120)
+    seconds = models.FloatField(default=0)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['employee', 'month', 'application'], name='unique_archived_month_app')]
+
+
+class ArchivedActivityReceipt(models.Model):
+    """A content hash prevents an offline retry from re-adding expired raw data."""
+    employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='archived_activity_receipts')
+    fingerprint = models.CharField(max_length=64)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['employee', 'fingerprint'], name='unique_archived_activity_receipt')]
+

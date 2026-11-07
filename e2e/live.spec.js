@@ -3,11 +3,13 @@ import { test, expect } from "@playwright/test";
 test("real Django login → department/manager → task/quality → inactive filter → server logout", async ({
   page,
   request,
+  browser,
 }) => {
   test.skip(
     !process.env.WORKTRACK_LIVE_E2E,
     "Run with python verify_frontend.py against an isolated database.",
   );
+  test.setTimeout(90000);
   await page.goto("/");
   await page
     .getByLabel("Хэрэглэгчийн нэр", { exact: true })
@@ -81,6 +83,31 @@ test("real Django login → department/manager → task/quality → inactive fil
     .filter({
       has: page.getByRole("heading", { name: "Smoke Manager", exact: true }),
     });
+  await expect(manager).toContainText('Нэвтрэх нэр: smoke-manager');
+  const oldLogin = await request.post(`${process.env.VITE_API_URL}/api/auth/login/`, {
+    data:{username:'smoke-manager', password:process.env.E2E_PASSWORD},
+  });
+  expect(oldLogin.status()).toBe(200);
+  const oldSession = await oldLogin.json();
+  await manager.getByRole('button', {name:'Нууц үг шинэчлэх', exact:true}).click();
+  await manager.getByLabel('Шинэ нууц үг', {exact:true}).fill('password');
+  await manager.getByLabel('Шинэ нууц үг давтах', {exact:true}).fill('password');
+  await manager.getByRole('button', {name:'Шинэ нууц үг хадгалах', exact:true}).click();
+  await expect(manager.getByRole('alert')).toContainText('Энэ нууц үг хэт түгээмэл байна.');
+  await expect(page.locator('main > [role="alert"]')).toHaveCount(0);
+  await manager.getByLabel('Шинэ нууц үг', {exact:true}).fill(process.env.E2E_PASSWORD+'-reset');
+  await manager.getByLabel('Шинэ нууц үг давтах', {exact:true}).fill(process.env.E2E_PASSWORD+'-reset');
+  await manager.getByRole('button', {name:'Шинэ нууц үг хадгалах', exact:true}).click();
+  await expect(manager.getByRole('status')).toContainText('Нууц үг шинэчлэгдлээ');
+  expect((await request.get(`${process.env.VITE_API_URL}/api/users/me/`, {
+    headers:{Authorization:`Bearer ${oldSession.access}`},
+  })).status()).toBe(401);
+  expect((await request.post(`${process.env.VITE_API_URL}/api/auth/refresh/`, {
+    data:{refresh:oldSession.refresh},
+  })).status()).toBe(401);
+  expect((await request.post(`${process.env.VITE_API_URL}/api/auth/login/`, {
+    data:{username:'smoke-manager', password:process.env.E2E_PASSWORD+'-reset'},
+  })).status()).toBe(200);
   await manager.getByRole("button", { name: "Идэвхгүй болгох" }).click();
   await expect(manager).toContainText("Идэвхгүй");
   await page.getByRole("button", { name: "Даалгавар", exact: true }).click();
@@ -129,6 +156,19 @@ test("real Django login → department/manager → task/quality → inactive fil
   const fileReady=page.waitForEvent('download');
   await page.getByRole('button',{name:'Тайлан татах',exact:true}).click();
   expect((await fileReady).suggestedFilename()).toMatch(/\.csv$/);
+  await exerciseTaskHandoff({page, request, browser, headers:authenticated});
+  // The real desktop bridge checkpoints and uploads without browser writes.
+  await expect.poll(async () => {
+    const response = await request.get(`${process.env.VITE_API_URL}/api/reports/monthly/`, {headers:authenticated});
+    expect(response.status()).toBe(200);
+    const data = await response.json();
+    return data.employees.find(row => row.username === process.env.E2E_USERNAME)?.launcher_seconds || 0;
+  }, {timeout:40000, intervals:[1000]}).toBeGreaterThan(0);
+  await page.getByRole('button', {name:'Тайлан',exact:true}).click();
+  const monthly = page.getByRole('region', {name:'Сарын ажилтны тайлан',exact:true});
+  await monthly.getByRole('button', {name:'Сарын тайлан шинэчлэх',exact:true}).click();
+  await expect(monthly).toContainText('handoff-first');
+  await expect(monthly).toContainText('Програмын цаг илгээсэн:');
   await page.getByRole("button", { name: "Гарах", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "WorkTrack — Нэвтрэх" }),
@@ -152,3 +192,68 @@ test("real Django login → department/manager → task/quality → inactive fil
   expect((await request.get(`${process.env.VITE_API_URL}/api/users/me/`,{headers:{Authorization:`Bearer ${previous.access}`}})).status()).toBe(401);
   expect((await request.post(`${process.env.VITE_API_URL}/api/auth/login/`,{data:{username:process.env.E2E_USERNAME,password:process.env.E2E_PASSWORD+'-new'}})).status()).toBe(200);
 });
+
+async function exerciseTaskHandoff({page, request, browser, headers}) {
+  const api = process.env.VITE_API_URL;
+  const departments = await (await request.get(`${api}/api/departments/`, {headers})).json();
+  const department = departments.results.find(row => row.name === 'UI Smoke Team').id;
+  const people = [], contexts = [];
+  try {
+    for (const name of ['first', 'second', 'third']) {
+      const created = await request.post(`${api}/api/users/`, {headers, data:{username:`handoff-${name}`,
+        first_name:name, password:process.env.E2E_PASSWORD, department, role:'EMPLOYEE'}});
+      expect(created.status()).toBe(201);
+      const user = await created.json();
+      const login = await request.post(`${api}/api/auth/login/`, {data:{username:user.username, password:process.env.E2E_PASSWORD}});
+      expect(login.status()).toBe(200);
+      const tokens = await login.json();
+      const context = await browser.newContext(); contexts.push(context);
+      await context.addInitScript(value => sessionStorage.setItem('worktrack-auth', JSON.stringify(value)), tokens);
+      const tab = await context.newPage();
+      people.push({user, tab, headers:{Authorization:`Bearer ${tokens.access}`}});
+    }
+    const [first, second, third] = people;
+    const created = await request.post(`${api}/api/tasks/`, {headers, data:{title:'Shared live handoff', employee:first.user.id}});
+    expect(created.status()).toBe(201);
+    const task = await created.json();
+    for (const person of people) {
+      await person.tab.goto(new URL('/', page.url()).href);
+      await person.tab.getByRole('button', {name:'Даалгавар', exact:true}).click();
+    }
+    const card = person => person.tab.getByLabel('Shared live handoff — оролцоо', {exact:true});
+    await card(first).getByRole('button', {name:'Ажиллаж эхлэх', exact:true}).click();
+    await expect(first.tab.getByRole('button', {name:'Даалгаврын цаг зогсоох', exact:true})).toBeVisible();
+    await card(first).getByLabel('Миний хийсэн хувь', {exact:false}).fill('35');
+    await card(first).getByRole('button', {name:'Хувь хадгалах', exact:true}).click();
+    await expect(card(first)).toContainText('Хийсэн хувь: 35%');
+    async function handoff(sender, receiver) {
+      await card(sender).getByRole('button', {name:'Шилжүүлэх хүсэлт', exact:true}).click();
+      await card(sender).getByLabel('Хүлээн авах гишүүн', {exact:true}).selectOption(String(receiver.user.id));
+      await card(sender).getByLabel('Шилжүүлэх тайлбар', {exact:true}).fill('Live handoff evidence');
+      await card(sender).getByRole('button', {name:'Хүсэлт илгээх', exact:true}).click();
+      await expect(card(sender)).toContainText('Хариу хүлээж байна');
+      const before = await (await request.get(`${api}/api/tasks/${task.id}/`, {headers})).json();
+      expect(before.employee).toBe(sender.user.id);
+      await receiver.tab.getByRole('button', {name:'Даалгавар шинэчлэх', exact:true}).click();
+      await card(receiver).getByRole('button', {name:'Хүлээн авах', exact:true}).click();
+      await expect(card(receiver).getByRole('button', {name:'Ажиллаж эхлэх', exact:true})).toBeVisible();
+    }
+    await handoff(first, second);
+    expect((await request.get(`${api}/api/tasks/work-session/`, {headers:first.headers}).then(r => r.json())).session).toBeNull();
+    await card(second).getByRole('button', {name:'Ажиллаж эхлэх', exact:true}).click();
+    await card(second).getByLabel('Миний хийсэн хувь', {exact:false}).fill('40');
+    await card(second).getByRole('button', {name:'Хувь хадгалах', exact:true}).click();
+    await expect(card(second)).toContainText('Хийсэн хувь: 40%');
+    await handoff(second, third);
+    await card(third).getByLabel('Миний хийсэн хувь', {exact:false}).fill('25');
+    await card(third).getByRole('button', {name:'Хувь хадгалах', exact:true}).click();
+    await expect(card(third)).toContainText('Оролцоо · нийт 100%');
+    await expect(card(third)).toContainText('Шилжүүлсэн: 2 / 2');
+    await expect(card(third).getByRole('button', {name:'Шилжүүлэх хүсэлт', exact:true})).toHaveCount(0);
+    const result = await (await request.get(`${api}/api/tasks/${task.id}/`, {headers})).json();
+    expect(result.employee).toBe(third.user.id);
+    expect(result.collaboration.contributions.map(row => Number(row.percent))).toEqual([35, 40, 25]);
+    expect(result.collaboration.total_seconds).toBeGreaterThanOrEqual(0);
+    expect(result.collaboration.transfers.filter(row => row.status === 'ACCEPTED')).toHaveLength(2);
+  } finally {await Promise.all(contexts.map(context => context.close()));}
+}

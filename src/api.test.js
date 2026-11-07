@@ -16,6 +16,18 @@ const reply = (data, status = 200) =>
     status,
     headers: { "Content-Type": "application/json" },
   });
+test("field validation keeps structured details for inline password feedback", async () => {
+  const client = await setup({access:'access', refresh:'refresh'});
+  const {passwordFeedback} = await import('./passwordFeedback.js');
+  const details = {password:['This password is too common.']};
+  globalThis.fetch = async () => reply(details, 400);
+  await assert.rejects(client.api('/api/users/2/', {method:'PATCH', body:JSON.stringify({password:'password'})}), error => {
+    assert.equal(error.status, 400);
+    assert.deepEqual(error.details, details);
+    assert.deepEqual(passwordFeedback(error), {field:'password', message:'Энэ нууц үг хэт түгээмэл байна. Таахад хэцүү, өөр нууц үг сонгоно уу.'});
+    return true;
+  });
+});
 test("login persists JWT and authenticated writes use it", async () => {
   const client = await setup();
   const calls = [];

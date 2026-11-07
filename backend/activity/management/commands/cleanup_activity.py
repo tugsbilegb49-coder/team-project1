@@ -46,7 +46,10 @@ class Command(BaseCommand):
                 camera.delete()
                 presence.delete()
                 for offset in range(0,len(ids),500):
-                    ComputerActivity.objects.filter(pk__in=ids[offset:offset+500]).delete()
+                    from users.monthly import archive_activity
+                    rows = list(ComputerActivity.objects.select_for_update().filter(pk__in=ids[offset:offset+500]))
+                    archive_activity(rows)
+                    ComputerActivity.objects.filter(pk__in=[row.pk for row in rows]).delete()
                 self.stdout.write('Activity deleted. Users, tasks, consent and stored scores retained.')
                 if options['backup']:
                     import re

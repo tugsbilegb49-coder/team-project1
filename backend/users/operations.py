@@ -193,12 +193,15 @@ class NotificationsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from workforce.models import Task
+        from workforce.models import Task, TaskTransfer
         users = visible_users(request.user)
         today, now = timezone.localdate(), timezone.now()
         tasks = Task.objects.filter(employee__in=users, due_date__lte=today).exclude(status=Task.Status.DONE).order_by('due_date', 'id')
         alerts = [{'id': f'task-{task.pk}', 'kind': 'task_overdue' if task.due_date < today else 'task_due_today',
                    'message': task.title, 'employee_id': task.employee_id, 'due_date': task.due_date} for task in tasks[:100]]
+        pending = TaskTransfer.objects.filter(to_employee=request.user, status='PENDING').select_related('task')
+        alerts[:0] = [{'id': f'transfer-{row.pk}', 'kind': 'task_transfer',
+                      'message': f'{row.task.title} · {row.from_name} → {row.to_name}'} for row in pending[:100]]
         beats = AgentHeartbeat.objects.select_related('device').filter(device__employee__in=users, device__enabled=True)
         for beat in beats.order_by('-seen_at')[:100]:
             kind = 'agent_offline' if (now-beat.seen_at).total_seconds() > HEARTBEAT_SECONDS else 'upload_error' if beat.error_code else 'queue_pending' if beat.queue_count else None

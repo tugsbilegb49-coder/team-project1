@@ -120,3 +120,19 @@ class AuditEntry(models.Model):
     class Meta:
         ordering = ['-created_at', '-id']
 
+
+class LauncherInterval(models.Model):
+    """Client-observed awake launcher time, not a measure of productive work."""
+    employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='launcher_intervals')
+    device = models.ForeignKey(Device, null=True, on_delete=models.SET_NULL, related_name='launcher_intervals')
+    event_id = models.UUIDField()
+    started_at = models.DateTimeField(db_index=True)
+    ended_at = models.DateTimeField(db_index=True)
+    received_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['employee', 'event_id'], name='unique_employee_launcher_interval'),
+            models.CheckConstraint(condition=models.Q(ended_at__gte=models.F('started_at')), name='launcher_interval_order'),
+        ]
+

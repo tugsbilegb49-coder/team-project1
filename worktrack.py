@@ -179,6 +179,7 @@ def stop_process(process):
 
 
 def main():
+    started_at = time.time()
     parser = argparse.ArgumentParser(description='WorkTrack: backend + frontend + agent нэг дор асаах')
     parser.add_argument('--web-only', action='store_true', help='Backend/frontend болон онооны scheduler асаах; agent/camera асаахгүй')
     parser.add_argument('--camera', action='store_true', help='Camera monitor мөн асаах')
@@ -208,7 +209,7 @@ def main():
                 print('Backend асаж дуустал хүлээнэ үү.')
             return
     processes, logs = [], []
-    desktop, controller = None, None
+    desktop, controller, usage = None, None, None
     shutdown = threading.Event()
 
     def start(name, command):
@@ -222,6 +223,8 @@ def main():
     try:
         existing_backend = backend_is_current()  # Refuse stale servers before running migrations.
         python, npm = bootstrap(interactive=not args.desktop)
+        from desktop.usage import LauncherUsage
+        usage = LauncherUsage(RUNTIME/'launcher-usage.sqlite3')
         if args.desktop:
             os.environ.setdefault('WORKTRACK_DESKTOP_URL','http://127.0.0.1:8766')
             if sys.platform=='darwin' and not (ROOT/'WorkTrack.app').exists():
@@ -237,7 +240,7 @@ def main():
         start('backup', [str(python), '-u', 'manage.py', 'run_backup_scheduler'])
         if args.desktop:
             from desktop.service import DesktopController, DesktopServer
-            controller=DesktopController(ROOT,API,python,shutdown.set)
+            controller=DesktopController(ROOT,API,python,shutdown.set,started_at=started_at,usage=usage)
             desktop=DesktopServer(('127.0.0.1',8766),controller,{WEB,'http://localhost:5173'})
             desktop.start()
         elif not args.web_only:
@@ -266,6 +269,7 @@ def main():
             stop_process(process)
         for log in logs:
             log.close()
+        if usage: usage.close()
         lock.close()
 
 

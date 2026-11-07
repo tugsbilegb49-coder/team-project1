@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import TaskCollaboration from './TaskCollaboration';
 import "./Tasks.css";
 
 function Tasks({
@@ -10,6 +11,11 @@ function Tasks({
   onQuality,
   canManage,
   busy,
+  user,
+  work,
+  onStart,
+  onAction,
+  onRefresh,
 }) {
   const activeMembers = members.filter((member) => member.is_active);
   const [title, setTitle] = useState("");
@@ -18,6 +24,11 @@ function Tasks({
   const [assignedTo, setAssignedTo] = useState("");
   const [filterMember, setFilterMember] = useState("Бүгд");
   const [filterStatus, setFilterStatus] = useState("Бүгд");
+  useEffect(() => {
+    if (busy) return;
+    const timer = setInterval(onRefresh, 15000);
+    return () => clearInterval(timer);
+  }, [busy, onRefresh]);
   async function addTask(e) {
     e.preventDefault();
 
@@ -59,6 +70,9 @@ function Tasks({
       <header className="tasks-header">
         <h1>Миний даалгавар</h1>
         <p>Өөрийн ажлуудаа нэг дор удирдаарай.</p>
+        <button type="button" disabled={busy} onClick={onRefresh}>Даалгавар шинэчлэх</button>
+        <p className="muted">Цаг бүртгэхдээ «Ажиллаж эхлэх» дарна. Нэг удаад нэг даалгаварт цаг бүртгэнэ.
+          Вебээ нээлттэй байлгана; холболт 90 секунд тасарвал цаг зогсоно. Жагсаалт 15 секунд тутам шинэчлэгдэнэ.</p>
       </header>
 
       {canManage && (
@@ -152,8 +166,8 @@ function Tasks({
           </p>
         ) : (
           filteredTasks.map((task) => (
-            <article className="task-item" key={task.id}>
-              <div>
+            <article className="task-item task-card" key={task.id}>
+              <div className="task-card-content">
                 <h3>{task.title}</h3>
 
                 {task.description && <p>{task.description}</p>}
@@ -162,7 +176,7 @@ function Tasks({
 
                 {task.assignedTo && <p>Хариуцах гишүүн: {task.assignedTo}</p>}
 
-                {canManage && (
+                {(task.can_manage ?? canManage) && (
                   <QualityEditor
                     key={`${task.id}:${task.quality_score ?? ""}`}
                     task={task}
@@ -173,7 +187,7 @@ function Tasks({
                 <label htmlFor={`task-status-${task.id}`}>Төлөв</label>
                 <select
                   id={`task-status-${task.id}`}
-                  disabled={!canManage || busy}
+                  disabled={!(task.can_manage ?? canManage) || busy}
                   value={task.status}
                   onChange={(e) => changeStatus(task.id, e.target.value)}
                 >
@@ -181,12 +195,13 @@ function Tasks({
                   <option value="Хийгдэж байна">Хийгдэж байна</option>
                   <option value="Дууссан">Дууссан</option>
                 </select>
+                <TaskCollaboration task={task} user={user} busy={busy} onAction={onAction} onStart={onStart} work={work}/>
               </div>
 
               <div className="task-actions">
                 <button
                   type="button"
-                  disabled={!canManage || busy}
+                  disabled={!(task.can_manage ?? canManage) || busy}
                   className="delete-button"
                   onClick={() => deleteTask(task.id)}
                 >

@@ -17,11 +17,12 @@ try {
   sessionStorage.removeItem("worktrack-auth");
 }
 export class APIError extends Error {
-  constructor(message, status = 0, retryAfter = null) {
+  constructor(message, status = 0, retryAfter = null, details = null) {
     super(message);
     this.name = "APIError";
     this.status = status;
     this.retryAfter = retryAfter;
+    this.details = details;
   }
 }
 export function hasAuth() {
@@ -86,7 +87,7 @@ async function readResponse(response) {
       response.status === 429 && wait
         ? `Хэт олон оролдлого хийсэн байна. ${wait} секунд хүлээгээд дахин оролдоно уу.`
         : errorMessage(data);
-    throw new APIError(message, response.status, wait);
+    throw new APIError(message, response.status, wait, data);
   }
   return data;
 }

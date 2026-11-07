@@ -9,7 +9,8 @@ User = get_user_model()
 
 class UserSerializer(serializers.ModelSerializer):
     is_admin = serializers.BooleanField(source="is_admin_role", read_only=True)
-    password = serializers.CharField(write_only=True, required=False, min_length=8)
+    password = serializers.CharField(write_only=True, required=False, min_length=8,
+                                     max_length=256, trim_whitespace=False)
     department_name = serializers.CharField(source="department.name", read_only=True)
 
     class Meta:

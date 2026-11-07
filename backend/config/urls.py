@@ -5,6 +5,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from users.auth import LoginView, LogoutView
 from users.health import HealthView
 from users.self_service import PasswordChangeView, DesktopLinkView, MyTodayView
+from users.monthly import LauncherUsageView, MonthlyReportView
 
 from activity.batch import ActivityBatchView
 from users.views import ConsentRecordViewSet, DeviceViewSet, UserViewSet
@@ -28,6 +29,8 @@ router.register('agent-status', AgentStatusViewSet, basename='agent-status')
 router.register('audit', AuditViewSet, basename='audit')
 
 urlpatterns = [
+    path('api/launcher-usage/', LauncherUsageView.as_view()),
+    path('api/reports/monthly/', MonthlyReportView.as_view()),
     path('api/me/today/', MyTodayView.as_view()),
     path('api/me/password/', PasswordChangeView.as_view()),
     path('api/desktop/link/', DesktopLinkView.as_view()),

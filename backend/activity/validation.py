@@ -1,6 +1,9 @@
 """Time validation shared by admin CRUD and both uploader protocols."""
 from datetime import timedelta
 import math
+import hashlib
+import json
+from datetime import timezone as utc
 
 from django.contrib.auth import get_user_model
 from django.db import connection, transaction
@@ -8,9 +11,18 @@ from django.db.models import F
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
-from .models import ComputerActivity
+from .models import ComputerActivity, ArchivedActivityReceipt
 
 MAX_SEGMENT_SECONDS = 3600
+
+
+def activity_fingerprint(data):
+    identity = [data['started_at'].astimezone(utc.utc).isoformat(), float(data['duration_seconds']).hex(), data['application']]
+    return hashlib.sha256(json.dumps(identity, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+
+
+def is_archived(employee, data):
+    return ArchivedActivityReceipt.objects.filter(employee=employee, fingerprint=activity_fingerprint(data)).exists()
 
 
 def interval(model, data):
@@ -70,6 +82,9 @@ def save_segment(model, employee, data, device=None):
     lock_employee(employee)
     interval(model, data)
     lookup = {'employee': employee, **data}
+    if model is ComputerActivity and is_archived(employee, data):
+        # Acknowledge a replay without recreating a raw row or incrementing totals.
+        return model(**lookup, device=device), False
     existing = model.objects.filter(**lookup).first()
     if existing is not None:
         return existing, False

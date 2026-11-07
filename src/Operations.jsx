@@ -37,6 +37,7 @@ function usePolling(path, user) {
 export function Notifications({user, navigate}) {
   const {data, error} = usePolling('/api/notifications/', user);
   const names = {task_overdue: 'Хугацаа хэтэрсэн', task_due_today: 'Өнөөдөр дуусах', agent_offline: 'Agent холболтгүй',
+    task_transfer: 'Даалгавар шилжүүлэх хүсэлт',
     upload_error: 'Илгээлтийн алдаа', queue_pending: 'Илгээх бүртгэл хүлээгдэж байна'};
   return <details className="notification-box">
     <summary>Мэдэгдэл ({data?.count ?? 0})</summary>
@@ -86,7 +87,8 @@ export function AgentStatus({user}) {
 export function AuditHistory({user}) {
   const [page, setPage] = useState(1);
   const {data, error} = usePolling(`/api/audit/?page=${page}`, user);
-  const actions = {create:'Үүсгэсэн',update:'Зассан',delete:'Устгасан',configure:'Тохируулсан',grant:'Зөвшөөрсөн',revoke:'Цуцалсан',export:'Экспортолсон',password_change:'Нууц үг сольсон',admin_change:'Admin-аар зассан'};
+  const actions = {create:'Үүсгэсэн',update:'Зассан',delete:'Устгасан',configure:'Тохируулсан',grant:'Зөвшөөрсөн',revoke:'Цуцалсан',export:'Экспортолсон',password_change:'Нууц үг сольсон',admin_change:'Admin-аар зассан',
+    transfer_request:'Шилжүүлэх хүсэлт',transfer_accept:'Шилжүүлгийг зөвшөөрсөн',transfer_decline:'Шилжүүлгээс татгалзсан',transfer_cancel:'Шилжүүлгийг цуцалсан',progress:'Гүйцэтгэлийн хувь',work_start:'Даалгаврын цаг эхлүүлсэн',work_stop:'Даалгаврын цаг зогсоосон'};
   const resources = {task:'Даалгавар',user:'Хэрэглэгч',consent:'Consent',report:'Тайлан',monitoring_settings:'Тохиргоо'};
   const fields = {employee_id:'Ажилтан',title:'Гарчиг',status:'Төлөв',due_date:'Дуусах хугацаа',quality_score:'Чанарын үнэлгээ',
     completed_at:'Дууссан цаг',role:'Эрх',username:'Хэрэглэгчийн нэр',is_active:'Идэвхтэй',department_id:'Хэлтэс',
