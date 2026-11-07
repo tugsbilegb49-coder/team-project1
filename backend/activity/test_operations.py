@@ -74,7 +74,8 @@ class BackupCycleTests(SimpleTestCase):
             copied = list(Path(copy).iterdir())
             self.assertEqual(len(copied), 1)
             self.assertEqual(copied[0].read_bytes(), b'backup-0')
-            self.assertEqual(copied[0].stat().st_mode & 0o777, 0o600)
+            if os.name != 'nt':  # Windows has no POSIX permission bits.
+                self.assertEqual(copied[0].stat().st_mode & 0o777, 0o600)
 
     def test_unmounted_copy_destination_does_not_prune_local_history(self):
         with TemporaryDirectory() as directory:

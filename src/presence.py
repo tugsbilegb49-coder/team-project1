@@ -263,7 +263,9 @@ class PresenceMonitor:
                     if cap is None:
                         continue
                     if not cap.isOpened():
-                        raise RuntimeError('Could not open webcam. Check camera permission and camera_index.')
+                        from src.camera_capture import unopened_camera_error
+
+                        raise unopened_camera_error()
                 ok, frame = cap.read()
                 if not ok:
                     raise RuntimeError('Camera frame could not be read.')

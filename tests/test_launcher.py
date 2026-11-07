@@ -27,7 +27,7 @@ class LauncherTests(unittest.TestCase):
         process.wait.assert_not_called()
         process.terminate.assert_not_called()
 
-    @unittest.skipIf(worktrack.os.name == 'nt', 'POSIX process groups')
+    @unittest.skipIf(worktrack.WINDOWS, 'POSIX process groups')
     def test_shutdown_signals_owned_group_then_waits(self):
         process = Mock(pid=1234)
         process.poll.return_value = None
@@ -36,7 +36,7 @@ class LauncherTests(unittest.TestCase):
         kill.assert_called_once_with(1234, signal.SIGINT)
         process.wait.assert_called_once_with(timeout=5)
 
-    @unittest.skipIf(worktrack.os.name == 'nt', 'POSIX process groups')
+    @unittest.skipIf(worktrack.WINDOWS, 'POSIX process groups')
     def test_unresponsive_group_is_killed_after_grace_period(self):
         process = Mock(pid=1234)
         process.poll.return_value = None
@@ -44,6 +44,83 @@ class LauncherTests(unittest.TestCase):
         with patch.object(worktrack.os, 'killpg') as kill:
             worktrack.stop_process(process)
         self.assertEqual(kill.call_args_list[1].args, (1234, signal.SIGKILL))
+
+    def test_windows_shutdown_sends_ctrl_break_to_own_group(self):
+        process = Mock(pid=1234)
+        process.poll.return_value = None
+        with (
+            patch.object(worktrack, 'WINDOWS', True),
+            patch.object(worktrack.signal, 'CTRL_BREAK_EVENT', 1, create=True),
+            patch.object(worktrack.subprocess, 'run') as run,
+        ):
+            worktrack.stop_process(process)
+        process.send_signal.assert_called_once_with(1)
+        process.wait.assert_called_once_with(timeout=5)
+        run.assert_not_called()
+
+    def test_windows_never_sends_ctrl_break_to_a_process_without_its_own_group(self):
+        process = Mock(spec=subprocess.Popen, pid=1234)  # A plain Popen, not started by spawn().
+        process.poll.return_value = None
+        with (
+            patch.object(worktrack, 'WINDOWS', True),
+            patch.object(worktrack.signal, 'CTRL_BREAK_EVENT', 1, create=True),
+            patch.object(worktrack.subprocess, 'run') as run,
+        ):
+            worktrack.stop_process(process)
+        process.send_signal.assert_not_called()
+        self.assertEqual(run.call_args.args[0][0], 'taskkill')
+
+    def test_spawned_children_are_marked_as_group_leaders(self):
+        with patch.object(worktrack.subprocess, 'Popen') as popen:
+            process = worktrack.spawn(['python'], cwd='.')
+        self.assertTrue(process.own_group)
+        self.assertEqual(popen.call_args.kwargs, {'cwd': '.', **worktrack.process_group()})
+
+    def test_windows_unresponsive_tree_is_killed_with_taskkill(self):
+        for failure in (subprocess.TimeoutExpired('agent', 5), OSError('no console')):
+            with self.subTest(failure=type(failure).__name__):
+                process = Mock(pid=1234)
+                process.poll.return_value = None
+                process.wait.side_effect = [failure, None] if isinstance(failure, subprocess.TimeoutExpired) else None
+                if isinstance(failure, OSError):
+                    process.send_signal.side_effect = failure
+                with (
+                    patch.object(worktrack, 'WINDOWS', True),
+                    patch.object(worktrack.signal, 'CTRL_BREAK_EVENT', 1, create=True),
+                    patch.object(worktrack.subprocess, 'run') as run,
+                ):
+                    worktrack.stop_process(process)
+                self.assertEqual(run.call_args.args[0], ['taskkill', '/PID', '1234', '/T', '/F'])
+                process.kill.assert_called_once()
+
+    def test_children_get_their_own_process_group(self):
+        with patch.object(worktrack, 'WINDOWS', False):
+            self.assertEqual(worktrack.process_group(), {'start_new_session': True})
+        with (
+            patch.object(worktrack, 'WINDOWS', True),
+            patch.object(worktrack.subprocess, 'CREATE_NEW_PROCESS_GROUP', 0x200, create=True),
+        ):
+            self.assertEqual(worktrack.process_group(), {'creationflags': 0x200})
+
+    def test_windows_continues_in_venv_python_without_exec(self):
+        with (
+            patch.object(worktrack, 'WINDOWS', True),
+            patch.object(
+                worktrack, 'VENV_PYTHON', Mock(exists=Mock(return_value=True), __str__=lambda _: 'venv-python')
+            ),
+            patch.object(worktrack.sys, 'prefix', '/system/python'),
+            patch.object(worktrack.sys, 'argv', ['worktrack.py', '--desktop']),
+            patch.object(worktrack.signal, 'signal'),
+            patch.object(worktrack.signal, 'SIGBREAK', 21, create=True),
+            patch.object(worktrack.subprocess, 'call', return_value=3) as call,
+            patch.object(worktrack.os, 'execv') as execv,
+        ):
+            with self.assertRaises(SystemExit) as stopped:
+                worktrack.ensure_venv()
+        self.assertEqual(stopped.exception.code, 3)
+        self.assertEqual(call.call_args.args[0][0], 'venv-python')
+        self.assertEqual(call.call_args.args[0][-1], '--desktop')
+        execv.assert_not_called()
 
     def test_web_only_launcher_also_starts_and_stops_scheduler(self):
         from pathlib import Path
@@ -56,7 +133,9 @@ class LauncherTests(unittest.TestCase):
             with (
                 patch.object(worktrack, 'RUNTIME', Path(directory)),
                 patch.object(worktrack.sys, 'argv', ['worktrack.py', '--web-only']),
-                patch.object(worktrack, 'bootstrap', return_value=(Path('/test/python'), 'npm')),
+                patch.object(worktrack, 'use_utf8'),
+                patch.object(worktrack, 'ensure_venv'),
+                patch.object(worktrack, 'bootstrap', return_value=(Path('/test/python'), 'node')),
                 patch.object(worktrack, 'check_http', return_value=True),
                 patch.object(worktrack, 'backend_is_current', return_value=True),
                 patch.object(worktrack.subprocess, 'Popen', return_value=process) as launch,

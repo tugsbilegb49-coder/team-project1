@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 import platform
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -729,6 +730,8 @@ def main() -> None:
     controls.add_argument('--grant-consent', metavar='POLICY', help='Record informed consent for a policy version')
     controls.add_argument('--revoke-consent', action='store_true', help='Revoke server-side consent and pause locally')
     args = parser.parse_args()
+    if hasattr(signal, 'SIGBREAK'):  # Windows: the launcher stops the agent with Ctrl+Break.
+        signal.signal(signal.SIGBREAK, signal.default_int_handler)
 
     try:
         if args.pause:

@@ -57,7 +57,7 @@ def test_presence_log_contains_only_metadata_and_is_private(tmp_path):
         rows = list(csv.DictReader(stream))
     assert set(rows[0]) == {'timestamp', 'present', 'confidence'}
     assert [r['present'] for r in rows] == ['1', '0']
-    assert path.stat().st_mode & 0o777 == 0o600
+    assert os.name == 'nt' or path.stat().st_mode & 0o777 == 0o600
 
 
 def test_corrupt_control_fails_closed(tmp_path):
@@ -209,7 +209,7 @@ def test_rotated_csv_files_stay_bounded_readable_and_private(tmp_path):
     assert len(files) == 3
     for file in files:
         assert file.stat().st_size <= 256
-        assert file.stat().st_mode & 0o777 == 0o600
+        assert os.name == 'nt' or file.stat().st_mode & 0o777 == 0o600
         with file.open() as stream:
             reader = csv.DictReader(stream)
             assert reader.fieldnames == ['timestamp', 'present', 'confidence']

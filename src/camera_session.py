@@ -7,7 +7,11 @@ import time
 
 def locally_paused(config):
     try:
-        return bool(json.loads(Path(config.get('control_file', 'agent/control.json')).read_text()).get('paused', False))
+        return bool(
+            json.loads(Path(config.get('control_file', 'agent/control.json')).read_text(encoding='utf-8')).get(
+                'paused', False
+            )
+        )
     except FileNotFoundError:
         return False
     except (OSError, ValueError, AttributeError):

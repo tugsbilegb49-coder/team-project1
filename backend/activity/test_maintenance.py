@@ -1,6 +1,7 @@
 from contextlib import closing
 from datetime import timedelta
 from io import StringIO
+import os
 from pathlib import Path
 import sqlite3
 from tempfile import TemporaryDirectory
@@ -38,7 +39,8 @@ class SQLiteBackupTests(SimpleTestCase):
 
     def test_backup_restores_rows_and_preserves_pre_restore_database(self):
         backup = create_backup(self.root / 'copy.sqlite3')
-        self.assertEqual(backup.stat().st_mode & 0o777, 0o600)
+        if os.name != 'nt':  # Windows has no POSIX permission bits.
+            self.assertEqual(backup.stat().st_mode & 0o777, 0o600)
         with closing(sqlite3.connect(self.live)) as db:
             db.execute("UPDATE users_user SET name='changed'")
             db.commit()

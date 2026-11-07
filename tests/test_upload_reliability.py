@@ -1,4 +1,5 @@
 import json
+import os
 import multiprocessing
 import threading
 import time
@@ -31,7 +32,7 @@ def test_rejected_head_is_quarantined_and_valid_rows_continue(tmp_path):
     assert [call.args[0]['id'] for call in client.ingest.call_args_list] == [1, 2]
     rejected = json.loads((tmp_path / 'pending.rejected.json').read_text())
     assert rejected[0]['status'] == 400 and rejected[0]['event'] == {'id': 1}
-    assert (tmp_path / 'pending.rejected.json').stat().st_mode & 0o777 == 0o600
+    assert os.name == 'nt' or (tmp_path / 'pending.rejected.json').stat().st_mode & 0o777 == 0o600
 
 
 @pytest.mark.parametrize(
@@ -145,7 +146,7 @@ def test_concurrent_processes_write_complete_private_token_files(tmp_path):
                 process.terminate()
                 process.join()
     assert read_tokens(path)['refresh'] == 'shared-refresh'
-    assert path.stat().st_mode & 0o777 == 0o600
+    assert os.name == 'nt' or path.stat().st_mode & 0o777 == 0o600
     assert not list(tmp_path.glob('*.tmp'))
 
 
@@ -162,3 +163,26 @@ def test_old_refresh_cannot_resurrect_logout_or_overwrite_new_login(tmp_path):
     with pytest.raises(StaleTokenError):
         remove_tokens(path, 'old-refresh')
     assert read_tokens(path) == {'access': 'new', 'refresh': 'new-refresh'}
+
+
+def test_windows_replace_retries_while_a_reader_holds_the_file(tmp_path):
+    from agent import token_store
+
+    path = tmp_path / 'config.json'
+    real_replace = os.replace
+    attempts = []
+
+    def flaky_replace(source, destination):
+        attempts.append(destination)
+        if len(attempts) < 3:
+            raise PermissionError('[WinError 5] Access is denied')
+        real_replace(source, destination)
+
+    with (
+        patch.object(token_store, 'WINDOWS', True),
+        patch.object(token_store.os, 'replace', side_effect=flaky_replace),
+        patch.object(token_store.time, 'sleep'),
+    ):
+        token_store.atomic_json_write(path, {'device_name': 'Миний компьютер'})
+    assert len(attempts) == 3
+    assert json.loads(path.read_text(encoding='utf-8')) == {'device_name': 'Миний компьютер'}

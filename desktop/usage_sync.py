@@ -38,7 +38,7 @@ class UsageSync:
             try:
                 client = ApiClient(controller.api, controller.tokens)
                 user = client.get('/api/users/me/')
-                config = json.loads(controller.config.read_text())
+                config = json.loads(controller.config.read_text(encoding='utf-8'))
                 if user['id'] != controller.owner['user_id'] or config.get('api_url', '').rstrip(
                     '/'
                 ) != controller.api.rstrip('/'):

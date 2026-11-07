@@ -10,8 +10,8 @@ class AlreadyRunningError(RuntimeError):
 
 
 @contextmanager
-def collector_lock(kind):
-    directory = Path(__file__).resolve().parents[1] / '.runtime'
+def collector_lock(kind, directory=None):
+    directory = Path(directory) if directory else Path(__file__).resolve().parents[1] / '.runtime'
     directory.mkdir(exist_ok=True)
     path = directory / (kind + '.lock')
     with path.open('a+b') as stream:

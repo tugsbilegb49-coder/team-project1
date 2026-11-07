@@ -3,6 +3,7 @@ import { api, clearAuth } from './api';
 import { LauncherClock, TaskWorkClock } from './WorkClocks';
 import { durationText, sessionTiming, useTick } from './taskTime';
 import { usePolling } from './usePolling';
+import { launcherName } from './platform';
 
 const DEFAULT_DEVICE_NAME = 'Миний компьютер';
 
@@ -14,7 +15,13 @@ const CAMERA_ERRORS = {
   startup: 'Camera апп эхэлсэнгүй. macOS-ийн зөвшөөрлийн цонхыг шалгаад дахин асаана уу.',
 };
 
+// Windows-д тусдаа зөвшөөрлийн цонх гардаггүй; camera зүгээр л нээгдэхгүй.
+const WINDOWS_CAMERA_PERMISSION =
+  'Camera нээгдсэнгүй. Windows Settings → Privacy & security → Camera дээр "Camera access" болон "Let desktop apps access your camera"-г асаагаад дахин асаана уу. Өөр програм camera ашиглаж байвал хаана уу.';
+
 function deviceErrorMessage(state) {
+  if (state.camera_error === 'permission' && state.platform === 'Windows')
+    return WINDOWS_CAMERA_PERMISSION;
   if (CAMERA_ERRORS[state.camera_error]) return CAMERA_ERRORS[state.camera_error];
   const stopped = state.errors.includes('agent') ? 'Agent' : 'Camera';
   return `${stopped} зогссон байна. Зөвшөөрөл/нэвтрэлтээ шалгаад дахин холбоно уу.`;
@@ -253,7 +260,7 @@ export function DesktopPanel({ user, tasks, work, workday, busy }) {
         </span>
       </div>
       {closed ? (
-        <p role="status">WorkTrack хаагдаж байна. Дараа WorkTrack.app-аа нээгээрэй.</p>
+        <p role="status">WorkTrack хаагдаж байна. Дараа {launcherName}-аа нээгээрэй.</p>
       ) : (
         <>
           {error && <p role="alert">{error}</p>}

@@ -1,3 +1,5 @@
+import { launcherChoices } from './platform.js';
+
 const base = (import.meta.env?.VITE_API_URL || '').replace(/\/$/, '');
 let tokens = null;
 let version = 0;
@@ -170,10 +172,7 @@ export async function desktop(action, options = {}) {
       error.name !== 'AbortError' &&
       (!error.status || error.status === 200 || error.status === 404 || error.status >= 500)
     )
-      throw new APIError(
-        'WorkTrack.app эсвэл Start WorkTrack.command-аа нээгээд дахин холбоно уу.',
-        error.status,
-      );
+      throw new APIError(`${launcherChoices}-аа нээгээд дахин холбоно уу.`, error.status);
     throw error;
   }
 }

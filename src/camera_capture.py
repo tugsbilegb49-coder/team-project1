@@ -2,6 +2,11 @@
 
 import sys
 
+WINDOWS_CAMERA_HELP = (
+    'Camera нээгдсэнгүй. Windows Settings → Privacy & security → Camera дээр "Camera access" болон '
+    '"Let desktop apps access your camera"-г асаана уу. Өөр програм camera ашиглаж байвал хаана уу.'
+)
+
 
 class CameraPermissionError(RuntimeError):
     pass
@@ -18,6 +23,13 @@ def check_session():
         return
     if not host.session_active():
         raise CameraSessionCancelled('Camera session cancelled.')
+
+
+def unopened_camera_error():
+    """Windows reports a privacy block only as a camera that does not open; say how to allow it."""
+    if sys.platform == 'win32':
+        return CameraPermissionError(WINDOWS_CAMERA_HELP)
+    return RuntimeError('Could not open webcam. Check camera permission and camera_index.')
 
 
 def open_camera(index, permitted=None):

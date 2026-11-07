@@ -54,7 +54,7 @@ class DesktopController:
         self.install_process = None
         self.closed = False
         try:
-            self.owner = json.loads(self.metadata.read_text())
+            self.owner = json.loads(self.metadata.read_text(encoding='utf-8'))
         except (OSError, ValueError):
             self.owner = None
         from desktop.usage_sync import UsageSync
@@ -97,6 +97,7 @@ class DesktopController:
         camera_code = camera.poll() if linked and camera is not None else None
         return {
             'available': True,
+            'platform': platform.system(),
             'linked': linked,
             'launcher_started_at': self.started_at,
             'launcher_uptime_seconds': max(0, time.time() - self.started_at),
@@ -127,15 +128,16 @@ class DesktopController:
         }
 
     def _spawn(self, name, command):
+        from worktrack import spawn
+
         stream = (self.runtime / (name + '.log')).open('a')
         self.logs.append(stream)
-        return subprocess.Popen(
+        return spawn(
             command,
             cwd=self.root,
             stdin=subprocess.DEVNULL,
             stdout=stream,
             stderr=subprocess.STDOUT,
-            start_new_session=os.name != 'nt',
             env={**os.environ, 'YOLO_CONFIG_DIR': str(self.runtime / 'ultralytics')},
         )
 
@@ -203,9 +205,9 @@ class DesktopController:
                 )
                 save_tokens(self.tokens, {'access': linked['access'], 'refresh': linked['refresh']})
                 try:
-                    config = json.loads(self.config.read_text())
+                    config = json.loads(self.config.read_text(encoding='utf-8'))
                 except (OSError, ValueError):
-                    config = json.loads((self.root / 'agent/config.example.json').read_text())
+                    config = json.loads((self.root / 'agent/config.example.json').read_text(encoding='utf-8'))
                 config.update(api_url=self.api, username=linked['username'], device_id=linked['device_id'])
                 atomic_json_write(self.config, config)
                 self.owner = {'user_id': linked['user_id'], 'device_name': name.strip()}

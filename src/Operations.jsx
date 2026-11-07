@@ -146,7 +146,11 @@ export function AgentStatus({ user }) {
             {!device.enabled ? ' · Идэвхгүй' : ''}
           </p>
           {!device.agents.length && (
-            <p>Agent төлөв илгээгээгүй. Start WorkTrack.command-аар асаана уу.</p>
+            <p>
+              Agent төлөв илгээгээгүй.{' '}
+              {device.platform === 'Windows' ? 'Start WorkTrack.bat' : 'Start WorkTrack.command'}
+              -аар асаана уу.
+            </p>
           )}
           {device.agents.map((agent) => (
             <div key={agent.kind} aria-label={`${device.name} ${agent.kind}`}>

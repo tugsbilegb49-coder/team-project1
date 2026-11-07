@@ -2,11 +2,14 @@
 """Django's command-line utility for administrative tasks."""
 
 import os
+import signal
 import sys
 
 
 def main():
     """Run administrative tasks."""
+    if hasattr(signal, 'SIGBREAK'):  # Windows: the launcher stops children with Ctrl+Break.
+        signal.signal(signal.SIGBREAK, signal.default_int_handler)
     sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parent / 'backend'))
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
     try:

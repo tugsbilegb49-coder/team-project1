@@ -178,3 +178,14 @@ def test_native_session_check_fails_closed_when_wrapper_has_cancelled():
     ):
         with pytest.raises(capture.CameraSessionCancelled):
             capture.check_session()
+
+
+def test_unopened_windows_camera_explains_the_privacy_setting():
+    from src.camera_capture import unopened_camera_error
+
+    with patch('src.camera_capture.sys.platform', 'win32'):
+        error = unopened_camera_error()
+    assert isinstance(error, CameraPermissionError)  # main.py turns this into exit 77 ("permission").
+    assert 'Let desktop apps access your camera' in str(error)
+    with patch('src.camera_capture.sys.platform', 'darwin'):
+        assert not isinstance(unopened_camera_error(), CameraPermissionError)

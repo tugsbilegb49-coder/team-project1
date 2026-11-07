@@ -77,13 +77,14 @@ def main():
         def synthetic_collector(name, command):
             if name not in ('agent', 'camera'):
                 raise RuntimeError('Dependency installation is outside this test.')
-            return subprocess.Popen(
+            from worktrack import spawn
+
+            return spawn(
                 [sys.executable, '-c', 'import time; time.sleep(600)'],
                 cwd=temp,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                start_new_session=True,
             )
 
         control = DesktopController(temp, env['VITE_API_URL'], sys.executable, lambda: None, spawn=synthetic_collector)
@@ -110,7 +111,10 @@ def main():
                         time.sleep(0.1)
                 result = subprocess.run([npm, 'run', 'test:e2e', '--', 'e2e/live.spec.js'], cwd=ROOT, env=env)
                 if result.returncode:
-                    print('Temporary backend log:', (temp / 'backend.log').read_text()[-3000:])
+                    print(
+                        'Temporary backend log:',
+                        (temp / 'backend.log').read_text(encoding='utf-8', errors='replace')[-3000:],
+                    )
                 else:
                     manage(
                         'shell',

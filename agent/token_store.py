@@ -7,6 +7,8 @@ from pathlib import Path
 import tempfile
 import time
 
+WINDOWS = os.name == 'nt'
+
 
 class StaleTokenError(RuntimeError):
     pass
@@ -22,9 +24,21 @@ def atomic_json_write(path, value):
             json.dump(value, stream, ensure_ascii=False)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(name, path)
+        _replace(name, path)
     finally:
         Path(name).unlink(missing_ok=True)
+
+
+def _replace(source, destination, attempts=40):
+    """os.replace that tolerates Windows briefly locking a file another process is reading."""
+    for attempt in range(attempts):
+        try:
+            os.replace(source, destination)
+            return
+        except PermissionError:
+            if not WINDOWS or attempt == attempts - 1:
+                raise
+            time.sleep(0.05)
 
 
 def read_tokens(path):

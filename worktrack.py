@@ -2,6 +2,7 @@
 """Interactive local launcher for the WorkTrack web app and monitoring agent."""
 
 import argparse
+from contextlib import ExitStack
 import errno
 import hashlib
 import json
@@ -19,10 +20,58 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 import webbrowser
 
+if sys.version_info < (3, 10):
+    sys.exit('WorkTrack-д Python 3.10 буюу шинэ хувилбар хэрэгтэй (3.12 зөвлөнө): https://www.python.org/downloads/')
+
 ROOT = Path(__file__).resolve().parent
 API = 'http://127.0.0.1:8000'
 WEB = 'http://127.0.0.1:5173'
 RUNTIME = ROOT / '.runtime'
+WINDOWS = os.name == 'nt'
+VENV_PYTHON = ROOT / '.venv' / ('Scripts/python.exe' if WINDOWS else 'bin/python')
+LAUNCHER = 'Start WorkTrack.bat' if WINDOWS else 'Start WorkTrack.command'
+
+
+def use_utf8():
+    """Keep Cyrillic output working on Windows code pages (cp1252/cp866) and in log files."""
+    os.environ.setdefault('PYTHONUTF8', '1')  # Every child process inherits UTF-8 mode.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            if (stream.encoding or '').lower().replace('-', '') != 'utf8':
+                stream.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, ValueError):
+            pass
+
+
+def process_group():
+    """Popen options giving a child its own process group, so stop_process can stop it with its children."""
+    if WINDOWS:
+        return {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {'start_new_session': True}
+
+
+def spawn(command, **options):
+    """Start a child in its own process group; stop it later with stop_process."""
+    process = subprocess.Popen(command, **options, **process_group())
+    process.own_group = True
+    return process
+
+
+def ensure_venv():
+    """Create .venv on the first run and continue the launcher with its Python."""
+    if not VENV_PYTHON.exists():
+        print('Python virtual environment үүсгэж байна…', flush=True)
+        subprocess.run([sys.executable, '-m', 'venv', str(ROOT / '.venv')], check=True)
+    if Path(sys.prefix).resolve() == (ROOT / '.venv').resolve():
+        return
+    command = [str(VENV_PYTHON), str(Path(__file__).resolve()), *sys.argv[1:]]
+    if not WINDOWS:
+        os.execv(command[0], command)
+    # Windows has no exec. Run the venv launcher in this console; it handles Ctrl+C/Ctrl+Break
+    # itself, while this process only waits and passes its exit code on.
+    for name in ('SIGINT', 'SIGBREAK'):
+        signal.signal(getattr(signal, name), signal.SIG_IGN)
+    raise SystemExit(subprocess.call(command))
 
 
 def open_browser():
@@ -77,7 +126,7 @@ def backend_is_current():
         or data.get('workspace_id') != workspace_id(ROOT / 'backend')
     ):
         raise RuntimeError(
-            'Ажиллаж буй backend хуучин эсвэл өөр project-ийнх байна. Тэр backend/launcher цонхыг Ctrl+C-ээр зогсоогоод Start WorkTrack.command-ийг дахин нээнэ үү.'
+            f'Ажиллаж буй backend хуучин эсвэл өөр project-ийнх байна. Тэр backend/launcher цонхыг Ctrl+C-ээр зогсоогоод {LAUNCHER}-ийг дахин нээнэ үү.'
         )
     return True
 
@@ -94,15 +143,10 @@ def wait_ready(url, process, timeout=30):
 
 
 def bootstrap(interactive=True):
-    python = ROOT / '.venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
-    if not python.exists():
-        print('Python virtual environment үүсгэж байна…', flush=True)
-        subprocess.run([sys.executable, '-m', 'venv', str(ROOT / '.venv')], check=True)
-    if Path(sys.prefix).resolve() != (ROOT / '.venv').resolve():
-        os.execv(str(python), [str(python), str(Path(__file__).resolve()), *sys.argv[1:]])
+    python = VENV_PYTHON
     state_file = RUNTIME / 'dependencies.json'
     try:
-        state = json.loads(state_file.read_text())
+        state = json.loads(state_file.read_text(encoding='utf-8'))
     except (OSError, ValueError):
         state = {}
 
@@ -123,9 +167,9 @@ def bootstrap(interactive=True):
     )
     if probe.returncode or state.get('backend') != backend_digest:
         subprocess.run([str(python), '-m', 'pip', 'install', '-r', 'backend/requirements.txt'], cwd=ROOT, check=True)
-    npm = shutil.which('npm')
-    if not npm:
-        raise RuntimeError('Node.js/npm суулгаад Start WorkTrack.command-ийг дахин нээнэ үү.')
+    npm, node = shutil.which('npm'), shutil.which('node')
+    if not npm or not node:
+        raise RuntimeError(f'Node.js/npm суулгаад {LAUNCHER}-ийг дахин нээнэ үү.')
     frontend_digest = digest(['package.json', 'package-lock.json'])
     if not (ROOT / 'node_modules/vite/bin/vite.js').exists() or state.get('frontend') != frontend_digest:
         if check_http(WEB):
@@ -138,8 +182,8 @@ def bootstrap(interactive=True):
     atomic_json_write(state_file, {'backend': backend_digest, 'frontend': frontend_digest})
     env = ROOT / 'backend/.env'
     if not env.exists():
-        sample = (ROOT / 'backend/.env.example').read_text()
-        env.write_text(sample.replace('replace-with-a-long-random-secret', secrets.token_urlsafe(48)))
+        sample = (ROOT / 'backend/.env.example').read_text(encoding='utf-8')
+        env.write_text(sample.replace('replace-with-a-long-random-secret', secrets.token_urlsafe(48)), encoding='utf-8')
         env.chmod(0o600)
     subprocess.run([str(python), 'manage.py', 'migrate', '--noinput'], cwd=ROOT, check=True)
     probe = subprocess.run(
@@ -158,11 +202,11 @@ def bootstrap(interactive=True):
     if probe.stdout.strip().splitlines()[-1] != 'True':
         if not interactive:
             raise RuntimeError(
-                'Эхний admin үүсээгүй байна. Нэг удаа .venv/bin/python manage.py createsuperuser ажиллуулаад WorkTrack-аа дахин нээнэ үү.'
+                f'Эхний admin үүсээгүй байна. Нэг удаа {VENV_PYTHON.relative_to(ROOT)} manage.py createsuperuser ажиллуулаад WorkTrack-аа дахин нээнэ үү.'
             )
         print('Эхний admin account үүсгэнэ үү. Нууц үг бичихэд дэлгэц дээр харагдахгүй.', flush=True)
         subprocess.run([str(python), 'manage.py', 'createsuperuser'], cwd=ROOT, check=True)
-    return python, npm
+    return python, node
 
 
 def setup_agent():
@@ -213,14 +257,22 @@ def stop_process(process):
     if process.poll() is not None:
         return
     try:
-        if os.name == 'nt':
-            process.terminate()
-        else:
+        if not WINDOWS:
             os.killpg(process.pid, signal.SIGINT)
+        elif getattr(process, 'own_group', False):
+            # Ctrl+Break for that process group only; Python children turn it into
+            # KeyboardInterrupt and save their state, like SIGINT on macOS/Linux.
+            process.send_signal(signal.CTRL_BREAK_EVENT)
+        else:
+            # Windows delivers Ctrl+Break for a pid that leads no group to the whole console,
+            # this launcher included, so such a process is only force-stopped.
+            raise OSError('Not started by spawn(); no own process group.')
         process.wait(timeout=5)
-    except (ProcessLookupError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired):
         if process.poll() is None:
-            if os.name == 'nt':
+            if WINDOWS:
+                # /T also ends grandchildren, e.g. pip's build steps.
+                subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'], capture_output=True, check=False)
                 process.kill()
             else:
                 os.killpg(process.pid, signal.SIGKILL)
@@ -238,29 +290,31 @@ def main():
     parser.add_argument('--no-browser', action='store_true', help='Browser автоматаар нээхгүй')
     parser.add_argument('--app-id', help=argparse.SUPPRESS)
     args = parser.parse_args()
+    use_utf8()
+    ensure_venv()
 
     def interrupted(signum, frame):
         raise KeyboardInterrupt
 
     signal.signal(signal.SIGTERM, interrupted)
-    if hasattr(signal, 'SIGHUP'):
-        signal.signal(signal.SIGHUP, interrupted)
+    for name in ('SIGHUP', 'SIGBREAK'):  # Terminal closed (macOS/Linux); Ctrl+Break (Windows).
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), interrupted)
     os.chdir(ROOT)
     RUNTIME.mkdir(exist_ok=True)
-    # Prevent repeated double clicks from starting duplicate collectors.
-    lock = (RUNTIME / 'launcher.lock').open('a+')
-    if os.name != 'nt':
-        import fcntl
+    from agent.process_lock import AlreadyRunningError, collector_lock
 
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            print('WorkTrack launcher аль хэдийн ажиллаж байна.')
-            if backend_is_current():
-                open_browser()
-            else:
-                print('Backend асаж дуустал хүлээнэ үү.')
-            return
+    instance = ExitStack()
+    try:
+        # Prevent repeated double clicks from starting duplicate collectors.
+        instance.enter_context(collector_lock('launcher', RUNTIME))
+    except AlreadyRunningError:
+        print('WorkTrack launcher аль хэдийн ажиллаж байна.')
+        if not backend_is_current():
+            print('Backend асаж дуустал хүлээнэ үү.')
+        elif not args.no_browser:
+            open_browser()
+        return
     processes, logs = [], []
     desktop, controller, usage = None, None, None
     shutdown = threading.Event()
@@ -268,15 +322,13 @@ def main():
     def start(name, command):
         log = (RUNTIME / f'{name}.log').open('a')
         logs.append(log)
-        process = subprocess.Popen(
-            command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, start_new_session=os.name != 'nt'
-        )
+        process = spawn(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
         processes.append((name, process))
         return process
 
     try:
         existing_backend = backend_is_current()  # Refuse stale servers before running migrations.
-        python, npm = bootstrap(interactive=not args.desktop)
+        python, node = bootstrap(interactive=not args.desktop)
         from desktop.usage import LauncherUsage
 
         usage = LauncherUsage(RUNTIME / 'launcher-usage.sqlite3')
@@ -296,7 +348,11 @@ def main():
         if not check_http(WEB):
             wait_ready(
                 WEB,
-                start('frontend', [npm, 'run', 'dev', '--', '--host', '127.0.0.1', '--port', '5173', '--strictPort']),
+                # Run vite with node directly: no npm/cmd.exe wrapper that could outlive a stop on Windows.
+                start(
+                    'frontend',
+                    [node, 'node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', '5173', '--strictPort'],
+                ),
             )
         start('scheduler', [str(python), '-u', 'manage.py', 'run_score_scheduler'])
         start('backup', [str(python), '-u', 'manage.py', 'run_backup_scheduler'])
@@ -342,7 +398,7 @@ def main():
             log.close()
         if usage:
             usage.close()
-        lock.close()
+        instance.close()
 
 
 if __name__ == '__main__':

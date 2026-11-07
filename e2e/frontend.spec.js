@@ -649,7 +649,25 @@ test('today controls fit a small screen and unavailable local service offers ret
   );
   await page.reload();
   await expect(page.getByRole('button', { name: 'Дахин холбогдох', exact: true })).toBeVisible();
-  await expect(page.getByRole('alert')).toContainText('WorkTrack.app');
+  await expect(page.getByRole('alert')).toContainText(
+    process.platform === 'win32' ? 'Start WorkTrack.bat' : 'WorkTrack.app',
+  );
+});
+
+test('camera permission failures explain the Windows privacy setting', async ({ page }) => {
+  const state = await mockApp(page);
+  Object.assign(state.desktop, {
+    platform: 'Windows',
+    linked: true,
+    username: 'admin',
+    device_name: 'QA PC',
+    errors: ['camera'],
+    camera_error: 'permission',
+  });
+  await page.goto('/');
+  await expect(page.getByRole('alert')).toContainText(
+    'Windows Settings → Privacy & security → Camera',
+  );
 });
 
 test('camera permission failures explain the macOS setting', async ({ page }) => {

@@ -379,3 +379,17 @@ class QueueLimitTests(unittest.TestCase):
                     self.assertFalse(uploader.flush(1))
                 uploader.close()
             self.assertEqual(len(uploader._read_queue()), 2)
+
+
+@unittest.skipUnless(sys.platform == 'win32', 'Windows API')
+class WindowsApiTests(unittest.TestCase):
+    def test_win32_idle_time_and_foreground_lookup_work(self):
+        import main as agent
+
+        self.assertGreaterEqual(agent.idle_seconds(), 0)
+        try:
+            name = agent.foreground_application()
+        except agent.AgentError:
+            return  # A headless CI desktop may have no foreground window; the ctypes calls still ran.
+        self.assertTrue(name)
+        self.assertNotIn('\\', name)  # Executable name only, never a path or window title.

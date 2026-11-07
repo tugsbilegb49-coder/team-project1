@@ -22,6 +22,10 @@ def main():
     )
     parser.add_argument('--seconds', type=float, help='Stop the demo after this many seconds.')
     args = parser.parse_args()
+    import signal
+
+    if hasattr(signal, 'SIGBREAK'):  # Windows: the launcher stops children with Ctrl+Break.
+        signal.signal(signal.SIGBREAK, signal.default_int_handler)
 
     import math
     import yaml
