@@ -12,6 +12,7 @@ import platform
 import secrets
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -23,10 +24,26 @@ import webbrowser
 if sys.version_info < (3, 10):
     sys.exit('WorkTrack-д Python 3.10 буюу шинэ хувилбар хэрэгтэй (3.12 зөвлөнө): https://www.python.org/downloads/')
 
-ROOT = Path(__file__).resolve().parent
+FROZEN = getattr(sys, 'frozen', False)  # The installer build: a team computer only (see packaging/).
+
+
+def default_data_home():
+    if sys.platform == 'win32':
+        return Path(os.environ.get('LOCALAPPDATA') or Path.home() / 'AppData' / 'Local') / 'WorkTrack'
+    if sys.platform == 'darwin':
+        return Path.home() / 'Library' / 'Application Support' / 'WorkTrack'
+    return Path(os.environ.get('XDG_DATA_HOME') or Path.home() / '.local' / 'share') / 'WorkTrack'
+
+
+if FROZEN:  # The program folder is read-only once installed; keep data in the user's profile.
+    os.environ.setdefault('WORKTRACK_HOME', str(default_data_home()))
+
+ROOT = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent))
 API = 'http://127.0.0.1:8000'
 WEB = 'http://127.0.0.1:5173'
-RUNTIME = ROOT / '.runtime'
+# User data; an installed copy points WORKTRACK_HOME at the user's profile (see agent/main.py).
+HOME = Path(os.environ.get('WORKTRACK_HOME') or ROOT)
+RUNTIME = HOME / '.runtime'
 WINDOWS = os.name == 'nt'
 VENV_PYTHON = ROOT / '.venv' / ('Scripts/python.exe' if WINDOWS else 'bin/python')
 LAUNCHER = 'Start WorkTrack.bat' if WINDOWS else 'Start WorkTrack.command'
@@ -72,6 +89,100 @@ def ensure_venv():
     for name in ('SIGINT', 'SIGBREAK'):
         signal.signal(getattr(signal, name), signal.SIG_IGN)
     raise SystemExit(subprocess.call(command))
+
+
+def lan_addresses():
+    """IPv4 addresses of this computer that others on the office network can reach."""
+    found = []
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect(('192.0.2.1', 9))  # Picks the outgoing interface; UDP connect sends nothing.
+            found.append(probe.getsockname()[0])
+    except OSError:
+        pass
+    try:
+        found += socket.gethostbyname_ex(socket.gethostname())[2]
+    except OSError:
+        pass
+    return [address for address in dict.fromkeys(found) if not address.startswith(('127.', '0.'))]
+
+
+def load_server():
+    """The organisation's server this computer reports to (team mode), or None."""
+    try:
+        return json.loads((RUNTIME / 'server.json').read_text(encoding='utf-8'))['server']
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def save_server(url):
+    from agent.token_store import atomic_json_write
+
+    atomic_json_write(RUNTIME / 'server.json', {'server': url})
+
+
+def build_frontend():
+    """A team computer serves dist/ itself; rebuild it when the web app's sources changed."""
+    built = ROOT / 'dist' / 'index.html'
+    sources = [ROOT / 'index.html', ROOT / 'package-lock.json', ROOT / 'vite.config.js']
+    sources += [path for folder in ('src', 'public') for path in (ROOT / folder).rglob('*') if path.is_file()]
+    if built.exists() and built.stat().st_mtime >= max(path.stat().st_mtime for path in sources if path.exists()):
+        return
+    npm = shutil.which('npm')
+    if not npm:
+        raise RuntimeError(f'Вэб хуудсыг бэлдэхэд Node.js хэрэгтэй. Node.js суулгаад {LAUNCHER}-ийг дахин нээнэ үү.')
+    print('Вэб хуудсыг бэлдэж байна…', flush=True)
+    if not (ROOT / 'node_modules/vite/bin/vite.js').exists():
+        subprocess.run([npm, 'ci', '--include=dev'], cwd=ROOT, check=True)
+    subprocess.run([npm, 'run', 'build'], cwd=ROOT, check=True)
+
+
+def run_client(args, started_at):
+    """Team computer: no local server or database, only the web page, the agent and reminders."""
+    from desktop.gateway import Gateway, check_server, normalize_server
+    from desktop.service import DesktopController, DesktopServer
+    from desktop.usage import LauncherUsage
+
+    if args.server:
+        url = normalize_server(args.server)
+        check_server(url)
+        save_server(url)
+    if not FROZEN:
+        build_frontend()
+    ready, shutdown = threading.Event(), threading.Event()
+    if load_server():
+        ready.set()
+
+    def saved(url):
+        save_server(url)
+        ready.set()
+
+    gateway = Gateway(('127.0.0.1', 5173), ROOT / 'dist', load_server(), 'http://127.0.0.1:8766', saved)
+    gateway.start()
+    usage = controller = desktop = None
+    try:
+        print(f'\nWorkTrack: {WEB}\nЗогсоох: вебийн «WorkTrack хаах» эсвэл энэ цонхонд Ctrl+C.', flush=True)
+        if not args.no_browser:
+            open_browser()
+        while not ready.wait(1):
+            pass  # The page in the browser asks for the server address first.
+        server = load_server()
+        print(f'Байгууллагын сервер: {server}', flush=True)
+        usage = LauncherUsage(RUNTIME / 'launcher-usage.sqlite3')
+        python = sys.executable if FROZEN or not VENV_PYTHON.exists() else VENV_PYTHON
+        controller = DesktopController(ROOT, server, python, shutdown.set, started_at=started_at, usage=usage)
+        desktop = DesktopServer(('127.0.0.1', 8766), controller, {WEB, 'http://localhost:5173'})
+        desktop.start()
+        while not shutdown.wait(1):
+            pass
+    finally:
+        if desktop:
+            desktop.close()
+        if controller:
+            controller.close()
+        if usage:
+            usage.close()
+        gateway.close()
 
 
 def open_browser(url=WEB):
@@ -283,10 +394,21 @@ def main():
     parser.add_argument('--camera', action='store_true', help='Camera monitor мөн асаах')
     parser.add_argument('--desktop', action='store_true', help='Вебээс төхөөрөмж холбох, agent/camera удирдах')
     parser.add_argument('--no-browser', action='store_true', help='Browser автоматаар нээхгүй')
+    parser.add_argument(
+        '--server', metavar='URL', help='Багийн горим: байгууллагын серверт холбогдоно (хаяг хадгалагдана)'
+    )
+    parser.add_argument(
+        '--team', action='store_true', help='Багийн горим: серверийн хаягийг browser дээр асууна (хадгалагдаагүй бол)'
+    )
+    parser.add_argument('--local', action='store_true', help='Багийн горимоос гарч энэ компьютер дээр ажиллана')
+    parser.add_argument(
+        '--share', action='store_true', help='Оффисын сервер: бусад компьютер оффисын сүлжээгээр холбогдоно'
+    )
     parser.add_argument('--app-id', help=argparse.SUPPRESS)
     args = parser.parse_args()
     use_utf8()
-    ensure_venv()
+    if not FROZEN:
+        ensure_venv()
 
     def interrupted(signum, frame):
         raise KeyboardInterrupt
@@ -296,7 +418,7 @@ def main():
         if hasattr(signal, name):
             signal.signal(getattr(signal, name), interrupted)
     os.chdir(ROOT)
-    RUNTIME.mkdir(exist_ok=True)
+    RUNTIME.mkdir(parents=True, exist_ok=True)
     from agent.process_lock import AlreadyRunningError, collector_lock
 
     instance = ExitStack()
@@ -305,10 +427,20 @@ def main():
         instance.enter_context(collector_lock('launcher', RUNTIME))
     except AlreadyRunningError:
         print('WorkTrack launcher аль хэдийн ажиллаж байна.')
-        if not backend_is_current():
-            print('Backend асаж дуустал хүлээнэ үү.')
+        if not (check_http(WEB) if FROZEN or load_server() else backend_is_current()):
+            print('Асаж дуустал хүлээнэ үү.')
         elif not args.no_browser:
             open_browser()
+        return
+    if args.local:
+        (RUNTIME / 'server.json').unlink(missing_ok=True)
+    if FROZEN or args.team or args.server or load_server():
+        try:
+            run_client(args, started_at)
+        except KeyboardInterrupt:
+            print('\nWorkTrack-ийг зогсоож байна…')
+        finally:
+            instance.close()
         return
     processes, logs = [], []
     desktop, controller, usage = None, None, None
@@ -343,11 +475,21 @@ def main():
                 from desktop.build_macos_app import build
 
                 build()
+        host, shared = '127.0.0.1', []
+        if args.share:
+            # Office server: other computers on the network reach this API directly. No debug pages
+            # for them; --insecure only lets runserver keep serving the admin's static files.
+            shared = lan_addresses()
+            if not shared:
+                raise RuntimeError('Сүлжээний хаяг олдсонгүй. Wi-Fi/LAN-д холбогдсон эсэхээ шалгана уу.')
+            if existing_backend:
+                raise RuntimeError('Өмнө асаасан backend-ийг хаагаад оффисын сервер горимоор дахин нээнэ үү.')
+            host = '0.0.0.0'
+            os.environ['DJANGO_ALLOWED_HOSTS'] = ','.join(dict.fromkeys(['localhost', '127.0.0.1', *shared]))
+            os.environ['DJANGO_DEBUG'] = 'false'
         if not existing_backend:
-            wait_ready(
-                API + '/api/health/',
-                start('backend', [str(python), 'manage.py', 'runserver', '127.0.0.1:8000', '--noreload']),
-            )
+            command = [str(python), 'manage.py', 'runserver', f'{host}:8000', '--noreload']
+            wait_ready(API + '/api/health/', start('backend', command + (['--insecure'] if args.share else [])))
             if not backend_is_current():
                 raise RuntimeError('Backend readiness/version шалгалт амжилтгүй.')
         if not check_http(WEB):
@@ -385,6 +527,8 @@ def main():
         )
         if setup_url:
             print(f'Анхны админаа үүсгэх хуудас: {setup_url}', flush=True)
+        for address in shared:
+            print(f'Оффисын бусад компьютерийн WorkTrack-д энэ хаягийг оруулна: http://{address}:8000', flush=True)
         if not args.no_browser:
             open_browser(setup_url or WEB)
         while not shutdown.is_set():
@@ -409,8 +553,23 @@ def main():
 
 
 if __name__ == '__main__':
+    if FROZEN and sys.argv[1:2] == ['agent']:
+        # The installed app runs a second copy of itself as the activity agent (desktop/service.py).
+        sys.argv = [sys.argv[0], *sys.argv[2:]]
+        from agent.main import main as agent_main
+
+        agent_main()
+        sys.exit(0)
+    if sys.stdout is None or sys.stderr is None:  # A windowed app has no console: log to a file.
+        RUNTIME.mkdir(parents=True, exist_ok=True)
+        log = open(RUNTIME / 'app.log', 'a', encoding='utf-8', buffering=1)
+        sys.stdout, sys.stderr = sys.stdout or log, sys.stderr or log
     try:
         main()
     except (RuntimeError, subprocess.CalledProcessError, OSError, ValueError) as exc:
         print(f'Алдаа: {exc}', file=sys.stderr)
+        if FROZEN:  # There may be no window to read the message in.
+            from desktop.reminders import notify
+
+            notify(f'WorkTrack эхэлсэнгүй: {exc}')
         sys.exit(1)

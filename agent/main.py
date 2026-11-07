@@ -12,6 +12,7 @@ import argparse
 from datetime import datetime
 from getpass import getpass
 import json
+import os
 from pathlib import Path
 import platform
 import re
@@ -44,10 +45,13 @@ from urllib.request import Request, urlopen
 
 
 AGENT_DIR = Path(__file__).resolve().parent
-DEFAULT_CONFIG_PATH = AGENT_DIR / 'config.json'
-DEFAULT_TOKEN_PATH = AGENT_DIR / '.agent_tokens.json'
-DEFAULT_QUEUE_PATH = AGENT_DIR / '.pending_events.json'
-DEFAULT_CONTROL_PATH = AGENT_DIR / 'control.json'
+# Login, settings and the offline queue sit next to the code in a source checkout. An installed
+# copy, whose program folder is read-only, sets WORKTRACK_HOME to a folder in the user's profile.
+DATA_DIR = Path(os.environ['WORKTRACK_HOME']) / 'agent' if os.environ.get('WORKTRACK_HOME') else AGENT_DIR
+DEFAULT_CONFIG_PATH = DATA_DIR / 'config.json'
+DEFAULT_TOKEN_PATH = DATA_DIR / '.agent_tokens.json'
+DEFAULT_QUEUE_PATH = DATA_DIR / '.pending_events.json'
+DEFAULT_CONTROL_PATH = DATA_DIR / 'control.json'
 BROWSERS = {'Safari', 'Google Chrome', 'Chromium', 'Firefox', 'Arc', 'Microsoft Edge'}
 COMMUNICATION_APPS = {'Slack', 'Microsoft Teams', 'Zoom', 'Discord'}
 IDLE_APPLICATION = 'Idle'

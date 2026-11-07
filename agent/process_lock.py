@@ -11,8 +11,11 @@ class AlreadyRunningError(RuntimeError):
 
 @contextmanager
 def collector_lock(kind, directory=None):
-    directory = Path(directory) if directory else Path(__file__).resolve().parents[1] / '.runtime'
-    directory.mkdir(exist_ok=True)
+    if not directory:
+        home = os.environ.get('WORKTRACK_HOME')
+        directory = Path(home) / '.runtime' if home else Path(__file__).resolve().parents[1] / '.runtime'
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
     path = directory / (kind + '.lock')
     with path.open('a+b') as stream:
         os.chmod(path, 0o600)

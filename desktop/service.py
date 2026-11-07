@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import platform
 import subprocess
+import sys
 import threading
 import time
 from urllib.error import HTTPError, URLError
@@ -14,6 +15,9 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 
 from agent.main import ApiClient, AgentError, is_paused, set_paused
 from agent.token_store import atomic_json_write, save_tokens
+
+# The installer build bundles no Python interpreter for scripts and leaves the camera out.
+FROZEN = getattr(sys, 'frozen', False)
 
 
 class DesktopError(RuntimeError):
@@ -29,17 +33,19 @@ class NoRedirect(HTTPRedirectHandler):
 
 class DesktopController:
     def __init__(self, root, api, python, shutdown, spawn=None, stop=None, started_at=None, usage=None, sync=True):
+        # `root` holds the program files; `home` the user's data (see WORKTRACK_HOME in agent/main.py).
         self.root, self.api, self.python = Path(root), api, str(python)
+        self.home = Path(os.environ.get('WORKTRACK_HOME') or root)
         self.started_at = time.time() if started_at is None else started_at
-        self.runtime = self.root / '.runtime'
-        self.runtime.mkdir(exist_ok=True)
+        self.runtime = self.home / '.runtime'
+        self.runtime.mkdir(parents=True, exist_ok=True)
         from desktop.usage import LauncherUsage
 
         self.owns_usage = usage is None
         self.usage = usage if usage is not None else LauncherUsage(self.runtime / 'launcher-usage.sqlite3')
-        self.tokens = self.root / 'agent/.agent_tokens.json'
-        self.config = self.root / 'agent/config.json'
-        self.control = self.root / 'agent/control.json'
+        self.tokens = self.home / 'agent/.agent_tokens.json'
+        self.config = self.home / 'agent/config.json'
+        self.control = self.home / 'agent/control.json'
         self.metadata = self.runtime / 'desktop-session.json'
         self.lock = threading.RLock()
         self.processes, self.logs = {}, []
@@ -115,9 +121,9 @@ class DesktopController:
             'computer_running': linked and self._running('agent'),
             'camera_running': linked and self._running('camera'),
             'paused': is_paused(self.control) if linked else True,
-            'camera_ready': all(
-                importlib.util.find_spec(module) is not None for module in ('cv2', 'ultralytics', 'yaml')
-            ),
+            'camera_supported': not FROZEN,
+            'camera_ready': not FROZEN
+            and all(importlib.util.find_spec(module) is not None for module in ('cv2', 'ultralytics', 'yaml')),
             'preparing_camera': self.preparing,
             'reminders_enabled': self.reminders.enabled,
             'reminder': self.reminders.current() if linked else None,
@@ -238,7 +244,9 @@ class DesktopController:
                 if action == 'start':
                     set_paused(False, self.control)
                     if not self._running('agent'):
-                        self.processes['agent'] = self.spawn('agent', [self.python, '-u', 'agent/main.py'])
+                        # An installed app runs its own copy as the agent (see worktrack.py __main__).
+                        command = [sys.executable, 'agent'] if FROZEN else [self.python, '-u', 'agent/main.py']
+                        self.processes['agent'] = self.spawn('agent', command)
                 elif action == 'pause':
                     set_paused(True, self.control)
                 elif action == 'resume':
@@ -247,6 +255,8 @@ class DesktopController:
                     set_paused(False, self.control)
                 elif action == 'stop':
                     self._stop_collectors()
+                elif action in ('camera-on', 'prepare-camera') and FROZEN:
+                    raise DesktopError('Энэ хувилбарт камер ороогүй.', 409)
                 elif action == 'camera-on':
                     if not self._running('agent') or is_paused(self.control):
                         raise DesktopError('Эхлээд ажлаа эхлүүлэх буюу үргэлжлүүлнэ үү.', 409)

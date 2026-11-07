@@ -228,12 +228,14 @@ function DeviceMenu({ state, busy, act, onRelink }) {
     <details>
       <summary>Төхөөрөмжийн нэмэлт үйлдэл</summary>
       <div className="desktop-actions">
-        <button
-          disabled={busy || state.camera_running || state.preparing_camera}
-          onClick={() => act('prepare-camera')}
-        >
-          {state.preparing_camera ? 'Камер бэлтгэж байна…' : 'Камерын тохиргоог шинэчлэх'}
-        </button>
+        {state.camera_supported !== false && (
+          <button
+            disabled={busy || state.camera_running || state.preparing_camera}
+            onClick={() => act('prepare-camera')}
+          >
+            {state.preparing_camera ? 'Камер бэлтгэж байна…' : 'Камерын тохиргоог шинэчлэх'}
+          </button>
+        )}
         <button
           disabled={busy || state.computer_running || state.camera_running}
           onClick={onRelink}
@@ -340,7 +342,9 @@ export function DesktopPanel({ user, tasks, work, workday, busy }) {
                     working={working}
                     busy={busy}
                   />
-                  <CameraControls state={state} busy={busy} act={act} />
+                  {state.camera_supported !== false && (
+                    <CameraControls state={state} busy={busy} act={act} />
+                  )}
                   {state.errors?.length > 0 && <p role="alert">{deviceErrorMessage(state)}</p>}
                   {state.camera_setup_error && (
                     <p role="alert">

@@ -236,3 +236,75 @@ class BackendIdentityTests(unittest.TestCase):
         ):
             with self.assertRaises(RuntimeError):
                 worktrack.backend_is_current()
+
+
+class ModeTests(unittest.TestCase):
+    def run_main(self, argv, directory, server=None, **patches):
+        from pathlib import Path
+
+        runtime = Path(directory)
+        if server:
+            (runtime / 'server.json').write_text('{"server": "%s"}' % server, encoding='utf-8')
+        with (
+            patch.object(worktrack, 'RUNTIME', runtime),
+            patch.object(worktrack.sys, 'argv', ['worktrack.py', *argv]),
+            patch.object(worktrack, 'use_utf8'),
+            patch.object(worktrack, 'ensure_venv'),
+            patch.object(worktrack.signal, 'signal'),
+            patch.object(worktrack, 'run_client') as client,
+            patch.object(worktrack, 'bootstrap', side_effect=KeyboardInterrupt) as solo,
+            patch.object(worktrack, 'backend_is_current', return_value=False),
+        ):
+            worktrack.main()
+        return client, solo
+
+    def test_saved_server_or_server_flag_starts_the_team_computer(self):
+        from tempfile import TemporaryDirectory
+
+        for argv, server in ((['--desktop'], 'https://worktrack.example.mn'), (['--server', 'x.mn'], None)):
+            with self.subTest(argv=argv), TemporaryDirectory() as directory:
+                client, solo = self.run_main(argv, directory, server)
+                client.assert_called_once()
+                solo.assert_not_called()
+
+    def test_without_a_server_or_with_local_this_computer_runs_everything(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as directory:
+            client, solo = self.run_main(['--desktop', '--local'], directory, 'https://worktrack.example.mn')
+            client.assert_not_called()
+            solo.assert_called_once()
+            self.assertFalse((Path(directory) / 'server.json').exists())
+
+    def test_office_server_listens_on_the_network_without_debug_pages(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        commands = []
+
+        def launch(command, **options):
+            commands.append(command)
+            return Mock(**{'poll.return_value': None})
+
+        with TemporaryDirectory() as directory, patch.dict(os.environ):
+            with (
+                patch.object(worktrack, 'RUNTIME', Path(directory)),
+                patch.object(worktrack.sys, 'argv', ['worktrack.py', '--web-only', '--share', '--no-browser']),
+                patch.object(worktrack, 'use_utf8'),
+                patch.object(worktrack, 'ensure_venv'),
+                patch.object(worktrack, 'bootstrap', return_value=(Path('/test/python'), 'node', False)),
+                patch.object(worktrack, 'lan_addresses', return_value=['192.168.1.20']),
+                patch.object(worktrack, 'check_http', return_value=True),
+                patch.object(worktrack, 'backend_is_current', side_effect=[False, True]),
+                patch.object(worktrack.subprocess, 'Popen', side_effect=launch),
+                patch.object(worktrack.signal, 'signal'),
+                patch.object(worktrack.time, 'sleep', side_effect=KeyboardInterrupt),
+                patch.object(worktrack, 'stop_process'),
+            ):
+                worktrack.main()
+            self.assertEqual(os.environ['DJANGO_DEBUG'], 'false')
+            self.assertIn('192.168.1.20', os.environ['DJANGO_ALLOWED_HOSTS'].split(','))
+        runserver = next(command for command in commands if 'runserver' in command)
+        self.assertIn('0.0.0.0:8000', runserver)
+        self.assertIn('--insecure', runserver)
