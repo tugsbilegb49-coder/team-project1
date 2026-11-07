@@ -80,7 +80,7 @@ export function FirstAdminSetup({ token, onCreated, onSkip }) {
           {error && <p role="alert">{error.message}</p>}
           <button type="submit">{busy ? 'Үүсгэж байна…' : 'Админ үүсгээд нэвтрэх'}</button>
         </fieldset>
-        <button type="button" onClick={skip}>
+        <button type="button" className="secondary-button" onClick={skip}>
           Админ бүртгэлтэй бол нэвтрэх
         </button>
       </form>

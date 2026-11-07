@@ -842,3 +842,8 @@ textarea:focus-visible {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+.main .task-form button.secondary-button {
+  background: transparent;
+  color: var(--primary-dark);
+  border: 1px solid var(--primary);
+}
