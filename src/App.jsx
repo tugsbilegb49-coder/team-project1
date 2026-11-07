@@ -34,6 +34,40 @@ function localToday() {
   const value = (key) => parts.find((part) => part.type === key).value;
   return `${value('year')}-${value('month')}-${value('day')}`;
 }
+const appCategories = {
+  WORK: 'Ажлын програм',
+  COMMUNICATION: 'Харилцаа',
+  BROWSER: 'Browser',
+  OTHER: 'Бусад',
+};
+const cameraStates = {
+  WORKING: 'Ажиллаж байна',
+  PHONE: 'Утсаар',
+  IDLE: 'Идэвхгүй',
+  AWAY: 'Байхгүй',
+};
+const scoreLevels = { HIGH: 'Өндөр', MEDIUM: 'Дунд', LOW: 'Бага' };
+
+/** Хоосон үед юу болохыг тайлбарлана: энэ өдөр компьютерээс аппын хэрэглээ ирээгүй. */
+function NoAppUse({ name, isToday, onDevices }) {
+  return (
+    <div className="empty-explained">
+      <p>
+        {isToday ? 'Өнөөдөр' : 'Энэ өдөр'} {name ? `${name}-ийн` : 'энэ ажилтны'} компьютерээс аппын
+        хэрэглээ ирээгүй байна.
+      </p>
+      <p className="muted">
+        {isToday
+          ? 'Төхөөрөмж холбогдоогүй, ажил эхлүүлээгүй эсвэл дөнгөж эхэлсэн байж болно. Ажил эхэлснээс хойш 1 минут орчмын дараа энд гарна; хуудас 30 секунд тутам шинэчлэгдэнэ.'
+          : 'Тэр өдөр ажил эхлүүлээгүй, эсвэл компьютер нь WorkTrack-д холбогдоогүй байжээ.'}
+      </p>
+      <button type="button" className="secondary-button" onClick={onDevices}>
+        Төхөөрөмжийн төлөв харах
+      </button>
+    </div>
+  );
+}
+
 function App() {
   const [user, setUser] = useState(null),
     [page, setPage] = useState('today');
@@ -46,6 +80,7 @@ function App() {
   const [reportState, setReport] = useState(null),
     [employee, setEmployee] = useState('');
   const [date, setDate] = useState(localToday);
+  const [reportTick, setReportTick] = useState(0);
   const [error, setError] = useState('');
   const [appBusy, setBusy] = useState(false),
     [ready, setReady] = useState(() => !hasAuth()),
@@ -191,7 +226,13 @@ function App() {
           setReport({ key: reportKey, revision, error: failure.message });
       });
     return () => controller.abort();
-  }, [user?.id, employee, date, validDate, reportKey, revision]);
+  }, [user?.id, employee, date, validDate, reportKey, revision, reportTick]);
+  useEffect(() => {
+    // Today's numbers grow while people work; past days do not change.
+    if (!user?.id || page !== 'dashboard' || date !== today) return;
+    const timer = setInterval(() => setReportTick((value) => value + 1), 30000);
+    return () => clearInterval(timer);
+  }, [user?.id, page, date, today]);
   async function signIn(event) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -445,7 +486,7 @@ function App() {
               </div>
             </section>
             <section className="task-section">
-              <h2>Өдрийн activity ба бүтээмж</h2>
+              <h2>Өдрийн аппын хэрэглээ ба бүтээмж</h2>
 
               <div className="activity-controls">
                 <select
@@ -499,24 +540,28 @@ function App() {
                   <div className="activity-score-card">
                     <p>Өдрийн бүтээмжийн оноо</p>
                     <h3>{report.score ? report.score.score : '—'}</h3>
-                    <span>{report.score ? report.score.category : 'Тооцоолоогүй'}</span>
+                    <span>
+                      {report.score
+                        ? scoreLevels[report.score.category] || report.score.category
+                        : 'Тооцоолоогүй'}
+                    </span>
                   </div>
                   <div className="activity-detail-card">
-                    <h3>Application categories</h3>
+                    <h3>Аппын ангилал</h3>
 
                     {report.application_categories?.length ? (
                       report.application_categories.map((row) => (
                         <div className="activity-row" key={row.category}>
-                          <span>{row.category}</span>
+                          <span>{appCategories[row.category] || row.category}</span>
                           <strong>{(row.seconds / 60).toFixed(1)} мин</strong>
                         </div>
                       ))
                     ) : (
-                      <p>Ангиллын мэдээлэл бүртгэгдээгүй.</p>
+                      <p className="muted">Аппын хэрэглээ ирмэгц ангилал энд гарна.</p>
                     )}
                   </div>
                   <div className="activity-detail-card">
-                    <h3>Application activity</h3>
+                    <h3>Аппын хэрэглээ</h3>
 
                     {report.applications.length ? (
                       <div className="activity-chart">
@@ -545,12 +590,16 @@ function App() {
                         })}
                       </div>
                     ) : (
-                      <p>Activity бүртгэгдээгүй.</p>
+                      <NoAppUse
+                        name={members.find((m) => String(m.id) === String(employee))?.name}
+                        isToday={date === today}
+                        onDevices={() => setPage('agents')}
+                      />
                     )}
                   </div>
 
                   <div className="activity-detail-card">
-                    <h3>Camera activity</h3>
+                    <h3>Камерын ажиглалт</h3>
                     {report.presence?.samples > 0 && (
                       <div aria-label="Камерын илрүүлэлт">
                         <div className="activity-row">
@@ -570,7 +619,7 @@ function App() {
                           </strong>
                         </div>
                         <div className="activity-row">
-                          <span>Илрүүлэлтийн confidence</span>
+                          <span>Илрүүлэлтийн итгэлцүүр</span>
                           <strong>{(report.presence.latest_confidence * 100).toFixed(1)}%</strong>
                         </div>
                         <p>Эдгээр нь камерын ажиглалтын тоо; ажилласан минутыг илэрхийлэхгүй.</p>
@@ -579,12 +628,14 @@ function App() {
                     {report.camera.length > 0 &&
                       report.camera.map((row) => (
                         <div className="activity-row" key={row.state}>
-                          <span>{row.state}</span>
+                          <span>{cameraStates[row.state] || row.state}</span>
                           <strong>{(row.seconds / 60).toFixed(1)} мин</strong>
                         </div>
                       ))}
                     {!report.camera.length && !report.presence?.samples && (
-                      <p>Камерын мэдээлэл бүртгэгдээгүй.</p>
+                      <p className="muted">
+                        Камер ашиглаагүй. Камерыг зөвхөн ажилтан өөрөө асаадаг.
+                      </p>
                     )}
                   </div>
                 </div>

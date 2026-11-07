@@ -338,14 +338,19 @@ async function mockApp(page) {
       state.score = '75.00';
       return respond({}, 201);
     }
-    if (path === '/api/scores/dashboard/')
+    if (path === '/api/scores/dashboard/') {
+      state.dashboardRequests = (state.dashboardRequests || 0) + 1;
+      const used = state.appName
+        ? [{ application: state.appName, category: 'WORK', seconds: 600 }]
+        : [];
       return respond({
         score: { score: state.score, category: 'LOW' },
-        applications: [{ application: state.appName, category: 'WORK', seconds: 600 }],
-        application_categories: [{ category: 'WORK', seconds: 600 }],
+        applications: used,
+        application_categories: used.map(({ category, seconds }) => ({ category, seconds })),
         camera: [],
         presence: state.presence,
       });
+    }
     return respond({ detail: `Unexpected request: ${method} ${path}` }, 500);
   });
   return state;
@@ -1359,4 +1364,34 @@ test('the next day starts with one click on the task used last time', async ({ p
   await start.click();
   await expect(panel.getByRole('button', { name: 'Түр зогсоох', exact: true })).toBeVisible();
   expect(state.desktopPosts.filter((action) => action === 'start')).toHaveLength(2);
+});
+
+test('the day overview explains an empty day, speaks Mongolian and refreshes today', async ({
+  page,
+}) => {
+  const state = await mockApp(page);
+  state.appName = null; // Nothing recorded yet today.
+  await page.clock.install();
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Ерөнхий тойм', exact: true }).click();
+  const apps = page
+    .locator('.activity-detail-card')
+    .filter({ has: page.getByRole('heading', { name: 'Аппын хэрэглээ', exact: true }) });
+  await expect(apps).toContainText('компьютерээс аппын хэрэглээ ирээгүй байна');
+  await expect(apps).toContainText('Төхөөрөмж холбогдоогүй, ажил эхлүүлээгүй');
+  await expect(page.getByText('Бага', { exact: true })).toBeVisible(); // Score level, not LOW.
+  await expect(page.getByText('Application activity')).toHaveCount(0);
+  state.appName = 'Visual Studio Code'; // The agent sends its first minutes.
+  const before = state.dashboardRequests;
+  await page.clock.fastForward(31000);
+  await expect.poll(() => state.dashboardRequests).toBeGreaterThan(before);
+  await expect(apps).toContainText('Visual Studio Code');
+  await expect(page.getByText('Ажлын програм', { exact: true })).toBeVisible();
+  state.appName = null;
+  await page.getByLabel('Тайлангийн огноо').fill('2026-10-01');
+  await expect(apps).toContainText('Тэр өдөр ажил эхлүүлээгүй');
+  await apps.getByRole('button', { name: 'Төхөөрөмжийн төлөв харах' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Төхөөрөмжийн төлөв', exact: true }),
+  ).toBeVisible();
 });

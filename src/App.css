@@ -988,3 +988,7 @@ textarea:focus-visible {
 .server-share p {
   margin: 6px 0;
 }
+
+.empty-explained p {
+  margin: 4px 0 8px;
+}
