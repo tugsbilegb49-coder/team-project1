@@ -1,6 +1,7 @@
 from datetime import timedelta
 import json
 from pathlib import Path
+import sys
 from tempfile import TemporaryDirectory
 from django.core.cache import cache
 from django.test import LiveServerTestCase, override_settings
@@ -9,10 +10,16 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from activity.models import CameraPresence, ComputerActivity
 from users.models import AgentHeartbeat, ConsentRecord, Device, MonitoringSettings, User
-from agent.main import ApiClient, PendingUploader
-from agent.runtime import AgentRuntime
-from agent.token_store import save_tokens
-from src.api_logger import PresenceEventUploader
+
+# `agent/` болон `src/` нь repo-ийн root-д байна; `backend/`-оос ажиллуулахад ч олдохоор нэмнэ.
+_REPO_ROOT = str(Path(__file__).resolve().parents[2])
+if _REPO_ROOT not in sys.path:
+    sys.path.append(_REPO_ROOT)
+
+from agent.main import ApiClient, PendingUploader  # noqa: E402
+from agent.runtime import AgentRuntime  # noqa: E402
+from agent.token_store import save_tokens  # noqa: E402
+from src.api_logger import PresenceEventUploader  # noqa: E402
 
 
 @override_settings(REQUIRE_MONITORING_CONSENT=True)
