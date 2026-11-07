@@ -110,6 +110,8 @@ async function mockApp(page) {
     if (action === 'camera-off') state.desktop.camera_running = false;
     if (action === 'reminders-on' || action === 'reminders-off')
       state.desktop.reminders_enabled = action === 'reminders-on';
+    if (action === 'autostart-on' || action === 'autostart-off')
+      state.desktop.autostart_enabled = action === 'autostart-on';
     if (action === 'stop')
       Object.assign(state.desktop, {
         computer_running: false,
@@ -1171,4 +1173,28 @@ test('a reminder shows on the page and reminders can be turned off', async ({ pa
   await panel.getByRole('button', { name: 'Сануулга унтраах', exact: true }).click();
   await expect(panel.getByRole('button', { name: 'Сануулга асаах', exact: true })).toBeVisible();
   expect(state.desktop.reminders_enabled).toBe(false);
+});
+
+test('starting at sign-in is explained before linking and can be switched off', async ({
+  page,
+}) => {
+  const state = await mockApp(page);
+  Object.assign(state.desktop, {
+    autostart_supported: true,
+    autostart_enabled: false,
+    autostart_on_connect: true,
+  });
+  await page.goto('/');
+  const panel = page.getByRole('region', { name: 'Энэ компьютерийн удирдлага', exact: true });
+  await panel.getByRole('button', { name: 'Үргэлжлүүлэх' }).click();
+  await expect(panel.getByText('компьютер асахад WorkTrack далд асна')).toBeVisible();
+  const toggle = panel.getByRole('checkbox', {
+    name: 'Компьютер асахад WorkTrack-ийг автоматаар асаах',
+  });
+  // The box follows the computer's answer, so it changes after the click is saved.
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
+  expect(state.desktopPosts).toEqual(['autostart-on', 'autostart-off']);
 });

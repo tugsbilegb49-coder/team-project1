@@ -186,7 +186,15 @@ def run_client(args, started_at):
         print(f'Байгууллагын сервер: {server}', flush=True)
         usage = LauncherUsage(RUNTIME / 'launcher-usage.sqlite3')
         python = sys.executable if FROZEN or not VENV_PYTHON.exists() else VENV_PYTHON
-        controller = DesktopController(ROOT, server, python, shutdown.set, started_at=started_at, usage=usage)
+        controller = DesktopController(
+            ROOT,
+            server,
+            python,
+            shutdown.set,
+            started_at=started_at,
+            usage=usage,
+            autostart_command=autostart_command(args),
+        )
         desktop = DesktopServer(('127.0.0.1', 8766), controller, {WEB, 'http://localhost:5173'})
         desktop.start()
         while not shutdown.wait(1):
@@ -199,6 +207,14 @@ def run_client(args, started_at):
         if usage:
             usage.close()
         gateway.close()
+
+
+def autostart_command(args):
+    """How the operating system should start this copy of WorkTrack at sign-in (in the background)."""
+    if FROZEN:
+        return [sys.executable, '--no-browser']
+    python = VENV_PYTHON if VENV_PYTHON.exists() else Path(sys.executable)
+    return [str(python), str(ROOT / 'worktrack.py'), '--desktop', *(['--share'] if args.share else []), '--no-browser']
 
 
 def open_browser(url=WEB):
@@ -522,7 +538,15 @@ def main():
         if args.desktop:
             from desktop.service import DesktopController, DesktopServer
 
-            controller = DesktopController(ROOT, API, python, shutdown.set, started_at=started_at, usage=usage)
+            controller = DesktopController(
+                ROOT,
+                API,
+                python,
+                shutdown.set,
+                started_at=started_at,
+                usage=usage,
+                autostart_command=autostart_command(args),
+            )
             desktop = DesktopServer(('127.0.0.1', 8766), controller, {WEB, 'http://localhost:5173'})
             desktop.start()
         elif not args.web_only:

@@ -32,7 +32,19 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 class DesktopController:
-    def __init__(self, root, api, python, shutdown, spawn=None, stop=None, started_at=None, usage=None, sync=True):
+    def __init__(
+        self,
+        root,
+        api,
+        python,
+        shutdown,
+        spawn=None,
+        stop=None,
+        started_at=None,
+        usage=None,
+        sync=True,
+        autostart_command=None,
+    ):
         # `root` holds the program files; `home` the user's data (see WORKTRACK_HOME in agent/main.py).
         self.root, self.api, self.python = Path(root), api, str(python)
         self.home = Path(os.environ.get('WORKTRACK_HOME') or root)
@@ -69,6 +81,13 @@ class DesktopController:
         from desktop.reminders import Reminders
 
         self.reminders = Reminders(self, autostart=sync)
+        from desktop.autostart import Autostart
+
+        self.autostart_choice = self.runtime / 'autostart.json'
+        try:
+            self.autostart = Autostart(autostart_command, log=self.runtime / 'app.log')
+        except OSError:
+            self.autostart = Autostart(None)
 
     def backend(self, route, access, payload=None):
         request = Request(
@@ -126,6 +145,10 @@ class DesktopController:
             and all(importlib.util.find_spec(module) is not None for module in ('cv2', 'ultralytics', 'yaml')),
             'preparing_camera': self.preparing,
             'reminders_enabled': self.reminders.enabled,
+            'autostart_supported': self.autostart.supported,
+            'autostart_enabled': self.autostart.enabled,
+            # The installed app turns this on when a device is linked, unless the user chose before.
+            'autostart_on_connect': FROZEN and self.autostart.supported and not self.autostart_choice.exists(),
             'reminder': self.reminders.current() if linked else None,
             'camera_setup_error': self.setup_error,
             'camera_error': 'permission'
@@ -234,6 +257,22 @@ class DesktopController:
                 self.usage_sync.last_upload, self.usage_sync.error = None, ''
                 atomic_json_write(self.metadata, self.owner)
                 set_paused(True, self.control)
+                if FROZEN and self.autostart.supported and not self.autostart_choice.exists():
+                    try:
+                        self.autostart.set(True)
+                    except OSError:
+                        pass  # Starting by hand still works; the page shows the switch as off.
+            elif action in ('autostart-on', 'autostart-off'):
+                # Anyone signed in on this computer may choose, unless it is linked to someone else.
+                if data:
+                    raise DesktopError('Энэ үйлдэлд нэмэлт утга хэрэггүй.')
+                if self.owner and self.owner.get('user_id') != user['id']:
+                    raise DesktopError('Өөр хэрэглэгчийн төхөөрөмжийг удирдах эрхгүй.', 403)
+                try:
+                    self.autostart.set(action == 'autostart-on')
+                except OSError as exc:
+                    raise DesktopError('Автоматаар асаах тохиргоог хадгалж чадсангүй.', 409) from exc
+                atomic_json_write(self.autostart_choice, {'enabled': action == 'autostart-on'})
             else:
                 if data:
                     raise DesktopError('Энэ үйлдэлд нэмэлт утга хэрэггүй.')
@@ -390,6 +429,8 @@ class DesktopHandler(BaseHTTPRequestHandler):
                     'disconnect',
                     'reminders-on',
                     'reminders-off',
+                    'autostart-on',
+                    'autostart-off',
                     'quit',
                 }
                 action = self.path.removeprefix('/desktop/').removesuffix('/')

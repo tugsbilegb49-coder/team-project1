@@ -30,7 +30,7 @@ function deviceErrorMessage(state) {
 }
 
 /** Энэ компьютерийг хэрэглэгчийн бүртгэлтэй холбох 3 алхам. */
-function DeviceSetup({ user, busy, initialName, onConnect, onCancel }) {
+function DeviceSetup({ user, busy, initialName, autostart, onConnect, onCancel }) {
   const [step, setStep] = useState(1);
   const [deviceName, setDeviceName] = useState(initialName);
   const [consent, setConsent] = useState(false);
@@ -81,6 +81,12 @@ function DeviceSetup({ user, busy, initialName, onConnect, onCancel }) {
                 сүүлд товшсоноос хойших хугацааг шалгана. Үүнийг хадгалахгүй, илгээхгүй;
                 «Төхөөрөмжийн нэмэлт үйлдэл»-ээс унтрааж болно.
               </li>
+              {autostart && (
+                <li>
+                  <strong>Автоматаар асах:</strong> компьютер асахад WorkTrack далд асна. Бүртгэл
+                  эхлэхгүй, «Ажил эхлүүлэх»-ийг та өөрөө дарна. Энэ хуудаснаас унтрааж болно.
+                </li>
+              )}
             </ul>
             <label className="toggle-field">
               <input
@@ -326,6 +332,7 @@ export function DesktopPanel({ user, tasks, work, workday, busy }) {
                   user={user}
                   busy={busy}
                   initialName={state.device_name || DEFAULT_DEVICE_NAME}
+                  autostart={state.autostart_on_connect}
                   onConnect={(body) => act('connect', body)}
                   onCancel={relink ? () => setRelink(false) : null}
                 />
@@ -364,11 +371,34 @@ export function DesktopPanel({ user, tasks, work, workday, busy }) {
                   />
                 </>
               )}
+              {state.autostart_supported && !state.another_account && (
+                <AutostartSwitch state={state} busy={busy} act={act} />
+              )}
             </>
           )}
         </>
       )}
     </section>
+  );
+}
+
+function AutostartSwitch({ state, busy, act }) {
+  return (
+    <div className="autostart-field">
+      <label className="toggle-field">
+        <input
+          type="checkbox"
+          checked={state.autostart_enabled}
+          disabled={busy}
+          onChange={(event) => act(event.target.checked ? 'autostart-on' : 'autostart-off')}
+        />
+        Компьютер асахад WorkTrack-ийг автоматаар асаах
+      </label>
+      <p className="muted">
+        Далд асна, browser нээгдэхгүй. Бүртгэл «Ажил эхлүүлэх» дарсны дараа л эхэлнэ. WorkTrack-ийн
+        дүрс дээр дахин дарахад энэ хуудас нээгдэнэ.
+      </p>
+    </div>
   );
 }
 

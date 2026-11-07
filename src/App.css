@@ -31,6 +31,18 @@
   flex-direction: row;
   align-items: flex-start;
 }
+.autostart-field {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.autostart-field label.toggle-field {
+  margin: 0 0 4px;
+}
+.autostart-field .muted {
+  margin: 0;
+  font-size: 0.9em;
+}
 .consent-list {
   margin: 8px 0 14px;
   padding-left: 20px;

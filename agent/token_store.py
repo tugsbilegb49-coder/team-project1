@@ -14,19 +14,24 @@ class StaleTokenError(RuntimeError):
     pass
 
 
-def atomic_json_write(path, value):
+def atomic_write_bytes(path, data):
+    """Write a private file (mode 600) so readers see either the old or the new content."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, name = tempfile.mkstemp(prefix=path.name + '.', suffix='.tmp', dir=path.parent)
     try:
-        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+        with os.fdopen(fd, 'wb') as stream:
             os.chmod(name, 0o600)
-            json.dump(value, stream, ensure_ascii=False)
+            stream.write(data)
             stream.flush()
             os.fsync(stream.fileno())
         _replace(name, path)
     finally:
         Path(name).unlink(missing_ok=True)
+
+
+def atomic_json_write(path, value):
+    atomic_write_bytes(path, json.dumps(value, ensure_ascii=False).encode('utf-8'))
 
 
 def _replace(source, destination, attempts=40):
