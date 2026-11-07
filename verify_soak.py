@@ -20,7 +20,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='worktrack-soak-') as directory:
         temp = Path(directory)
         (temp / 'soak_settings.py').write_text(
-            'from config.settings import *\nDATABASES={"default":{"ENGINE":"django.db.backends.sqlite3","NAME":'
+            'from config.settings import *\nDATABASES={"default":{"ENGINE":"django.db.backends.sqlite3","OPTIONS":SQLITE_OPTIONS,"NAME":'
             + repr(str(temp / 'soak.sqlite3'))
             + '}}\n'
         )

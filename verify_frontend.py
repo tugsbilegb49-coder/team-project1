@@ -36,7 +36,7 @@ def main():
         (temp / 'browser_settings.py').write_text(
             'from config.settings import *\nBASE_DIR=Path('
             + repr(str(temp))
-            + ')\nDATABASES={"default":{"ENGINE":"django.db.backends.sqlite3","NAME":'
+            + ')\nDATABASES={"default":{"ENGINE":"django.db.backends.sqlite3","OPTIONS":SQLITE_OPTIONS,"NAME":'
             + repr(str(temp / 'browser.sqlite3'))
             + '}}\n'
         )

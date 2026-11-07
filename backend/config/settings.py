@@ -69,6 +69,11 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
+# The launcher runs the backend, score scheduler, backup and agent uploads side by side on one
+# SQLite file. Take the write lock when a transaction starts and wait up to 20 s for it, instead
+# of failing with "database is locked" (seen on Windows while the start-up backup ran).
+SQLITE_OPTIONS = {'transaction_mode': 'IMMEDIATE', 'timeout': 20}
+
 if os.environ.get('POSTGRES_DB'):
     DATABASES = {
         'default': {
@@ -85,6 +90,7 @@ else:
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': BASE_DIR / 'db.sqlite3',
+            'OPTIONS': SQLITE_OPTIONS,
         }
     }
 

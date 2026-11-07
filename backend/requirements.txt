@@ -1,4 +1,4 @@
-Django>=5.0,<6.1
+Django>=5.1,<6.1  # 5.1+: SQLite transaction_mode
 djangorestframework>=3.15,<3.17
 djangorestframework-simplejwt>=5.3,<6.0
 django-cors-headers>=4.4,<5.0

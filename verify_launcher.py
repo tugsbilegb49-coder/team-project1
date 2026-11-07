@@ -200,7 +200,7 @@ def main():
             'from pathlib import Path\n'
             'from config.settings import *  # noqa: F403\n'
             f'BASE_DIR = Path({str(directory)!r})  # backups go here\n'
-            'DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", '
+            'DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "OPTIONS": SQLITE_OPTIONS, '  # noqa: F405
             f'"NAME": {str(directory / "db.sqlite3")!r}}}}}\n',
             encoding='utf-8',
         )
