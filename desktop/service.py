@@ -143,20 +143,26 @@ class DesktopController:
 
     def _client(self, user):
         if not self.owner or self.owner.get('user_id') != user['id']:
-            raise DesktopError('Эхлээд энэ төхөөрөмжийг өөрийн account-тай холбоно уу.', 409)
+            raise DesktopError('Эхлээд энэ төхөөрөмжийг өөрийн бүртгэлтэй холбоно уу.', 409)
         client = ApiClient(self.api, self.tokens)
         try:
             actual = client.get('/api/users/me/')
         except AgentError as exc:
-            raise DesktopError('Agent-ийн нэвтрэлт дууссан. Анхны тохиргоогоор дахин холбоно уу.', 409) from exc
+            raise DesktopError(
+                'Төхөөрөмжийн нэвтрэлт дууссан. «Төхөөрөмжийн нэмэлт үйлдэл» → «Дахин холбох» дарна уу.', 409
+            ) from exc
         if actual['id'] != user['id']:
-            raise DesktopError('Agent өөр account-тай байна. Зогсоогоод дахин холбоно уу.', 409)
+            raise DesktopError(
+                'Энэ төхөөрөмж өөр хэрэглэгчтэй холбогдсон байна. «Дахин холбох»-оор өөрийн бүртгэлтэй холбоно уу.', 409
+            )
         return client
 
     def _require_consent(self, user):
         client = self._client(user)
         if not client.get('/api/consents/status/')['active']:
-            raise DesktopError('Monitoring зөвшөөрөл цуцлагдсан байна. Анхны тохиргоогоор дахин зөвшөөрнө үү.', 409)
+            raise DesktopError(
+                'Мэдээлэл бүртгэх зөвшөөрөл цуцлагдсан байна. «Дахин холбох»-оор дахин зөвшөөрнө үү.', 409
+            )
 
     def _stop_collectors(self):
         set_paused(True, self.control)
@@ -192,7 +198,7 @@ class DesktopController:
                 raise DesktopError('WorkTrack хаагдаж байна.', 409)
             if action == 'connect':
                 if any(self._running(name) for name in self.processes):
-                    raise DesktopError('Ажиллаж буй agent/camera-г эхлээд дуусгана уу.', 409)
+                    raise DesktopError('Эхлээд «Ажил дуусгах» дарна уу.', 409)
                 if set(data) - {'device_name', 'consent'} or data.get('consent') is not True:
                     raise DesktopError('Мэдээлэл бүртгэх зөвшөөрлөө сонгоно уу.')
                 name = data.get('device_name', '')
@@ -221,7 +227,7 @@ class DesktopController:
                 if data:
                     raise DesktopError('Энэ үйлдэлд нэмэлт утга хэрэггүй.')
                 if not self.owner or self.owner.get('user_id') != user['id']:
-                    raise DesktopError('Өөр account-ийн төхөөрөмжийг удирдах эрхгүй.', 403)
+                    raise DesktopError('Өөр хэрэглэгчийн төхөөрөмжийг удирдах эрхгүй.', 403)
                 if action in ('start', 'resume', 'camera-on'):
                     self._require_consent(user)
                 if action == 'start':
@@ -240,7 +246,7 @@ class DesktopController:
                     if not self._running('agent') or is_paused(self.control):
                         raise DesktopError('Эхлээд ажлаа эхлүүлэх буюу үргэлжлүүлнэ үү.', 409)
                     if self.preparing or not self.state(user)['camera_ready']:
-                        raise DesktopError('Camera-г эхлээд бэлтгэнэ үү.', 409)
+                        raise DesktopError('Эхлээд «Камер бэлтгэх» дарна уу.', 409)
                     if not self._running('camera'):
                         self.processes['camera'] = self.spawn(
                             'camera', [self.python, '-u', 'main.py', '--mode', 'presence', '--consent']
@@ -251,7 +257,7 @@ class DesktopController:
                         self.stop(process)
                 elif action == 'prepare-camera':
                     if self._running('camera'):
-                        raise DesktopError('Camera-г эхлээд унтраана уу.', 409)
+                        raise DesktopError('Эхлээд камераа унтраана уу.', 409)
                     if not self.preparing:
                         self.preparing, self.setup_error = True, False
                         threading.Thread(target=self._prepare_camera, name='camera-setup', daemon=True).start()
@@ -327,7 +333,7 @@ class DesktopHandler(BaseHTTPRequestHandler):
                 raise DesktopError('Local host шаардлагатай.', 403)
             origin = self.headers.get('Origin')
             if (origin and origin not in self.server.origins) or (post and not origin):
-                raise DesktopError('Энэ хуудас local control ашиглах эрхгүй.', 403)
+                raise DesktopError('Энэ хуудас WorkTrack-ийг удирдах эрхгүй.', 403)
             if self.headers.get('X-WorkTrack-Desktop') != '1':
                 raise DesktopError('Local control header шаардлагатай.', 403)
             controller = self.server.controller

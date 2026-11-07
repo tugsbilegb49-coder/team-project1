@@ -515,7 +515,7 @@ function App() {
                   <div className="activity-detail-card">
                     <h3>Camera activity</h3>
                     {report.presence?.samples > 0 && (
-                      <div aria-label="Camera presence">
+                      <div aria-label="Камерын илрүүлэлт">
                         <div className="activity-row">
                           <span>Хүн илэрсэн / нийт ажиглалт</span>
                           <strong>
@@ -547,7 +547,7 @@ function App() {
                         </div>
                       ))}
                     {!report.camera.length && !report.presence?.samples && (
-                      <p>Camera мэдээлэл бүртгэгдээгүй.</p>
+                      <p>Камерын мэдээлэл бүртгэгдээгүй.</p>
                     )}
                   </div>
                 </div>

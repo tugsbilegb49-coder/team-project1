@@ -79,7 +79,7 @@ function MemberPasswordReset({ member, busy, mutate }) {
         >
           <p>
             <strong>{member.username}</strong> хэрэглэгчийн нууц үгийг шинэчилнэ. Ажилтан дахин
-            нэвтэрч, agent төхөөрөмжөө дахин холбоно.
+            нэвтэрч, төхөөрөмжөө дахин холбоно.
           </p>
           <fieldset disabled={busy}>
             <label htmlFor={`${formId}-new`}>Шинэ нууц үг</label>

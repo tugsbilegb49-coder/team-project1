@@ -55,7 +55,9 @@ async function fetchResponse(path, options) {
     return await fetch((path.startsWith('/desktop/') ? '' : base) + path, options);
   } catch (error) {
     if (error.name === 'AbortError') throw error;
-    throw new APIError('Сервертэй холбогдож чадсангүй. Холболт болон backend серверээ шалгана уу.');
+    throw new APIError(
+      'Сервертэй холбогдож чадсангүй. WorkTrack асаалттай эсэх, интернэт холболтоо шалгаад дахин оролдоно уу.',
+    );
   }
 }
 function errorMessage(data) {
@@ -157,7 +159,7 @@ export async function login(username, password) {
     typeof data?.refresh !== 'string' ||
     !data.refresh
   )
-    throw new APIError('Login token серверээс ирсэнгүй.');
+    throw new APIError('Нэвтрэх үед серверээс хариу дутуу ирлээ. Дахин оролдоно уу.');
   save(data);
 }
 

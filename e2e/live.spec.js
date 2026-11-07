@@ -163,8 +163,8 @@ test('real Django login → department/manager → task/quality → inactive fil
   expect(present.status()).toBe(201);
   await page.reload();
   await page.getByRole('button', { name: 'Ерөнхий тойм', exact: true }).click();
-  await expect(page.getByLabel('Camera presence', { exact: true })).toContainText('1 / 1');
-  await expect(page.getByLabel('Camera presence', { exact: true })).toContainText('83.0%');
+  await expect(page.getByLabel('Камерын илрүүлэлт', { exact: true })).toContainText('1 / 1');
+  await expect(page.getByLabel('Камерын илрүүлэлт', { exact: true })).toContainText('83.0%');
   const enrolled = await request.post(`${process.env.VITE_API_URL}/api/devices/enroll/`, {
     headers: authenticated,
     data: { name: 'QA browser workstation', platform: 'qa-test' },
@@ -189,7 +189,7 @@ test('real Django login → department/manager → task/quality → inactive fil
   await page.getByRole('button', { name: 'Өөрчлөлтийн түүх', exact: true }).click();
   await expect(page.getByText('Чанарын үнэлгээ:', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: 'Тохиргоо', exact: true }).click();
-  await page.getByLabel('Camera confidence threshold', { exact: true }).fill('0.55');
+  await page.getByLabel('Камерын итгэлцлийн босго', { exact: true }).fill('0.55');
   await page.getByRole('button', { name: 'Тохиргоо хадгалах', exact: true }).click();
   await expect(page.getByText('Хадгаллаа.', { exact: false })).toBeVisible();
   const settings = await request.get(`${process.env.VITE_API_URL}/api/monitoring-settings/`, {

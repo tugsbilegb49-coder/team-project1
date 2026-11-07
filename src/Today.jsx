@@ -9,22 +9,23 @@ const DEFAULT_DEVICE_NAME = 'Миний компьютер';
 
 const CAMERA_ERRORS = {
   permission:
-    'Camera зөвшөөрөгдөөгүй. System Settings → Privacy & Security → Camera → WorkTrack Camera-ийг зөвшөөрөөд дахин асаана уу.',
+    'Камер зөвшөөрөгдөөгүй байна. System Settings → Privacy & Security → Camera → WorkTrack Camera-г асаагаад дахин оролдоно уу.',
   setup:
-    'Camera launcher бэлтгэгдсэнгүй. Camera бэлтгэх товчийг дарж, Command Line Tools болон Python суулгалтаа шалгана уу.',
-  startup: 'Camera апп эхэлсэнгүй. macOS-ийн зөвшөөрлийн цонхыг шалгаад дахин асаана уу.',
+    'Камер бэлтгэгдээгүй байна. «Камер бэлтгэх» товчийг дарна уу. Дахин алдаа гарвал админдаа хандана уу.',
+  startup: 'Камер асахгүй байна. macOS зөвшөөрөл асуусан бол зөвшөөрөөд дахин оролдоно уу.',
 };
 
-// Windows-д тусдаа зөвшөөрлийн цонх гардаггүй; camera зүгээр л нээгдэхгүй.
+// Windows-д тусдаа зөвшөөрлийн цонх гардаггүй; камер зүгээр л нээгдэхгүй.
 const WINDOWS_CAMERA_PERMISSION =
-  'Camera нээгдсэнгүй. Windows Settings → Privacy & security → Camera дээр "Camera access" болон "Let desktop apps access your camera"-г асаагаад дахин асаана уу. Өөр програм camera ашиглаж байвал хаана уу.';
+  'Камер нээгдсэнгүй. Windows Settings → Privacy & security → Camera дээр "Camera access" болон "Let desktop apps access your camera"-г асаагаад дахин оролдоно уу. Өөр програм камер ашиглаж байвал хаана уу.';
 
 function deviceErrorMessage(state) {
   if (state.camera_error === 'permission' && state.platform === 'Windows')
     return WINDOWS_CAMERA_PERMISSION;
   if (CAMERA_ERRORS[state.camera_error]) return CAMERA_ERRORS[state.camera_error];
-  const stopped = state.errors.includes('agent') ? 'Agent' : 'Camera';
-  return `${stopped} зогссон байна. Зөвшөөрөл/нэвтрэлтээ шалгаад дахин холбоно уу.`;
+  if (state.errors.includes('agent'))
+    return 'Аппын бүртгэл гэнэт зогссон байна. «Ажил эхлүүлэх»-ийг дахин дарна уу. Болохгүй бол «Төхөөрөмжийн нэмэлт үйлдэл» → «Дахин холбох».';
+  return 'Камер гэнэт зогссон байна. «Камер асаах»-ыг дахин дарна уу. Болохгүй бол WorkTrack-аа хааж дахин нээнэ үү.';
 }
 
 /** Энэ компьютерийг хэрэглэгчийн бүртгэлтэй холбох 3 алхам. */
@@ -57,19 +58,24 @@ function DeviceSetup({ user, busy, initialName, onConnect, onCancel }) {
         )}
         {step === 2 && (
           <>
-            <p>
-              2. Идэвхтэй аппын нэр, ашигласан болон идэвхгүй хугацааг бүртгэнэ. Бичсэн текст, URL,
-              дэлгэцийн зураг хадгалахгүй.
-            </p>
-            <p>
-              Account-тай холбосны дараа WorkTrack нээлттэй байсан хугацаа мөн сарын тайланд админд
-              харагдана. Ажил түр зогсоосон үед ч програмын нээлттэй цаг тоологдоно; бүрэн зогсоох
-              бол WorkTrack-аа хаах эсвэл төхөөрөмжөө салгана.
-            </p>
-            <p>
-              Камер тусдаа товчоор асна. Зураг, видео хадгалахгүй; зөвхөн хүн байгаа эсэх,
-              илрүүлэлтийн итгэлцүүр бүртгэнэ.
-            </p>
+            <p>2. Юуг бүртгэх вэ:</p>
+            <ul className="consent-list">
+              <li>
+                <strong>Бүртгэнэ:</strong> идэвхтэй аппын нэр, ашигласан болон идэвхгүй хугацаа,
+                WorkTrack нээлттэй байсан хугацаа. Эдгээр нь сарын тайланд админд харагдана.
+              </li>
+              <li>
+                <strong>Бүртгэхгүй:</strong> бичсэн текст, вэб хаяг (URL), дэлгэцийн зураг.
+              </li>
+              <li>
+                <strong>Камер:</strong> зөвхөн та өөрөө асаана. Зураг, видео хадгалахгүй; хүн байгаа
+                эсэх, түүний итгэлцүүрийг л бүртгэнэ.
+              </li>
+              <li>
+                «Түр зогсоох» үед ч WorkTrack нээлттэй цаг тоологдоно. Бүрэн зогсоох бол
+                WorkTrack-аа хаах эсвэл төхөөрөмжөө салгана.
+              </li>
+            </ul>
             <label className="toggle-field">
               <input
                 type="checkbox"
@@ -82,8 +88,8 @@ function DeviceSetup({ user, busy, initialName, onConnect, onCancel }) {
         )}
         {step === 3 && (
           <p>
-            3. {deviceName} төхөөрөмжийг {user.username}-тай холбоно. Дараа нь “Ажил эхлүүлэх”
-            дарна; camera автоматаар асахгүй.
+            3. «{deviceName}» төхөөрөмжийг {user.username}-тай холбоно. Дараа нь «Ажил эхлүүлэх»
+            дарна; камер автоматаар асахгүй.
           </p>
         )}
         <div className="desktop-actions">
@@ -195,11 +201,11 @@ function CameraControls({ state, busy, act }) {
           disabled={busy || (!state.camera_running && !canTurnOn)}
           onClick={() => act(state.camera_running ? 'camera-off' : 'camera-on')}
         >
-          {state.camera_running ? 'Camera унтраах' : 'Camera асаах'}
+          {state.camera_running ? 'Камер унтраах' : 'Камер асаах'}
         </button>
         {!state.camera_ready && (
           <button disabled={busy || state.preparing_camera} onClick={() => act('prepare-camera')}>
-            {state.preparing_camera ? 'Camera бэлтгэж байна…' : 'Camera бэлтгэх'}
+            {state.preparing_camera ? 'Камер бэлтгэж байна…' : 'Камер бэлтгэх'}
           </button>
         )}
       </div>
@@ -210,7 +216,7 @@ function CameraControls({ state, busy, act }) {
 /** Ховор хэрэглэгддэг үйлдлүүд: камер шинэчлэх, дахин холбох, салгах, хаах. */
 function DeviceMenu({ state, busy, act, onRelink }) {
   function quit() {
-    if (window.confirm('Agent, camera болон WorkTrack-ийг хаах уу?')) act('quit');
+    if (window.confirm('WorkTrack-ийг хаах уу? Аппын бүртгэл болон камер зогсоно.')) act('quit');
   }
   return (
     <details>
@@ -220,7 +226,7 @@ function DeviceMenu({ state, busy, act, onRelink }) {
           disabled={busy || state.camera_running || state.preparing_camera}
           onClick={() => act('prepare-camera')}
         >
-          {state.preparing_camera ? 'Camera бэлтгэж байна…' : 'Камерын тохиргоог шинэчлэх'}
+          {state.preparing_camera ? 'Камер бэлтгэж байна…' : 'Камерын тохиргоог шинэчлэх'}
         </button>
         <button
           disabled={busy || state.computer_running || state.camera_running}
@@ -293,7 +299,8 @@ export function DesktopPanel({ user, tasks, work, workday, busy }) {
               </p>
               {state.another_account ? (
                 <p>
-                  Өөр account-ийн ажил үргэлжилж байна. Тэр account-аар нэвтэрч ажлаа дуусгана уу.
+                  Энэ компьютер дээр өөр хэрэглэгчийн ажил үргэлжилж байна. Тэр хэрэглэгчээр нэвтэрч
+                  ажлаа дуусгана уу.
                 </p>
               ) : !state.linked || relink ? (
                 <DeviceSetup
@@ -320,7 +327,8 @@ export function DesktopPanel({ user, tasks, work, workday, busy }) {
                   {state.errors?.length > 0 && <p role="alert">{deviceErrorMessage(state)}</p>}
                   {state.camera_setup_error && (
                     <p role="alert">
-                      Camera бэлтгэл амжилтгүй. Холболтоо шалгаад дахин бэлтгэнэ үү.
+                      Камер бэлтгэж чадсангүй. Интернэт холболтоо шалгаад «Камер бэлтгэх»-ийг дахин
+                      дарна уу.
                     </p>
                   )}
                   <p className="muted">
@@ -383,14 +391,13 @@ export default function Today({ user, navigate, tasks, work, workday, busy }) {
         <TaskWorkClock work={work} card />
         <article className="stat-card" aria-label="Өнөөдрийн аппын хэрэглээ">
           <p className="eyebrow">Өнөөдөр</p>
-          <p>Апп ашигласан</p>
+          <p>Компьютер дээр ажилласан</p>
           <h2>
             {result?.application_seconds != null ? durationText(result.application_seconds) : '—'}
           </h2>
-          <small>Идэвхгүй хугацааг хассан аппын бүртгэл.</small>
           <small>
-            Идэвхгүй: {result?.idle_seconds != null ? durationText(result.idle_seconds) : '—'} ·
-            Нийт бүртгэл: {result ? durationText(result.tracked_seconds) : '—'}
+            Идэвхгүй {result?.idle_seconds != null ? durationText(result.idle_seconds) : '—'}-ийг
+            хассан.
           </small>
           {result && result.application_seconds == null && (
             <small>Шинэ тооцоог харахын тулд WorkTrack-аа дахин асаана уу.</small>
@@ -399,8 +406,7 @@ export default function Today({ user, navigate, tasks, work, workday, busy }) {
         <LauncherClock user={user} card />
       </section>
       <p className="muted">
-        Эдгээр цаг тусдаа утгатай тул хооронд нь нэмэхгүй. Аппын бүртгэл 30 секунд тутам
-        шинэчлэгдэнэ.
+        Гурван цаг өөр өөр зүйлийг хэмждэг тул хооронд нь нэмэхгүй. 30 секунд тутам шинэчлэгдэнэ.
       </p>
       {error && <p role="alert">{error}</p>}
       {!result && !error && <p>Өнөөдрийн мэдээлэл уншиж байна…</p>}
@@ -478,8 +484,8 @@ export function PasswordSettings() {
       <form className="task-form" onSubmit={save}>
         <h2>Нууц үг солих</h2>
         <p>
-          Нууц үг солигдоход бүх session хүчингүй болно. Шинээр нэвтрээд төхөөрөмжөө дахин холбоно
-          уу.
+          Нууц үг солигдоход бүх төхөөрөмж дээрх нэвтрэлт дуусна. Шинэ нууц үгээр нэвтрээд
+          төхөөрөмжөө дахин холбоно уу.
         </p>
         <fieldset disabled={busy}>
           <label>

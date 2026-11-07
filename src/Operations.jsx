@@ -6,9 +6,9 @@ const errorLabels = {
   authentication: 'Дахин нэвтрэх шаардлагатай',
   permission: 'Зөвшөөрлийг шалгана уу',
   storage: 'Хадгалах алдаа',
-  login_changed: 'Account солигдсон — agent-аа дахин асаана уу',
+  login_changed: 'Нэвтэрсэн хэрэглэгч солигдсон — төхөөрөмжөө дахин холбоно уу',
   invalid_event: 'Буруу бүртгэл',
-  legacy_queue: 'Хуучин бүртгэлийн account-ийг шалгах шаардлагатай',
+  legacy_queue: 'Хуучин хадгалагдсан бүртгэл аль хэрэглэгчийнх болохыг шалгах шаардлагатай',
 };
 const stateLabels = {
   online: 'Ажиллаж байна',
@@ -71,7 +71,7 @@ export function Notifications({ user, navigate }) {
   const names = {
     task_overdue: 'Хугацаа хэтэрсэн',
     task_due_today: 'Өнөөдөр дуусах',
-    agent_offline: 'Agent холболтгүй',
+    agent_offline: 'Төхөөрөмж холболтгүй',
     task_transfer: 'Даалгавар шилжүүлэх хүсэлт',
     upload_error: 'Илгээлтийн алдаа',
     queue_pending: 'Илгээх бүртгэл хүлээгдэж байна',
@@ -127,7 +127,7 @@ export function AgentStatus({ user }) {
   const { data, error, refresh } = usePolling(`/api/agent-status/?page=${page}`, user);
   return (
     <section className="task-section">
-      <h1>Agent-ийн төлөв</h1>
+      <h1>Төхөөрөмжийн төлөв</h1>
       <p>
         30 секунд тутам шинэчлэгдэнэ. Сүүлийн heartbeat 90 секундээс хуучирвал холболтгүй гэж
         харуулна.
@@ -147,7 +147,7 @@ export function AgentStatus({ user }) {
           </p>
           {!device.agents.length && (
             <p>
-              Agent төлөв илгээгээгүй.{' '}
+              Төхөөрөмж төлөвөө илгээгээгүй.{' '}
               {device.platform === 'Windows' ? 'Start WorkTrack.bat' : 'Start WorkTrack.command'}
               -аар асаана уу.
             </p>
@@ -173,7 +173,7 @@ export function AgentStatus({ user }) {
                 <p role="status">{errorLabels[agent.error_code] || 'Алдаа гарсан'}</p>
               )}
               <p>
-                Agent {agent.agent_version || '—'} · Тохиргоо v{agent.settings_version}
+                Програм {agent.agent_version || '—'} · Тохиргоо v{agent.settings_version}
               </p>
             </div>
           ))}
@@ -224,9 +224,9 @@ export function AuditHistory({ user }) {
     is_active: 'Идэвхтэй',
     department_id: 'Хэлтэс',
     productive_apps: 'Ажилд тооцох аппууд',
-    camera_threshold: 'Camera confidence',
+    camera_threshold: 'Камерын итгэлцлийн босго',
     presence_log_retention_days: 'CSV хадгалах хоног',
-    activity_retention_days: 'Database хадгалах хоног',
+    activity_retention_days: 'Өгөгдлийн санд хадгалах хоног',
     automatic_retention: 'Автомат цэвэрлэгээ',
     records_revoked: 'Цуцалсан зөвшөөрөл',
     policy_version: 'Зөвшөөрлийн хувилбар',
@@ -234,7 +234,10 @@ export function AuditHistory({ user }) {
   return (
     <section className="task-section">
       <h1>Өөрчлөлтийн түүх</h1>
-      <p>Таны эрхийн хүрээнд хэн, юуг, хэзээ өөрчилснийг харуулна. Нууц үг, token хадгалахгүй.</p>
+      <p>
+        Таны эрхийн хүрээнд хэн, юуг, хэзээ өөрчилснийг харуулна. Нууц үг, нэвтрэх түлхүүр
+        хадгалахгүй.
+      </p>
       {error && <p role="alert">{error}</p>}
       {!data && !error && <p>Уншиж байна…</p>}
       {data?.results?.length === 0 && <p>Өөрчлөлт бүртгэгдээгүй.</p>}
@@ -327,7 +330,7 @@ export function MonitoringSettings({ user }) {
       if (!signal.aborted) {
         setValue(result);
         setMessage(
-          'Хадгаллаа. Agent дараагийн холболтоор шинэ тохиргоог авна (ердийн үед 30 секунд орчим).',
+          'Хадгаллаа. Төхөөрөмжүүд дараагийн холболтоор шинэ тохиргоог авна (ердийн үед 30 секунд орчим).',
         );
       }
     } catch (failure) {
@@ -357,7 +360,7 @@ export function MonitoringSettings({ user }) {
               />
             </label>
             <label>
-              Camera confidence threshold
+              Камерын итгэлцлийн босго
               <input
                 required
                 type="number"
@@ -420,7 +423,10 @@ export function MonitoringSettings({ user }) {
               />
               Backup амжилттай болсны дараа хугацаа хэтэрсэн activity-г автоматаар цэвэрлэх
             </label>
-            <p>Автомат цэвэрлэгээ эхэндээ унтраалттай. User, task, consent, оноог устгахгүй.</p>
+            <p>
+              Автомат цэвэрлэгээ эхэндээ унтраалттай. Хэрэглэгч, даалгавар, зөвшөөрөл, оноог
+              устгахгүй.
+            </p>
             <button type="submit">Тохиргоо хадгалах</button>
           </fieldset>
         </form>

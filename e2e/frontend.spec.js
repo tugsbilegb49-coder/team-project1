@@ -313,13 +313,13 @@ test('today home guides consent then controls work and camera explicitly', async
   await expect(page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true })).toBeDisabled();
   await page.getByLabel('Хийх даалгавар', { exact: true }).selectOption('none');
   await page.locator('.camera-controls summary').click();
-  await expect(page.getByRole('button', { name: 'Camera асаах', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Камер асаах', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true }).click();
   expect(state.desktop.camera_running).toBe(false);
-  await page.getByRole('button', { name: 'Camera асаах', exact: true }).click();
-  await page.getByRole('button', { name: 'Camera унтраах', exact: true }).click();
+  await page.getByRole('button', { name: 'Камер асаах', exact: true }).click();
+  await page.getByRole('button', { name: 'Камер унтраах', exact: true }).click();
   await page.getByRole('button', { name: 'Түр зогсоох', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Camera асаах', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Камер асаах', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Ажил үргэлжлүүлэх', exact: true }).click();
   await page.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true })).toBeDisabled();
@@ -364,13 +364,13 @@ test('launcher monthly clock survives navigation and reload and selects historic
   await expect(clock).toContainText('01:01:01');
   const summary = page.getByRole('region', { name: 'Хугацааны тойм', exact: true });
   await expect(summary.getByLabel('WorkTrack сарын хугацаа', { exact: true })).toContainText(
-    'сарын нийлбэр',
+    'WorkTrack хаалттай байсан хугацааг тооцохгүй',
   );
   await expect(summary.getByLabel('Өнөөдрийн аппын хэрэглээ', { exact: true })).toContainText(
     '1 цаг 0 мин',
   );
   await expect(summary.getByLabel('Өнөөдрийн аппын хэрэглээ', { exact: true })).toContainText(
-    'Идэвхгүй: 0 цаг 1 мин',
+    'Идэвхгүй 0 цаг 1 мин-ийг хассан',
   );
   await expect(clock).toHaveCount(1);
   await page.getByRole('button', { name: 'Багийн гишүүд', exact: true }).click();
@@ -684,7 +684,7 @@ test('camera permission failures explain the macOS setting', async ({ page }) =>
     'System Settings → Privacy & Security → Camera → WorkTrack Camera',
   );
   await page.locator('.camera-controls summary').click();
-  await expect(page.getByRole('button', { name: 'Camera асаах', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Камер асаах', exact: true })).toBeDisabled();
 });
 
 test('failed app start stops the newly created task timer and leaves an actionable inline error', async ({
@@ -796,9 +796,11 @@ test('agent status, notifications and audit history are connected', async ({ pag
   ];
   await page.goto('/');
   await page.getByText('Мэдэгдэл (1)', { exact: true }).click();
-  await expect(page.getByText('Agent холболтгүй: QA Laptop')).toBeVisible();
+  await expect(page.getByText('Төхөөрөмж холболтгүй: QA Laptop')).toBeVisible();
   await page.getByRole('button', { name: 'Харах', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Agent-ийн төлөв', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Төхөөрөмжийн төлөв', exact: true }),
+  ).toBeVisible();
   const device = page.getByLabel('QA Laptop computer', { exact: true });
   await expect(device).toContainText('Холболтгүй');
   await expect(device).toContainText('7');
@@ -813,7 +815,7 @@ test('admin settings save with a version and export downloads the chosen date ra
   const state = await mockApp(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Тохиргоо', exact: true }).click();
-  await page.getByLabel('Camera confidence threshold', { exact: true }).fill('0.65');
+  await page.getByLabel('Камерын итгэлцлийн босго', { exact: true }).fill('0.65');
   await page.getByRole('button', { name: 'Тохиргоо хадгалах', exact: true }).click();
   await expect(page.getByText('Хадгаллаа.', { exact: false })).toBeVisible();
   const saved = state.patches.find((row) => row.path === '/api/monitoring-settings/').data;
@@ -843,7 +845,7 @@ test('camera presence observations appear without being shown as worked minutes'
   };
   await page.goto('/');
   await page.getByRole('button', { name: 'Ерөнхий тойм', exact: true }).click();
-  const presence = page.getByLabel('Camera presence', { exact: true });
+  const presence = page.getByLabel('Камерын илрүүлэлт', { exact: true });
   await expect(presence).toBeVisible();
   await expect(presence).toContainText('3 / 5');
   await expect(presence).toContainText('Хүн илрээгүй');

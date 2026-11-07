@@ -80,8 +80,8 @@ export default function MonthlyReport({ user }) {
         </button>
       </div>
       <p className="muted">
-        Програм асаалттай цаг, апп/idle бүртгэл, даалгаврын цаг нь тусдаа хэмжилт тул хооронд нь
-        нэмэхгүй. Аппын цаг нь ажил гүйцэтгэсэн эсвэл бүтээмжтэй байсны баталгаа биш.
+        Програм асаалттай цаг, аппын болон идэвхгүй хугацаа, даалгаврын цаг нь тусдаа хэмжилт тул
+        хооронд нь нэмэхгүй. Аппын цаг нь ажил гүйцэтгэсэн эсвэл бүтээмжтэй байсны баталгаа биш.
       </p>
       {error && <p role="alert">Сарын тайлан: {error}</p>}
       {!report && !error && <p role="status">Сарын тайлан уншиж байна…</p>}
@@ -111,11 +111,11 @@ export default function MonthlyReport({ user }) {
                     <dd>{row.launcher_recorded_since ? clockTime(row.launcher_seconds) : '—'}</dd>
                   </div>
                   <div>
-                    <dt>Апп ашигласан (idle хассан)</dt>
+                    <dt>Апп ашигласан (идэвхгүйг хассан)</dt>
                     <dd>{clockTime(row.application_seconds)}</dd>
                   </div>
                   <div>
-                    <dt>Idle</dt>
+                    <dt>Идэвхгүй</dt>
                     <dd>{clockTime(row.idle_seconds)}</dd>
                   </div>
                   <div>
@@ -136,7 +136,7 @@ export default function MonthlyReport({ user }) {
                 <p className="muted">
                   {row.launcher_last_upload
                     ? `Програмын цаг илгээсэн: ${new Date(row.launcher_last_upload).toLocaleString('mn-MN', { timeZone: 'Asia/Ulaanbaatar' })}`
-                    : 'Програмын цаг хараахан ирээгүй. Ажилтан launcher-аа шинэчлэн асааж төхөөрөмжөө холбоно.'}
+                    : 'Програмын цаг хараахан ирээгүй. Ажилтан WorkTrack-аа дахин асааж төхөөрөмжөө холбоно.'}
                 </p>
                 <details>
                   <summary>{row.name} — ажлын дэлгэрэнгүй</summary>
@@ -182,7 +182,7 @@ export default function MonthlyReport({ user }) {
           <p className="muted">
             Хадгалагдсан бүртгэлд тулгуурлана. Өмнө нь хэмжээгүй эсвэл устсан мэдээллийг нөхөж
             тооцохгүй. WorkTrack-ийн давхардсан төхөөрөмжийн хугацааг нэг удаа тоолно; аппын цаг нь
-            илгээсэн сегментүүдийн нийлбэр.
+            илгээсэн бүртгэлүүдийн нийлбэр.
           </p>
         </>
       )}

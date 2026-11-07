@@ -31,6 +31,13 @@
   flex-direction: row;
   align-items: flex-start;
 }
+.consent-list {
+  margin: 8px 0 14px;
+  padding-left: 20px;
+}
+.consent-list li {
+  margin: 6px 0;
+}
 .workday-field {
   display: flex;
   flex-direction: column;

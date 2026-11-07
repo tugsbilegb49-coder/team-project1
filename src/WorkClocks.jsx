@@ -28,7 +28,9 @@ export function LauncherClock({ user, card = false }) {
       } catch {
         if (!signal.aborted) {
           setSample(null);
-          setError('Локал launcher-тэй холбогдоогүй.');
+          setError(
+            'Энэ компьютер дээрх WorkTrack програмтай холбогдсонгүй. WorkTrack-аа асаана уу.',
+          );
         }
       }
     },
@@ -58,7 +60,7 @@ export function LauncherClock({ user, card = false }) {
           {month?.month === usage?.current_month ? 'Энэ сар' : month?.month || 'Сарын нийлбэр'}
         </p>
       )}
-      <p>Програм нээлттэй байсан</p>
+      <p>WorkTrack нээлттэй байсан</p>
       <Value>{month ? clockTime(month.seconds + liveSeconds) : '—'}</Value>
       {usage && (
         <label className="usage-month">
@@ -78,12 +80,7 @@ export function LauncherClock({ user, card = false }) {
           </select>
         </label>
       )}
-      {card && (
-        <small>
-          WorkTrack нээлттэй байсан сарын нийлбэр. Хааж дахин нээхэд хадгалагдана. Компьютер унтсан,
-          програм хаалттай завсрыг тооцохгүй.
-        </small>
-      )}
+      {card && <small>Компьютер унтсан болон WorkTrack хаалттай байсан хугацааг тооцохгүй.</small>}
       {usage && !usage.running && (
         <small>Төхөөрөмжөө холбоно уу. Өмнөх хадгалсан хугацаа хэвээр үлдэнэ.</small>
       )}
@@ -112,15 +109,15 @@ export function TaskWorkClock({ work, busy, onStop, navigate, card = false }) {
   if (card)
     return (
       <article className="stat-card" aria-label="Одоогийн даалгаврын цаг">
-        <p className="eyebrow">Энэ удаагийн бүртгэл</p>
+        <p className="eyebrow">Одоогийн даалгавар</p>
         <p>Даалгаврын цаг</p>
         <h2>{clockTime(seconds)}</h2>
         <small>
           {session
             ? `${session.title} · ${running ? 'Бүртгэж байна' : 'Зогссон'}`
-            : 'Даалгавар сонгоод ажил эхлүүлэхэд тоолно.'}
+            : 'Даалгавар сонгоод «Ажил эхлүүлэх» дарахад тоолж эхэлнэ.'}
         </small>
-        <small>Өмнөх бүртгэлүүд даалгаврын дэлгэрэнгүй болон сарын тайланд хадгалагдана.</small>
+        <small>Өмнөх цагууд даалгавар болон сарын тайланд хадгалагдана.</small>
         {work.error && <small role="alert">Цагийн холболт: {work.error}</small>}
       </article>
     );
@@ -131,7 +128,7 @@ export function TaskWorkClock({ work, busy, onStop, navigate, card = false }) {
           <span>
             {session.title} · {running ? 'Цаг бүртгэж байна' : 'Цаг зогссон'}
           </span>
-          <strong aria-label="Даалгаврын session хугацаа">{clockTime(seconds)}</strong>
+          <strong aria-label="Даалгаврын цаг">{clockTime(seconds)}</strong>
           {running && (
             <button type="button" disabled={busy} onClick={onStop}>
               Түр зогсоох
