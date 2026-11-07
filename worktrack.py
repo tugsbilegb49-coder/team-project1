@@ -5,6 +5,7 @@ import argparse
 from contextlib import ExitStack
 import errno
 import hashlib
+import importlib
 import json
 import os
 from pathlib import Path
@@ -137,8 +138,23 @@ def build_frontend():
     subprocess.run([npm, 'run', 'build'], cwd=ROOT, check=True)
 
 
+def ensure_client_packages():
+    """A team computer needs only the standard library, plus the time zone database on Windows."""
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    try:
+        ZoneInfo('Asia/Ulaanbaatar')
+    except ZoneInfoNotFoundError:
+        print('Цагийн бүсийн мэдээллийг суулгаж байна…', flush=True)
+        subprocess.run([sys.executable, '-m', 'pip', 'install', 'tzdata>=2024.1'], check=True)
+        importlib.invalidate_caches()  # Let this running process find the package it just installed.
+        ZoneInfo('Asia/Ulaanbaatar')
+
+
 def run_client(args, started_at):
     """Team computer: no local server or database, only the web page, the agent and reminders."""
+    if not FROZEN:
+        ensure_client_packages()
     from desktop.gateway import Gateway, check_server, normalize_server
     from desktop.service import DesktopController, DesktopServer
     from desktop.usage import LauncherUsage

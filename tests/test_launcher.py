@@ -308,3 +308,23 @@ class ModeTests(unittest.TestCase):
         runserver = next(command for command in commands if 'runserver' in command)
         self.assertIn('0.0.0.0:8000', runserver)
         self.assertIn('--insecure', runserver)
+
+
+class ClientPackageTests(unittest.TestCase):
+    def test_missing_time_zone_database_is_installed_once(self):
+        from zoneinfo import ZoneInfoNotFoundError
+
+        lookups = Mock(side_effect=[ZoneInfoNotFoundError('Asia/Ulaanbaatar'), None])
+        with (
+            patch('zoneinfo.ZoneInfo', lookups),
+            patch.object(worktrack.subprocess, 'run') as run,
+            patch.object(worktrack.importlib, 'invalidate_caches'),
+        ):
+            worktrack.ensure_client_packages()
+        self.assertEqual(run.call_args.args[0][1:4], ['-m', 'pip', 'install'])
+        self.assertEqual(lookups.call_count, 2)
+
+    def test_nothing_is_installed_when_time_zones_work(self):
+        with patch.object(worktrack.subprocess, 'run') as run:
+            worktrack.ensure_client_packages()
+        run.assert_not_called()
