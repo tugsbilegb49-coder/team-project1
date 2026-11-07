@@ -313,6 +313,25 @@ Accuracy, state бүрийн precision/recall, confusion matrix гаргана. 
 state-ийн metric нь null; бодит annotation байхгүй үед accuracy-г зохиож мэдээлэхгүй.
 Нэг frame inference болон fake-clock gap тест нь accuracy судалгаа биш.
 
+### Багийн горимын бүтэц
+
+Ажилтны компьютер (installer-ийн апп эсвэл `worktrack.py --team`) локал database, сервер
+асаахгүй. `desktop/gateway.py` нь `127.0.0.1:5173` дээр бэлэн вэб хуудсыг (dist/) өгч, `/api/...`-г
+төв сервер рүү, `/desktop/...`-г локал удирдлага (8766) руу дамжуулна. Тиймээс төв серверт CORS
+тохиргоо хэрэггүй. Серверийн хаяг `<WORKTRACK_HOME>/.runtime/server.json`-д хадгалагдана.
+Суулгасан аппын өгөгдөл: Windows `%LOCALAPPDATA%\WorkTrack`, macOS
+`~/Library/Application Support/WorkTrack`.
+
+Оффисын сервер (`worktrack.py --share`) нь Django-г `0.0.0.0:8000` дээр `DEBUG=false`-оор
+ажиллуулж, тухайн компьютерийн дотоод IP хаягуудыг `ALLOWED_HOSTS`-д нэмнэ. Энэ нь жижиг
+оффист зориулсан: HTTP (шифргүй), Django-ийн хөгжүүлэлтийн сервер, `/admin` нь secure cookie
+шаарддаг тул энэ горимд нэвтрэхгүй. Олон хүн эсвэл гаднаас хандах бол доорх HTTPS deployment-ийг
+ашиглана.
+
+Installer-ийг `python packaging/build_client.py` build хийнэ (PyInstaller; macOS-д ad-hoc гарын
+үсэгтэй, Developer ID/notarization байхгүй). CI (`.github/workflows/installer.yml`) нь Windows,
+macOS дээр build хийж, `verify_client.py`-аар ажилтны бүх урсгалыг туршаад zip-ийг хадгална.
+
 ### Локал deployment бэлтгэл
 
 `compose.production.yml` нь **backend API**-д зориулсан template; React build

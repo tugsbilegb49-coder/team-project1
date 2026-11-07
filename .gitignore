@@ -83,3 +83,7 @@ data/.pending_multi_control*.json
 *.mp4
 *.avi
 *.mov
+
+# Installer builds (python packaging/build_client.py)
+packaging/out/
+packaging/build/

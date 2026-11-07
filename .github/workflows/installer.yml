@@ -1,0 +1,57 @@
+name: Installer
+# Builds the team-computer app (no Python/Node needed to run it) for Windows and macOS, runs it
+# against a throwaway server exactly as an employee would, and keeps the zip as a download.
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: installer-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            app: packaging/out/WorkTrack/WorkTrack.exe
+            artifact: WorkTrack-windows
+          - os: macos-latest
+            app: packaging/out/WorkTrack.app/Contents/MacOS/WorkTrack
+            artifact: WorkTrack-macos
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    env:
+      DJANGO_CACHE_BACKEND: locmem
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install build tools (and the test server's packages)
+        run: python -m pip install -r backend/requirements.txt pyinstaller tzdata psutil
+      - name: Install Node packages
+        run: npm ci
+      - name: Build the app
+        run: python .github/ci_step.py "Build the app" python packaging/build_client.py
+      - name: Use the installed app as an employee
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Installed app" python verify_client.py --command ${{ matrix.app }}
+      - name: Team computer from source
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Team computer from source" python verify_client.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: packaging/out/*.zip
+          retention-days: 30
