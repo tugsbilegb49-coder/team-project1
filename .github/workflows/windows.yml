@@ -75,3 +75,7 @@ jobs:
       - name: Launcher start, agent start/stop and Ctrl+Break shutdown
         if: ${{ !cancelled() }}
         run: python .github/ci_step.py "Launcher start, agent start/stop and Ctrl+Break shutdown" python verify_launcher.py --agent
+      - name: Start WorkTrack.bat runs (finds Python/Node, passes arguments)
+        if: ${{ !cancelled() }}
+        timeout-minutes: 3
+        run: python .github/ci_step.py "Start WorkTrack.bat" cmd /c "Start WorkTrack.bat" --help

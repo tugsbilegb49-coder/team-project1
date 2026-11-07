@@ -3,7 +3,7 @@
 the way a person does, against a throwaway database.
 
 Checks that a first run bootstraps .venv/node_modules, that backend, frontend and the local
-desktop control come up, that a second launch does not start a second copy, that Ctrl+C
+desktop control come up, that the first admin can be created from the one-time browser link, that a second launch does not start a second copy, that Ctrl+C
 (Ctrl+Break on Windows) shuts everything down, and that no server is left running afterwards.
 With --agent it also links this machine, starts the activity agent from the web API and stops
 it, which proves the agent receives the stop signal and saves its last segment.
@@ -16,6 +16,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import signal
 import socket
@@ -119,6 +120,25 @@ def still_running(process):
         return False
 
 
+def create_first_admin(env, log_path):
+    """Do what a new user does in the browser: open the launcher's one-time link, create the admin."""
+    match = re.search(r'#setup=([\w-]+)', log_path.read_text(encoding='utf-8', errors='replace'))
+    assert match, 'The launcher did not offer the first-run admin page.'
+    form = {
+        'username': env['DJANGO_SUPERUSER_USERNAME'],
+        'password': env['DJANGO_SUPERUSER_PASSWORD'],
+        'confirm_password': env['DJANGO_SUPERUSER_PASSWORD'],
+    }
+    headers = {'Content-Type': 'application/json'}
+    status, _ = request(API + '/api/setup/', {**form, 'token': 'wrong-' + match.group(1)}, headers)
+    assert status == 403, f'A wrong setup token was not refused: {status}'
+    status, body = request(API + '/api/setup/', {**form, 'token': match.group(1)}, headers)
+    assert status == 201, f'Creating the first admin failed: {status} {body}'
+    status, _ = request(API + '/api/setup/', {**form, 'token': match.group(1)}, headers)
+    assert status == 403, 'The setup link still worked after the admin existed.'
+    print('PASSED: first admin created from the one-time browser link', flush=True)
+
+
 def exercise_agent(env):
     """Link this machine, start the agent from the web API and stop it again."""
     status, tokens = request(
@@ -188,11 +208,6 @@ def main():
             'DJANGO_SUPERUSER_EMAIL': 'launcher-smoke@example.invalid',
             'DJANGO_SUPERUSER_PASSWORD': secrets.token_urlsafe(24),
         }
-        # Desktop mode refuses to start without an admin; create one in the throwaway database.
-        for command in (['migrate', '--noinput'], ['createsuperuser', '--noinput']):
-            subprocess.run(
-                [sys.executable, 'manage.py', *command], cwd=ROOT, env=env, check=True, stdout=subprocess.DEVNULL
-            )
 
         command = [sys.executable, 'worktrack.py', '--desktop', '--no-browser']
         log_path = directory / 'launcher.log'
@@ -220,6 +235,7 @@ def main():
                     args.timeout,
                 )
                 print(f'PASSED: launcher started in {time.monotonic() - started:.0f}s', flush=True)
+                create_first_admin(env, log_path)
 
                 second = subprocess.run(
                     command, cwd=ROOT, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180

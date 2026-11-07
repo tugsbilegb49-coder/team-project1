@@ -7,6 +7,8 @@ import { useTaskWork } from './taskTime';
 import { useWorkday } from './useWorkday';
 import Today, { PasswordSettings } from './Today';
 import MonthlyReport from './MonthlyReport';
+import { FirstAdminSetup, FirstRunHint } from './FirstRun';
+import { readSetupToken } from './setupToken';
 import {
   AgentStatus,
   AuditHistory,
@@ -33,6 +35,7 @@ function localToday() {
 function App() {
   const [user, setUser] = useState(null),
     [page, setPage] = useState('today');
+  const [setupToken, setSetupToken] = useState(readSetupToken);
   const [tasks, setTasks] = useState([]),
     [members, setMembers] = useState([]),
     [departments, setDepartments] = useState([]);
@@ -220,6 +223,20 @@ function App() {
         </button>
       </main>
     );
+  if (!user && setupToken)
+    return (
+      <FirstAdminSetup
+        token={setupToken}
+        onCreated={(username, password) => {
+          setSetupToken('');
+          return run(async () => {
+            await login(username, password);
+            return load();
+          });
+        }}
+        onSkip={() => setSetupToken('')}
+      />
+    );
   if (!user)
     return (
       <main className="main">
@@ -248,6 +265,7 @@ function App() {
             Нэвтрэх нэр эсвэл нууц үгээ мартсан бол байгууллагынхаа админтай холбогдоно уу. Админ
             таны нэвтрэх нэрийг шалгаж, нууц үгийг шинэчилж өгнө.
           </p>
+          <FirstRunHint />
         </form>
       </main>
     );
@@ -311,9 +329,6 @@ function App() {
         )}
         {error && <p role="alert">{error}</p>}
         {busy && <p>Хадгалж байна…</p>}
-        {page === 'today' && (user.is_admin || user.role === 'MANAGER') && (
-          <MonthlyReport key={`monthly:${user.id}:${user.role}:${user.department}`} user={user} />
-        )}
         {page === 'today' ? (
           <Today
             key={`today:${user.id}`}

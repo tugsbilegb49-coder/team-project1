@@ -16,7 +16,8 @@ Browser автоматаар нээгдэнэ. Хуучин кодтой backend
 төслийн сервер 8000 порт дээр байвал migration хийхээс өмнө алдаа мэдээлнэ.
 Өмнөх backend/launcher цонхонд Ctrl+C дараад дахин нээнэ; өөр process-ийг
 автоматаар зогсоохгүй.
-Анх удаа Python 3 болон Node.js/npm суусан байх шаардлагатай.
+Анх удаа Python 3 болон Node.js/npm суусан байх шаардлагатай; байхгүй бол `.command` юу дутууг
+хэлээд татах хуудсыг нь browser-т нээнэ.
 `backend/requirements.txt`, `package.json`, `package-lock.json` өөрчлөгдвөл launcher
 dependency-ийг дахин суулгана; өөрчлөгдөөгүй үед давтаж суулгахгүй. npm шинэчлэх
 шаардлагатай байхад хуучин frontend ажиллаж байвал түүний terminal-д Ctrl+C дараад
@@ -57,9 +58,10 @@ signature шалгалт амжилттай, харин энэ орчны dispos
 Mac дээр `python verify_desktop_app.py` буюу `python verify_camera_ai.py --native`
 командаар тусад нь ажиллуулна; `qa/bugs.json`-ийн QA-05 нээлттэй хэвээр.
 
-Цоо шинэ суулгалтад admin байхгүй бол нэг удаа `python manage.py createsuperuser`
-ажиллуулна. Desktop горим далд terminal prompt дээр гацахгүй, бэлтгэл дутууг
-`.runtime/app.log` дотор мэдээлнэ.
+Цоо шинэ суулгалтад admin байхгүй бол launcher browser-ийг **Анхны тохиргоо** хуудсаар нээнэ:
+админы нэр, нууц үгээ оруулаад шууд нэвтэрнэ (terminal хэрэггүй). Энэ хуудас нь launcher-ийн
+үүсгэсэн нэг удаагийн нууц холбоосоор (`#setup=…`) л ажиллаж, admin үүссэний дараа хаагдана.
+Холбоос мөн launcher-ийн цонхонд хэвлэгдэнэ. Бэлтгэл дутууг `.runtime/app.log` дотор мэдээлнэ.
 
 Terminal-аас ашиглах хувилбарууд:
 
@@ -78,16 +80,14 @@ Launcher ажиллаж байхад agent-ийг өөр terminal эсвэл OS 
 
 Windows 10/11 дээр macOS-той ижил ажиллана; `.command`-ийн оронд **Start WorkTrack.bat**.
 
-1. Анх нэг удаа суулгана:
-   - [Python 3.12](https://www.python.org/downloads/) — суулгах цонхны **Add python.exe to PATH**-г чагтална.
-   - [Node.js 22 LTS](https://nodejs.org/).
-2. Төслийн хавтас дахь **Start WorkTrack.bat**-ийг давхар товшино. Анх удаа `.venv`, dependency,
-   migration-ийг бэлдэнэ (хэдэн минут). Default нь вебээс удирдах desktop горим; browser өөрөө нээгдэнэ.
-3. Цоо шинэ суулгалтад admin байхгүй бол цонх үүнийг хэлээд зогсоно. Төслийн хавтсанд PowerShell
-   нээгээд нэг удаа ажиллуулаад `.bat`-аа дахин нээнэ:
-   ```powershell
-   .venv\Scripts\python.exe manage.py createsuperuser
-   ```
+1. Төслийн хавтас дахь **Start WorkTrack.bat**-ийг давхар товшино.
+2. Python эсвэл Node.js байхгүй бол цонх асууна: **Y** дарвал Windows-ийн `winget`-ээр суулгана
+   (Windows зөвшөөрөл асууж магадгүй). Дуусмагц цонхоо хаагаад `.bat`-аа дахин нээнэ. `winget`
+   байхгүй бол [Python 3.12](https://www.python.org/downloads/) (суулгахдаа **Add python.exe to PATH**)
+   болон [Node.js LTS](https://nodejs.org/)-ийн татах хуудсыг browser-т нээнэ.
+3. Анх удаа `.venv`, dependency, migration-ийг бэлдэнэ (хэдэн минут). Default нь вебээс удирдах
+   desktop горим; browser өөрөө нээгдэнэ. Admin байхгүй бол **Анхны тохиргоо** хуудас нээгдэж,
+   админы нэр, нууц үгээ оруулаад шууд нэвтэрнэ.
 4. Хаах: вебийн **WorkTrack хаах** эсвэл цонхонд **Ctrl+C**. Ингэхэд agent сүүлийн хугацаагаа
    хадгалж, backend/frontend бүгд зогсоно. Цонхыг **X**-ээр хаавал бүх process мөн зогсоно (сервер
    үлдэхгүй), гэхдээ agent сүүлийн 30 секунд хүртэлх хугацааг хадгалж амжихгүй байж болно.

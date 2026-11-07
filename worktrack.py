@@ -74,14 +74,14 @@ def ensure_venv():
     raise SystemExit(subprocess.call(command))
 
 
-def open_browser():
+def open_browser(url=WEB):
     if sys.platform == 'darwin':
         try:
-            subprocess.run(['/usr/bin/open', WEB], timeout=5, check=False)
+            subprocess.run(['/usr/bin/open', url], timeout=5, check=False)
         except (OSError, subprocess.TimeoutExpired):
-            print(f'Browser-оос {WEB} нээнэ үү.', flush=True)
+            print(f'Browser-оос {url} нээнэ үү.', flush=True)
     else:
-        webbrowser.open(WEB)
+        webbrowser.open(url)
 
 
 def check_http(url):
@@ -142,7 +142,8 @@ def wait_ready(url, process, timeout=30):
     raise RuntimeError(f'{url} асах хугацаа хэтэрлээ. .runtime дахь log-ийг шалгана уу.')
 
 
-def bootstrap(interactive=True):
+def bootstrap():
+    """Prepare dependencies and the database; return (python, node, needs_first_admin)."""
     python = VENV_PYTHON
     state_file = RUNTIME / 'dependencies.json'
     try:
@@ -199,14 +200,8 @@ def bootstrap(interactive=True):
         text=True,
         check=True,
     )
-    if probe.stdout.strip().splitlines()[-1] != 'True':
-        if not interactive:
-            raise RuntimeError(
-                f'Эхний admin үүсээгүй байна. Нэг удаа {VENV_PYTHON.relative_to(ROOT)} manage.py createsuperuser ажиллуулаад WorkTrack-аа дахин нээнэ үү.'
-            )
-        print('Эхний admin account үүсгэнэ үү. Нууц үг бичихэд дэлгэц дээр харагдахгүй.', flush=True)
-        subprocess.run([str(python), 'manage.py', 'createsuperuser'], cwd=ROOT, check=True)
-    return python, node
+    # The first administrator is created in the browser (see backend/users/first_run.py).
+    return python, node, probe.stdout.strip().splitlines()[-1] != 'True'
 
 
 def setup_agent():
@@ -328,7 +323,17 @@ def main():
 
     try:
         existing_backend = backend_is_current()  # Refuse stale servers before running migrations.
-        python, node = bootstrap(interactive=not args.desktop)
+        python, node, needs_admin = bootstrap()
+        setup_url = None
+        if needs_admin:
+            if existing_backend:
+                raise RuntimeError(
+                    'Анхны админ үүсээгүй байна. Өмнө асаасан WorkTrack/backend цонхыг Ctrl+C-ээр хаагаад дахин нээнэ үү.'
+                )
+            # One-time secret for the browser's first-run page; the backend started below inherits it.
+            token = secrets.token_urlsafe(32)
+            os.environ['WORKTRACK_SETUP_TOKEN'] = token
+            setup_url = f'{WEB}/#setup={token}'
         from desktop.usage import LauncherUsage
 
         usage = LauncherUsage(RUNTIME / 'launcher-usage.sqlite3')
@@ -378,8 +383,10 @@ def main():
             f'\nWorkTrack: {WEB}\nЗогсоох: энэ цонхонд Ctrl+C. Оноо автоматаар 60 секунд тутам шинэчлэгдэнэ.\nLog: .runtime/\nЦонхоо нээлттэй байлгана уу.',
             flush=True,
         )
+        if setup_url:
+            print(f'Анхны админаа үүсгэх хуудас: {setup_url}', flush=True)
         if not args.no_browser:
-            open_browser()
+            open_browser(setup_url or WEB)
         while not shutdown.is_set():
             for name, process in processes:
                 if process.poll() is not None:

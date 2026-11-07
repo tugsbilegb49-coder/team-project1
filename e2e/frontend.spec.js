@@ -388,7 +388,7 @@ test('launcher monthly clock survives navigation and reload and selects historic
   await expect(clock).toContainText('01:01:');
 });
 
-test('admin automatically sees monthly employees and can inspect another month on mobile', async ({
+test('admin finds monthly employees under reports and can inspect another month on mobile', async ({
   page,
 }) => {
   await mockApp(page);
@@ -434,6 +434,10 @@ test('admin automatically sees monthly employees and can inspect another month o
   await page.setViewportSize({ width: 320, height: 800 });
   await page.goto('/');
   const report = page.getByRole('region', { name: 'Сарын ажилтны тайлан', exact: true });
+  // "Миний өнөөдөр" keeps the admin's own work controls first; the report lives under "Тайлан".
+  await expect(page.getByRole('heading', { name: 'Одоо хийх ажил', exact: true })).toBeVisible();
+  await expect(report).toHaveCount(0);
+  await page.getByRole('button', { name: 'Тайлан', exact: true }).click();
   await expect(report).toContainText('Worker');
   await expect(report).toContainText('10:00:00');
   await report.locator('summary').click();
@@ -1055,4 +1059,50 @@ test('an incomplete numeric quality value cannot clear a saved grade', async ({ 
   await expect(page.getByRole('alert')).toContainText('Тоон үнэлгээ');
   await page.getByRole('button', { name: 'Үнэлгээ хадгалах' }).click();
   expect(state.patches).toHaveLength(0);
+});
+
+test('first run creates the administrator in the browser and signs straight in', async ({
+  page,
+}) => {
+  await mockApp(page);
+  await page.addInitScript(() => sessionStorage.removeItem('worktrack-auth'));
+  const created = [];
+  await page.route('**/api/setup/', (route) => {
+    if (route.request().method() !== 'POST')
+      return route.fulfill({ json: { needs_admin: true, setup_available: true } });
+    const body = route.request().postDataJSON();
+    created.push(body);
+    if (body.password === 'password')
+      return route.fulfill({
+        status: 400,
+        json: { password: ['This password is too common.'] },
+      });
+    return route.fulfill({
+      status: 201,
+      json: { detail: 'Админ үүслээ.', username: body.username },
+    });
+  });
+  await page.goto('/#setup=one-time-token_123');
+  await expect(page.getByRole('heading', { name: 'WorkTrack — Анхны тохиргоо' })).toBeVisible();
+  await page.getByLabel('Админы нэвтрэх нэр', { exact: true }).fill('admin');
+  await page.getByLabel('Нууц үг', { exact: true }).fill('password');
+  await page.getByLabel('Нууц үг давтах', { exact: true }).fill('password');
+  await page.getByRole('button', { name: 'Админ үүсгээд нэвтрэх', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('хэт түгээмэл');
+  await page.getByLabel('Нууц үг', { exact: true }).fill('Ulaanbaatar-2026!');
+  await page.getByLabel('Нууц үг давтах', { exact: true }).fill('Ulaanbaatar-2026!');
+  await page.getByRole('button', { name: 'Админ үүсгээд нэвтрэх', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Миний өнөөдөр', exact: true })).toBeVisible();
+  expect(created.at(-1)).toMatchObject({ token: 'one-time-token_123', username: 'admin' });
+  expect(new URL(page.url()).hash).toBe(''); // The secret does not stay in the address bar.
+});
+
+test('login page explains how to create the first administrator', async ({ page }) => {
+  await mockApp(page);
+  await page.addInitScript(() => sessionStorage.removeItem('worktrack-auth'));
+  await page.route('**/api/setup/', (route) =>
+    route.fulfill({ json: { needs_admin: true, setup_available: false } }),
+  );
+  await page.goto('/');
+  await expect(page.getByText('Админ хараахан үүсээгүй байна.')).toBeVisible();
 });

@@ -3,6 +3,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 from users.auth import LoginView, LogoutView
+from users.first_run import FirstRunView
 from users.health import HealthView
 from users.self_service import PasswordChangeView, DesktopLinkView, MyTodayView
 from users.monthly import LauncherUsageView, MonthlyReportView
@@ -44,6 +45,7 @@ urlpatterns = [
     path('api/notifications/', NotificationsView.as_view()),
     path('api/reports/export/', ReportExportView.as_view()),
     path('api/health/', HealthView.as_view()),
+    path('api/setup/', FirstRunView.as_view()),
     path('api/v1/activity', ActivityBatchView.as_view()),
     path('admin/', admin.site.urls),
     path('api/auth/login/', LoginView.as_view(), name='token-obtain-pair'),

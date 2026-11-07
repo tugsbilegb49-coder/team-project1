@@ -1,3 +1,4 @@
+import os
 import signal
 import subprocess
 import unittest
@@ -135,7 +136,7 @@ class LauncherTests(unittest.TestCase):
                 patch.object(worktrack.sys, 'argv', ['worktrack.py', '--web-only']),
                 patch.object(worktrack, 'use_utf8'),
                 patch.object(worktrack, 'ensure_venv'),
-                patch.object(worktrack, 'bootstrap', return_value=(Path('/test/python'), 'node')),
+                patch.object(worktrack, 'bootstrap', return_value=(Path('/test/python'), 'node', False)),
                 patch.object(worktrack, 'check_http', return_value=True),
                 patch.object(worktrack, 'backend_is_current', return_value=True),
                 patch.object(worktrack.subprocess, 'Popen', return_value=process) as launch,
@@ -151,6 +152,38 @@ class LauncherTests(unittest.TestCase):
             )
             agent.assert_not_called()
             self.assertEqual(stop.call_count, 2)
+
+    def test_first_run_opens_the_admin_setup_page_with_a_secret_the_backend_inherits(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        seen = {}
+
+        def launch(command, **options):
+            name = 'runserver' if 'runserver' in command else command[-1]
+            seen[name] = os.environ.get('WORKTRACK_SETUP_TOKEN')
+            return Mock(**{'poll.return_value': None})
+
+        with TemporaryDirectory() as directory, patch.dict(os.environ):
+            os.environ.pop('WORKTRACK_SETUP_TOKEN', None)
+            with (
+                patch.object(worktrack, 'RUNTIME', Path(directory)),
+                patch.object(worktrack.sys, 'argv', ['worktrack.py', '--web-only']),
+                patch.object(worktrack, 'use_utf8'),
+                patch.object(worktrack, 'ensure_venv'),
+                patch.object(worktrack, 'bootstrap', return_value=(Path('/test/python'), 'node', True)),
+                patch.object(worktrack, 'check_http', return_value=True),
+                patch.object(worktrack, 'backend_is_current', side_effect=[False, True]),
+                patch.object(worktrack.subprocess, 'Popen', side_effect=launch),
+                patch.object(worktrack, 'open_browser') as browser,
+                patch.object(worktrack.signal, 'signal'),
+                patch.object(worktrack.time, 'sleep', side_effect=KeyboardInterrupt),
+                patch.object(worktrack, 'stop_process'),
+            ):
+                worktrack.main()
+        token = seen['runserver']
+        self.assertTrue(token and len(token) >= 32)
+        browser.assert_called_once_with(f'{worktrack.WEB}/#setup={token}')
 
 
 class BackendIdentityTests(unittest.TestCase):
