@@ -66,6 +66,8 @@ async function mockApp(page) {
       presence_log_retention_days: 7,
       activity_retention_days: 90,
       automatic_retention: false,
+      client_version: '',
+      client_download_url: '',
       version: 1,
     },
     desktop: {
@@ -856,6 +858,16 @@ test('admin settings save with a version and export downloads the chosen date ra
   expect(saved.expected_version).toBe(1);
   expect(saved.camera_threshold).toBe(0.65);
   expect(saved.automatic_retention).toBe(false);
+  await page.getByLabel('Хувилбар (жишээ нь 1.1.0)', { exact: true }).fill('1.1.0');
+  await page.getByRole('button', { name: 'Тохиргоо хадгалах', exact: true }).click();
+  expect(state.patches).toHaveLength(1); // The browser asks for the download link first.
+  await page.getByLabel('Татах холбоос', { exact: true }).fill('https://example.mn/WorkTrack.zip');
+  await page.getByRole('button', { name: 'Тохиргоо хадгалах', exact: true }).click();
+  await expect.poll(() => state.patches.length).toBe(2);
+  expect(state.patches[1].data).toMatchObject({
+    client_version: '1.1.0',
+    client_download_url: 'https://example.mn/WorkTrack.zip',
+  });
   await page.getByRole('button', { name: 'Тайлан', exact: true }).click();
   await page.getByLabel('Эхлэх өдөр', { exact: true }).fill('2026-11-01');
   await page.getByLabel('Дуусах өдөр', { exact: true }).fill('2026-11-05');
@@ -1197,4 +1209,26 @@ test('starting at sign-in is explained before linking and can be switched off', 
   await toggle.click();
   await expect(toggle).not.toBeChecked();
   expect(state.desktopPosts).toEqual(['autostart-on', 'autostart-off']);
+});
+
+test('an older employee app links to the new version', async ({ page }) => {
+  const state = await mockApp(page);
+  Object.assign(state.desktop, {
+    linked: true,
+    username: 'admin',
+    device_name: 'QA laptop',
+    version: '1.0.0',
+    update: { version: '1.1.0', download_url: 'https://example.mn/WorkTrack.zip' },
+  });
+  await page.goto('/');
+  const panel = page.getByRole('region', { name: 'Энэ компьютерийн удирдлага', exact: true });
+  await expect(panel.getByText('шинэ хувилбар 1.1.0 гарлаа')).toBeVisible();
+  await expect(panel.getByRole('link', { name: 'Татаж авах' })).toHaveAttribute(
+    'href',
+    'https://example.mn/WorkTrack.zip',
+  );
+  state.desktop.update = { version: '9.9.9', download_url: 'javascript:alert(1)' };
+  await page.reload();
+  await expect(panel.getByRole('button', { name: 'Ажил эхлүүлэх' })).toBeVisible();
+  await expect(panel.getByRole('link', { name: 'Татаж авах' })).toHaveCount(0);
 });

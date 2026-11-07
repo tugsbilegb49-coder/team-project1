@@ -2,6 +2,11 @@
 
 import threading
 
+try:
+    from .version import VERSION
+except ImportError:  # Run as a script: agent/main.py.
+    from version import VERSION
+
 
 class AgentRuntime:
     def __init__(self, client, device_id, worker, paused, kind='computer', interval=30):
@@ -36,7 +41,7 @@ class AgentRuntime:
                     'device_id': self.device_id,
                     'kind': self.kind,
                     'paused': bool(self.paused()),
-                    'agent_version': '0.3.0',
+                    'agent_version': VERSION,
                     'settings_version': self.snapshot().get('version', 0),
                     **state,
                 },

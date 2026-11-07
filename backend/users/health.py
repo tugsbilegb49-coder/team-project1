@@ -21,15 +21,20 @@ class HealthView(APIView):
             cache.set('worktrack-health', True, 30)
             if cache.get('worktrack-health') is not True:
                 raise RuntimeError('Cache round trip failed.')
+            from .operations import current_settings
+
+            policy = current_settings()
         except Exception:
             log.exception('Readiness check failed')
             return Response({'status': 'unavailable'}, status=503)
-        return Response(
-            {
-                'status': 'ok',
-                'service': 'worktrack-api',
-                'protocol': 1,
-                'source_digest': settings.BACKEND_SOURCE_DIGEST,
-                'workspace_id': settings.BACKEND_WORKSPACE_ID,
-            }
-        )
+        data = {
+            'status': 'ok',
+            'service': 'worktrack-api',
+            'protocol': 1,
+            'source_digest': settings.BACKEND_SOURCE_DIGEST,
+            'workspace_id': settings.BACKEND_WORKSPACE_ID,
+        }
+        if policy.client_version and policy.client_download_url:
+            # Employee apps read this to offer an update (desktop/updates.py).
+            data['client'] = {'version': policy.client_version, 'download_url': policy.client_download_url}
+        return Response(data)

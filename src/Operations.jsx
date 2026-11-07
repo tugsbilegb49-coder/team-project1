@@ -228,6 +228,8 @@ export function AuditHistory({ user }) {
     presence_log_retention_days: 'CSV хадгалах хоног',
     activity_retention_days: 'Өгөгдлийн санд хадгалах хоног',
     automatic_retention: 'Автомат цэвэрлэгээ',
+    client_version: 'Ажилтны аппын хувилбар',
+    client_download_url: 'Аппын татах холбоос',
     records_revoked: 'Цуцалсан зөвшөөрөл',
     policy_version: 'Зөвшөөрлийн хувилбар',
   };
@@ -320,6 +322,8 @@ export function MonitoringSettings({ user }) {
       presence_log_retention_days: Number(form.presence_log_retention_days),
       activity_retention_days: Number(form.activity_retention_days),
       automatic_retention: form.automatic_retention,
+      client_version: form.client_version.trim(),
+      client_download_url: form.client_download_url.trim(),
     };
     try {
       const result = await api('/api/monitoring-settings/', {
@@ -427,6 +431,32 @@ export function MonitoringSettings({ user }) {
               Автомат цэвэрлэгээ эхэндээ унтраалттай. Хэрэглэгч, даалгавар, зөвшөөрөл, оноог
               устгахгүй.
             </p>
+            <h2>Ажилтны аппын шинэ хувилбар</h2>
+            <p>
+              Шинэ хувилбар гаргасан бол энд бичнэ. Хуучин хувилбартай компьютерууд мэдэгдэл авч,
+              татах холбоосыг харна. Компьютер бүрийн хувилбарыг «Agent төлөв»-өөс харна.
+            </p>
+            <label>
+              Хувилбар (жишээ нь 1.1.0)
+              <input
+                inputMode="decimal"
+                pattern="\d{1,4}(\.\d{1,4}){0,3}"
+                maxLength={20}
+                value={form.client_version}
+                onChange={(e) => update('client_version', e.target.value)}
+              />
+            </label>
+            <label>
+              Татах холбоос
+              <input
+                type="url"
+                maxLength={500}
+                placeholder="https://github.com/…/releases/latest"
+                required={Boolean(form.client_version.trim())}
+                value={form.client_download_url}
+                onChange={(e) => update('client_download_url', e.target.value)}
+              />
+            </label>
             <button type="submit">Тохиргоо хадгалах</button>
           </fieldset>
         </form>

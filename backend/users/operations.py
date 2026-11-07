@@ -40,6 +40,8 @@ SETTING_FIELDS = (
     'presence_log_retention_days',
     'activity_retention_days',
     'automatic_retention',
+    'client_version',
+    'client_download_url',
 )
 
 
@@ -106,6 +108,20 @@ class SettingsInput(StrictSerializer):
     presence_log_retention_days = serializers.IntegerField(min_value=1, max_value=365, required=False)
     activity_retention_days = serializers.IntegerField(min_value=1, max_value=3650, required=False)
     automatic_retention = serializers.BooleanField(required=False)
+    client_version = serializers.RegexField(
+        r'^(\d{1,4}(\.\d{1,4}){0,3})?$', max_length=20, allow_blank=True, required=False
+    )
+    client_download_url = serializers.URLField(max_length=500, allow_blank=True, required=False)
+
+    def validate_client_download_url(self, value):
+        if value and not value.lower().startswith(('https://', 'http://')):
+            raise ValidationError('Use an http(s) link.')
+        return value
+
+    def validate(self, data):
+        if data.get('client_version') and not data.get('client_download_url', current_settings().client_download_url):
+            raise ValidationError({'client_download_url': 'Add the download link for the new version.'})
+        return data
 
     def validate_productive_apps(self, values):
         values = [value.strip() for value in values]

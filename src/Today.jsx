@@ -295,6 +295,17 @@ export function DesktopPanel({ user, tasks, work, workday, busy }) {
               {message}
             </p>
           )}
+          {state?.update && /^https?:\/\//i.test(state.update.download_url) && (
+            <p role="status" className="work-reminder">
+              ⬇️ WorkTrack-ийн шинэ хувилбар {state.update.version} гарлаа (энэ компьютерт{' '}
+              {state.version}).{' '}
+              <a href={state.update.download_url} target="_blank" rel="noreferrer">
+                Татаж авах
+              </a>
+              . WorkTrack-аа хаагаад шинэ хувилбарыг хуучных нь оронд хуулна; таны мэдээлэл
+              хадгалагдана.
+            </p>
+          )}
           {state?.reminder && (
             <p role="status" className="work-reminder">
               🔔 {state.reminder}

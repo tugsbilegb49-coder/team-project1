@@ -15,6 +15,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 
 from agent.main import ApiClient, AgentError, is_paused, set_paused
 from agent.token_store import atomic_json_write, save_tokens
+from agent.version import VERSION
 
 # The installer build bundles no Python interpreter for scripts and leaves the camera out.
 FROZEN = getattr(sys, 'frozen', False)
@@ -81,6 +82,10 @@ class DesktopController:
         from desktop.reminders import Reminders
 
         self.reminders = Reminders(self, autostart=sync)
+        from desktop.updates import UpdateCheck
+
+        # Only the installed app offers downloads; a source checkout is updated with git.
+        self.updates = UpdateCheck(self, autostart=sync and FROZEN)
         from desktop.autostart import Autostart
 
         self.autostart_choice = self.runtime / 'autostart.json'
@@ -145,6 +150,8 @@ class DesktopController:
             and all(importlib.util.find_spec(module) is not None for module in ('cv2', 'ultralytics', 'yaml')),
             'preparing_camera': self.preparing,
             'reminders_enabled': self.reminders.enabled,
+            'version': VERSION,
+            'update': self.updates.available,
             'autostart_supported': self.autostart.supported,
             'autostart_enabled': self.autostart.enabled,
             # The installed app turns this on when a device is linked, unless the user chose before.
@@ -333,6 +340,7 @@ class DesktopController:
     def close(self):
         self.usage_sync.close()
         self.reminders.close()
+        self.updates.close()
         with self.lock:
             self.closed = True
             if self.owns_usage:

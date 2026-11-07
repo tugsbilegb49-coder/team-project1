@@ -87,6 +87,9 @@ class MonitoringSettings(models.Model):
     presence_log_retention_days = models.PositiveSmallIntegerField(default=7)
     activity_retention_days = models.PositiveSmallIntegerField(default=90)
     automatic_retention = models.BooleanField(default=False)
+    # The newest employee app the admin wants everyone on; older apps show where to download it.
+    client_version = models.CharField(max_length=20, blank=True)
+    client_download_url = models.URLField(max_length=500, blank=True)
     version = models.PositiveIntegerField(default=1)
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
