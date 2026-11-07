@@ -90,6 +90,9 @@ class MonitoringSettings(models.Model):
     # The newest employee app the admin wants everyone on; older apps show where to download it.
     client_version = models.CharField(max_length=20, blank=True)
     client_download_url = models.URLField(max_length=500, blank=True)
+    # A second place for the daily backup (USB disk, network share, synced cloud folder).
+    # BACKUP_COPY_DIR in the server environment takes precedence. Admin-only; not in settings_data.
+    backup_copy_dir = models.CharField(max_length=500, blank=True)
     version = models.PositiveIntegerField(default=1)
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(

@@ -15,6 +15,7 @@ import {
   AuditHistory,
   MonitoringSettings,
   Notifications,
+  ServerStatus,
   ReportExport,
 } from './Operations';
 import './App.css';
@@ -403,7 +404,10 @@ function App() {
         ) : page === 'audit' ? (
           <AuditHistory key={`audit:${user.id}:${user.role}:${user.department}`} user={user} />
         ) : page === 'settings' && user.is_admin ? (
-          <MonitoringSettings key={`settings:${user.id}`} user={user} />
+          <>
+            <ServerStatus key={`server:${user.id}`} user={user} />
+            <MonitoringSettings key={`settings:${user.id}`} user={user} />
+          </>
         ) : (
           <section>
             <header className="header">

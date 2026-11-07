@@ -95,6 +95,10 @@ async function mockApp(page) {
       },
     },
     workSession: null,
+    server: {
+      backup: { status: null, problems: [], copy_dir: '', copy_dir_source: null },
+      share: null,
+    },
   };
   await page.route('**/desktop/**', (route) => {
     const action = new URL(route.request().url()).pathname.split('/')[2];
@@ -230,6 +234,16 @@ async function mockApp(page) {
         next: null,
         previous: null,
       });
+    if (path === '/api/server-status/') {
+      if (method === 'PATCH') {
+        state.patches.push({ path, data });
+        if (!data.backup_copy_dir.startsWith('/'))
+          return respond({ backup_copy_dir: ['Бүтэн замыг оруулна уу.'] }, 400);
+        state.server.backup.copy_dir = data.backup_copy_dir;
+        state.server.backup.copy_dir_source = 'settings';
+      }
+      return respond(state.server);
+    }
     if (path === '/api/monitoring-settings/') {
       if (method === 'PATCH') {
         state.patches.push({ path, data });
@@ -1285,4 +1299,40 @@ test('an older employee app links to the new version', async ({ page }) => {
   await page.reload();
   await expect(panel.getByRole('button', { name: 'Ажил эхлүүлэх' })).toBeVisible();
   await expect(panel.getByRole('link', { name: 'Татаж авах' })).toHaveCount(0);
+});
+
+test('admin sees how employees connect, the last backup and sets a second backup folder', async ({
+  page,
+}) => {
+  const state = await mockApp(page);
+  state.server.share = {
+    addresses: ['https://192.168.1.20:8443', 'https://10.0.0.5:8443'],
+    code: 'AB12-CD34-EF56',
+  };
+  state.server.backup.status = {
+    last_success_at: '2026-11-07T09:00:00+08:00',
+    last_copy_at: null,
+    error: 'Хоёр дахь хуулбарын хавтас олдсонгүй: /Volumes/USB.',
+  };
+  state.notifications = [
+    { id: 'server-backup_failed', kind: 'backup_failed', message: 'Хавтас олдсонгүй' },
+  ];
+  await page.goto('/');
+  await page.getByText('Мэдэгдэл (1)', { exact: true }).click();
+  await expect(page.getByText('Backup амжилтгүй: Хавтас олдсонгүй')).toBeVisible();
+  await page.getByRole('button', { name: 'Харах', exact: true }).click();
+  const server = page.getByRole('region', { name: 'Сервер ба backup' });
+  await expect(server.getByText('https://192.168.1.20:8443')).toBeVisible();
+  await expect(server.getByText('AB12-CD34-EF56')).toBeVisible();
+  await expect(server.getByRole('alert')).toContainText('хавтас олдсонгүй');
+  await expect(server.getByText('Одоогоор backup зөвхөн серверийн компьютер дээр')).toBeVisible();
+  const folder = server.getByLabel('Хоёр дахь хуулбарын хавтас (серверийн компьютер дээр)');
+  await folder.fill('usb');
+  await server.getByRole('button', { name: 'Хавтас хадгалах' }).click();
+  await expect(server.getByText('Бүтэн замыг оруулна уу.')).toBeVisible();
+  await folder.fill('/Volumes/USB/WorkTrack');
+  await server.getByRole('button', { name: 'Хавтас хадгалах' }).click();
+  await expect(server.getByText('Хадгаллаа.', { exact: false })).toBeVisible();
+  await expect(folder).toHaveValue('/Volumes/USB/WorkTrack');
+  await expect(server.getByText('Одоогоор backup зөвхөн серверийн компьютер дээр')).toHaveCount(0);
 });

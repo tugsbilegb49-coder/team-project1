@@ -75,7 +75,11 @@ export function Notifications({ user, navigate }) {
     task_transfer: 'Даалгавар шилжүүлэх хүсэлт',
     upload_error: 'Илгээлтийн алдаа',
     queue_pending: 'Илгээх бүртгэл хүлээгдэж байна',
+    backup_failed: 'Backup амжилтгүй',
+    backup_stale: 'Backup удаан хийгдээгүй. Сүүлийнх',
   };
+  const target = (kind) =>
+    kind.startsWith('task_') ? 'tasks' : kind.startsWith('backup_') ? 'settings' : 'agents';
   return (
     <details className="notification-box">
       <summary>Мэдэгдэл ({data?.count ?? 0})</summary>
@@ -87,10 +91,7 @@ export function Notifications({ user, navigate }) {
             {names[item.kind]}: {item.message}
             {item.error_code ? ` — ${errorLabels[item.error_code] || 'Алдаа'}` : ''}
           </span>
-          <button
-            type="button"
-            onClick={() => navigate(item.kind.startsWith('task_') ? 'tasks' : 'agents')}
-          >
+          <button type="button" onClick={() => navigate(target(item.kind))}>
             Харах
           </button>
         </div>
@@ -267,6 +268,112 @@ export function AuditHistory({ user }) {
         </article>
       ))}
       <Pager data={data} page={page} setPage={setPage} />
+    </section>
+  );
+}
+
+/** Админд: backup-ийн төлөв, хоёр дахь хуулбарын хавтас, оффисын серверийн холбох хаяг. */
+export function ServerStatus({ user }) {
+  const { data, error, refresh } = usePolling('/api/server-status/', user);
+  const [folder, setFolder] = useState(null);
+  const [saving, setSaving] = useState(false),
+    [feedback, setFeedback] = useState(null);
+  const backup = data?.backup,
+    status = backup?.status,
+    share = data?.share;
+  async function save(event) {
+    event.preventDefault();
+    setSaving(true);
+    setFeedback(null);
+    try {
+      await api('/api/server-status/', {
+        method: 'PATCH',
+        body: JSON.stringify({ backup_copy_dir: (folder ?? backup.copy_dir).trim() }),
+      });
+      setFolder(null);
+      setFeedback({
+        ok: true,
+        text: 'Хадгаллаа. Дараагийн backup (нэг цагийн дотор) энд хуулагдана.',
+      });
+      refresh();
+    } catch (failure) {
+      const detail = failure.details?.backup_copy_dir;
+      setFeedback({ ok: false, text: Array.isArray(detail) ? detail.join(' ') : failure.message });
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <section className="task-section" aria-label="Сервер ба backup">
+      <h1>Сервер ба backup</h1>
+      {error && <p role="alert">{error}</p>}
+      {share && (
+        <div className="server-share">
+          <h2>Ажилтны компьютерийг холбох</h2>
+          <p>Ажилтны WorkTrack-ийн «Сервертэй холбох» хуудсанд эдгээрийг оруулна:</p>
+          <p>
+            Хаяг: <code>{share.addresses[0]}</code>
+            {share.addresses.length > 1 && (
+              <span className="muted"> (эсвэл {share.addresses.slice(1).join(', ')})</span>
+            )}
+          </p>
+          <p>
+            Серверийн код: <code>{share.code}</code>
+          </p>
+          <p className="muted">
+            Код нь холболтыг шифрлэж, өөр компьютер энэ сервер мэт дүр эсгэхээс хамгаална.
+          </p>
+        </div>
+      )}
+      {backup && (
+        <>
+          <h2>Backup</h2>
+          {!status ? (
+            <p>
+              Backup хараахан хийгдээгүй. WorkTrack асаалттай үед өдөрт нэг удаа автоматаар хийнэ.
+            </p>
+          ) : (
+            <p>
+              Сүүлийн амжилттай backup: <strong>{when(status.last_success_at)}</strong>
+              {status.last_copy_at && <> · Хоёр дахь хуулбар: {when(status.last_copy_at)}</>}
+            </p>
+          )}
+          {status?.error && <p role="alert">Сүүлийн оролдлого амжилтгүй: {status.error}</p>}
+          {backup.copy_dir_source === 'environment' ? (
+            <p>
+              Хоёр дахь хуулбар: <code>{backup.copy_dir}</code> (серверийн BACKUP_COPY_DIR
+              тохиргоогоор).
+            </p>
+          ) : (
+            <form className="task-form" onSubmit={save}>
+              <fieldset disabled={saving || !user.is_admin}>
+                <label>
+                  Хоёр дахь хуулбарын хавтас (серверийн компьютер дээр)
+                  <input
+                    value={folder ?? backup.copy_dir}
+                    maxLength={500}
+                    placeholder="D:\WorkTrack-backup эсвэл /Volumes/USB/WorkTrack"
+                    onChange={(e) => setFolder(e.target.value)}
+                  />
+                </label>
+                <p className="muted">
+                  Сервер эвдэрвэл backup хамт алга болохгүйн тулд USB диск, сүлжээний хавтас эсвэл
+                  Google Drive / OneDrive-ийн синк хийдэг хавтсыг сонгоно. Сүүлийн 30 хуулбар
+                  хадгалагдана. Хоосон бол хоёр дахь хуулбар хийхгүй.
+                </p>
+                {feedback && <p role={feedback.ok ? 'status' : 'alert'}>{feedback.text}</p>}
+                <button type="submit">Хавтас хадгалах</button>
+              </fieldset>
+            </form>
+          )}
+          {!backup.copy_dir && (
+            <p role="status" className="work-reminder">
+              Одоогоор backup зөвхөн серверийн компьютер дээр байна. Хоёр дахь хавтас тохируулахыг
+              зөвлөж байна.
+            </p>
+          )}
+        </>
+      )}
     </section>
   );
 }

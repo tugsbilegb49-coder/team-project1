@@ -6,6 +6,7 @@ from users.auth import LoginView, LogoutView
 from users.first_run import FirstRunView
 from users.health import HealthView
 from users.reset_codes import PasswordResetWithCodeView
+from users.server_status import ServerStatusView
 from users.self_service import PasswordChangeView, DesktopLinkView, MyTodayView
 from users.monthly import LauncherUsageView, MonthlyReportView
 from users.weekly import MyWeekView
@@ -46,6 +47,7 @@ urlpatterns = [
     path('api/desktop/link/', DesktopLinkView.as_view()),
     path('api/monitoring-settings/', MonitoringSettingsView.as_view()),
     path('api/notifications/', NotificationsView.as_view()),
+    path('api/server-status/', ServerStatusView.as_view()),
     path('api/reports/export/', ReportExportView.as_view()),
     path('api/health/', HealthView.as_view()),
     path('api/setup/', FirstRunView.as_view()),

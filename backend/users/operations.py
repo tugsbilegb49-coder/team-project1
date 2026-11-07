@@ -316,6 +316,17 @@ class NotificationsView(APIView):
                         'error_code': beat.error_code,
                     }
                 )
+        if request.user.is_admin_role:
+            from activity.backup_status import problems, read_status
+
+            status = read_status() or {}
+            messages = {
+                'backup_failed': status.get('error') or '',
+                'backup_stale': status.get('last_success_at') or 'хараахан болоогүй',
+            }
+            alerts[:0] = [
+                {'id': f'server-{kind}', 'kind': kind, 'message': messages[kind]} for kind in problems(status or None)
+            ]
         return Response(
             {'items': alerts, 'count': len(alerts), 'truncated': tasks.count() > 100 or beats.count() > 100}
         )

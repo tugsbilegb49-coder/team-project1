@@ -11,6 +11,7 @@ from django.conf import settings
 from django.db import connections
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
+from activity.backup_status import copy_dir_setting, write_status
 from activity.backups import create_backup, verify_backup
 
 GENERATED = re.compile(r'^daily-\d{8}T\d{6}Z-[0-9a-f]{8}\.(sqlite3|dump)$')
@@ -31,12 +32,31 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--keep', type=int, default=os.environ.get('BACKUP_KEEP', '7'))
-        parser.add_argument('--copy-dir', default=os.environ.get('BACKUP_COPY_DIR'))
+        parser.add_argument(
+            '--copy-dir', help='Second copy; default BACKUP_COPY_DIR, then the folder set on the admin page.'
+        )
+        parser.add_argument('--copy-keep', type=int, default=os.environ.get('BACKUP_COPY_KEEP', '30'))
 
     def handle(self, *args, **options):
-        keep = options['keep']
-        if keep < 1:
-            raise CommandError('--keep must be at least 1.')
+        copy_dir = options.get('copy_dir') or copy_dir_setting()[0]
+        try:
+            current, copied = self.cycle(options, copy_dir)
+        except Exception as exc:
+            write_status(error=str(exc) or exc.__class__.__name__, copy_dir=copy_dir or '')
+            raise
+        now = timezone.now().isoformat()
+        write_status(
+            error='',
+            last_success_at=now,
+            last_backup=current.name,
+            copy_dir=copy_dir or '',
+            **({'last_copy_at': now} if copied else {}),
+        )
+
+    def cycle(self, options, copy_dir):
+        keep, copy_keep = options['keep'], options.get('copy_keep', 30)
+        if keep < 1 or copy_keep < 1:
+            raise CommandError('--keep and --copy-keep must be at least 1.')
         directory = settings.BASE_DIR / 'backups'
         directory.mkdir(parents=True, exist_ok=True)
         files = sorted(
@@ -62,18 +82,18 @@ class Command(BaseCommand):
         else:
             self.stdout.write(f'Daily backup already exists: {current}')
         verify_backup(current)
-        if options.get('copy_dir'):
-            target = Path(options['copy_dir']).expanduser().resolve()
+        copied = False
+        if copy_dir:
+            target = Path(copy_dir).expanduser().resolve()
             if not target.is_dir():
                 raise CommandError(
-                    'Copy directory must already exist (mount the backup disk first). No local backups pruned.'
+                    f'Хоёр дахь хуулбарын хавтас олдсонгүй: {target}. USB диск/сүлжээний хавтсаа холбоно уу. '
+                    'Локал backup-ийг устгаагүй.'
                 )
             destination = target / current.name
             if destination.exists():
                 if digest(destination) != digest(current):
-                    raise CommandError(
-                        'Second-copy filename exists with different data; nothing overwritten or pruned.'
-                    )
+                    raise CommandError('Хоёр дахь хавтсанд ижил нэртэй өөр файл байна; юу ч дарж бичээгүй, устгаагүй.')
             else:
                 temporary = target / ('.backup-' + secrets.token_hex(8) + '.tmp')
                 try:
@@ -81,13 +101,22 @@ class Command(BaseCommand):
                     with os.fdopen(fd, 'wb') as output, current.open('rb') as source:
                         shutil.copyfileobj(source, output)
                     if digest(temporary) != digest(current):
-                        raise CommandError('Second-copy checksum mismatch.')
+                        raise CommandError('Хоёр дахь хуулбар эх файлтай таарсангүй (checksum).')
                     os.replace(temporary, destination)
                 finally:
                     temporary.unlink(missing_ok=True)
             self.stdout.write(f'Verified second copy: {destination}')
+            copied = True
+            copies = sorted(
+                (p for p in target.iterdir() if p.is_file() and not p.is_symlink() and GENERATED.fullmatch(p.name)),
+                key=lambda p: p.name,  # The names start with the UTC time they were made.
+                reverse=True,
+            )
+            for old in copies[copy_keep:]:
+                old.unlink()
         for old in files[keep:]:
             old.unlink()
         self.stdout.write(
-            f'Local generated backups retained: {min(len(files), keep)}. Custom files and external copies are not pruned.'
+            f'Local generated backups retained: {min(len(files), keep)}. Only generated copies are pruned elsewhere.'
         )
+        return current, copied
