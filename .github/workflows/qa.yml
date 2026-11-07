@@ -15,8 +15,8 @@ jobs:
       DJANGO_DEBUG: "true"
       DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -24,7 +24,7 @@ jobs:
             requirements-qa.txt
             requirements-ai.txt
             backend/requirements.txt
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -32,9 +32,13 @@ jobs:
       - run: python -m pip check
       - run: python -c "import cv2, django, psutil, sklearn, yaml"
       - run: npm ci
+      # Keep the codebase in the shared Prettier/ruff style (npm run format, ruff format .).
+      - run: python -m ruff format --check .
+      - run: python -m ruff check .
+      - run: npm run format:check
       - run: npx playwright install --with-deps chromium
       - run: python verify_camera_ai.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: camera-ai-qa-evidence
