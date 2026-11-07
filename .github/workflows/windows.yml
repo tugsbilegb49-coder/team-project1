@@ -72,9 +72,9 @@ jobs:
       - name: Real browser with Django
         if: ${{ !cancelled() }}
         run: python .github/ci_step.py "Real browser with Django" python verify_frontend.py
-      - name: Launcher start, agent start/stop and Ctrl+Break shutdown
+      - name: Office server (HTTPS + code), agent start/stop and Ctrl+Break shutdown
         if: ${{ !cancelled() }}
-        run: python .github/ci_step.py "Launcher start, agent start/stop and Ctrl+Break shutdown" python verify_launcher.py --agent
+        run: python .github/ci_step.py "Office server launcher" python verify_launcher.py --agent --share
       - name: Start WorkTrack.bat runs (finds Python/Node, passes arguments)
         if: ${{ !cancelled() }}
         timeout-minutes: 3

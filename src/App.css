@@ -969,8 +969,22 @@ textarea:focus-visible {
 .reset-code p {
   margin: 4px 0;
 }
-.reset-code-value {
-  font-size: 1.15em;
-  letter-spacing: 0.08em;
+.reset-code-value,
+.server-share code {
+  font-size: 1.25em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   user-select: all;
+}
+.server-share {
+  margin: 12px 0 20px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.server-share h2 {
+  margin: 0 0 8px;
+}
+.server-share p {
+  margin: 6px 0;
 }

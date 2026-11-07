@@ -331,7 +331,7 @@ def bootstrap():
         [
             str(python),
             '-c',
-            'import django, rest_framework, corsheaders, dotenv, rest_framework_simplejwt, psycopg, openpyxl; from zoneinfo import ZoneInfo; ZoneInfo("Asia/Ulaanbaatar")',
+            'import django, rest_framework, corsheaders, dotenv, rest_framework_simplejwt, psycopg, openpyxl, cryptography; from zoneinfo import ZoneInfo; ZoneInfo("Asia/Ulaanbaatar")',
         ],
         capture_output=True,
     )

@@ -274,11 +274,19 @@ python manage.py backup_cycle --keep 14
 python manage.py backup_cycle --copy-dir /Volumes/MyBackup/WorkTrack --keep 7
 ```
 
-Copy directory урьдчилж үүссэн, диск mount болсон байх ёстой. Хоёр дахь хуулбарыг
-SHA-256 checksum-аар шалгадаг. `BACKUP_KEEP`, `BACKUP_COPY_DIR` environment-оор
-scheduler-ийг тохируулна. Docker-д энэ disk path-ийг backup container дотор volume
-болгон тусад нь mount хийх шаардлагатай. External хуулбаруудыг автоматаар prune
-хийхгүй. Log: `.runtime/backup.log`. Launcher унтарсан үед автомат backup ажиллахгүй.
+**Хоёр дахь хуулбар.** Сервер эвдэрвэл backup хамт алга болохгүйн тулд вебийн
+**Тохиргоо → Сервер ба backup** хэсэгт серверийн компьютер дээрх өөр хавтсыг (USB диск,
+сүлжээний хавтас, Google Drive / OneDrive-ийн синк хийдэг хавтас) бичнэ. Хавтас байгаа,
+бичих эрхтэй эсэхийг хадгалахдаа шалгана. Серверийн `BACKUP_COPY_DIR` тохиргоо байвал
+тэр нь давуу эрхтэй (Docker). Хуулбарыг SHA-256-аар шалгаж, тэнд сүүлийн 30-ыг
+(`BACKUP_COPY_KEEP`) үлдээнэ; өөр нэртэй файлд хүрэхгүй. Copy диск олдохгүй бол local
+retention хийхгүй.
+
+**Анхааруулга.** Сүүлийн оролдлого амжилтгүй болсон, эсвэл 36 цагаас дээш амжилттай backup
+болоогүй бол админы **Мэдэгдэл**-д гарна. Үр дүн `backups/status.json`-д хадгалагдана.
+`BACKUP_KEEP` нь local хуулбарын тоо. Docker-д copy диск-ийг backup container дотор volume
+болгон mount хийнэ. Log: `.runtime/backup.log`. Launcher унтарсан үед автомат backup
+ажиллахгүй (оффисын серверт «Компьютер асахад WorkTrack-ийг автоматаар асаах»-ыг асаана).
 
 ### Олон төхөөрөмжийн урт HTTP soak ба camera үнэлгээ
 
@@ -322,15 +330,56 @@ state-ийн metric нь null; бодит annotation байхгүй үед accur
 Суулгасан аппын өгөгдөл: Windows `%LOCALAPPDATA%\WorkTrack`, macOS
 `~/Library/Application Support/WorkTrack`.
 
-Оффисын сервер (`worktrack.py --share`) нь Django-г `0.0.0.0:8000` дээр `DEBUG=false`-оор
-ажиллуулж, тухайн компьютерийн дотоод IP хаягуудыг `ALLOWED_HOSTS`-д нэмнэ. Энэ нь жижиг
-оффист зориулсан: HTTP (шифргүй), Django-ийн хөгжүүлэлтийн сервер, `/admin` нь secure cookie
-шаарддаг тул энэ горимд нэвтрэхгүй. Олон хүн эсвэл гаднаас хандах бол доорх HTTPS deployment-ийг
-ашиглана.
+Оффисын сервер (`worktrack.py --share`) нь Django-г зөвхөн `127.0.0.1:8000` дээр
+`DEBUG=false`-оор ажиллуулна. Оффисын сүлжээнд `desktop/tls.py`-ийн HTTPS front end
+`0.0.0.0:8443` дээр сонсож, Django руу дамжуулна (`X-Forwarded-For`-оор компьютер бүрийн
+хаягийг өгдөг тул login throttle хүн бүрт тусдаа). Сервер анх асахдаа өөрийн гэрчилгээг
+`.runtime/tls/`-д үүсгэж хадгална; IP солигдсон ч код өөрчлөгдөхгүй. Гэрчилгээг certificate
+authority батлаагүй тул ажилтан **серверийн код**-ыг (гэрчилгээний SHA-256-ийн эхний 12 тэмдэгт)
+оруулна. Ажилтны апп бүтэн fingerprint-ийг `server.json`-д хадгалж, цаашид зөвхөн тэр
+гэрчилгээтэй сервертэй ярина (`agent/transport.py`, `WORKTRACK_SERVER_PIN`). Хаяг, код
+серверийн цонх болон **Тохиргоо → Сервер ба backup**-д харагдана. `.runtime/tls/server.key`-г
+устгавал шинэ код үүсч, бүх ажилтан дахин холбогдоно. Энэ нь Django-ийн хөгжүүлэлтийн сервер
+тул жижиг оффист зориулсан; `/admin` зөвхөн серверийн компьютер дээрээс ч secure cookie
+шаарддаг тул ажиллахгүй (вебийн админ хэсгийг ашиглана). Олон хүн эсвэл гаднаас хандах бол
+доорх HTTPS deployment-ийг ашиглана.
 
-Installer-ийг `python packaging/build_client.py` build хийнэ (PyInstaller; macOS-д ad-hoc гарын
-үсэгтэй, Developer ID/notarization байхгүй). CI (`.github/workflows/installer.yml`) нь Windows,
-macOS дээр build хийж, `verify_client.py`-аар ажилтны бүх урсгалыг туршаад zip-ийг хадгална.
+Installer-ийг `python packaging/build_client.py` build хийнэ (PyInstaller). CI
+(`.github/workflows/installer.yml`) нь Windows, macOS дээр build хийж, `verify_client.py`-аар
+ажилтны бүх урсгалыг (суулгасан аппыг оффисын HTTPS сервер, кодтой) туршаад zip-ийг хадгална.
+
+### Ажилтны аппын шинэ хувилбар гаргах
+
+1. `agent/version.py`-ийн `VERSION`-ийг нэмнэ (жишээ нь `1.1.0`), commit хийнэ.
+2. `git tag v1.1.0 && git push origin v1.1.0`. Installer workflow хоёр zip-ийг build хийж,
+   туршаад **GitHub Releases**-д нийтэлнэ (tag ба `VERSION` таарахгүй бол зогсоно).
+3. Вебийн **Тохиргоо → Ажилтны аппын шинэ хувилбар**-т `1.1.0` болон холбоосыг
+   (`https://github.com/<owner>/<repo>/releases/latest`) бичнэ.
+
+Хуучин аппууд 6 цаг тутам серверээс шалгаж, нэг удаа мэдэгдэл гаргаад «Миний өнөөдөр»-т татах
+холбоос харуулна. Ажилтан WorkTrack-аа хааж, шинэ хувилбарыг хуучин хавтасны оронд хуулна;
+өгөгдөл хэрэглэгчийн профайлд тул хадгалагдана. Апп өөрөө татаж суулгахгүй. Компьютер бүрийн
+хувилбар «Төхөөрөмжийн төлөв»-д харагдана.
+
+### Тоон гарын үсэг
+
+Гарын үсэггүй апп анх нээхэд Windows SmartScreen, macOS Gatekeeper анхааруулга гаргадаг
+бөгөөд олон компанийн IT ийм аппыг хориглодог. Гэрчилгээг байгууллага өөрөө авна:
+
+- **macOS:** [Apple Developer Program](https://developer.apple.com/programs/) (жилд $99) →
+  «Developer ID Application» гэрчилгээ → Keychain-аас `.p12` болгон export. GitHub repo-ийн
+  **Settings → Secrets and variables → Actions**-д: `MACOS_CERT_P12_BASE64` (`base64 -i cert.p12`),
+  `MACOS_CERT_PASSWORD`, `MACOS_SIGN_IDENTITY` (`Developer ID Application: Нэр (TEAMID)`),
+  notarization-д `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD` (appleid.apple.com-ийн
+  app-specific password).
+- **Windows:** code signing гэрчилгээ (OV/EV) худалдан авна. `.pfx` файлтай бол
+  `WINDOWS_CERT_PFX_BASE64`, `WINDOWS_SIGN_PASSWORD` secret нэмнэ. 2023 оноос хойш ихэнх
+  гэрчилгээ USB token эсвэл cloud HSM дээр ирдэг тул `.pfx` гаргах боломжгүй байж болно; тэгвэл
+  token-той Windows компьютер дээр `WINDOWS_SIGN_THUMBPRINT=<гэрчилгээний thumbprint>` тавиад
+  `python packaging/build_client.py` ажиллуулна (Windows SDK-ийн `signtool`).
+
+Secret байхгүй үед CI гарын үсэггүй (macOS-д ad-hoc) build хийсээр байна. Гарын үсэг зурах алхам
+бодит гэрчилгээгээр хараахан туршигдаагүй: анхны удаа CI-ийн «Sign» алхмын log-ийг шалгана уу.
 
 ### Локал deployment бэлтгэл
 
@@ -365,6 +414,16 @@ TLS certificate, public deployment, external monitoring/alert-ийг ажилл�
 
 Тохиргооны лавлагаа: [Django database cache](https://docs.djangoproject.com/en/5.2/topics/cache/#database-caching),
 [Caddy reverse proxy](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy).
+
+## Нууц үгээ мартсан ажилтан
+
+Имэйл шаардахгүй. Админ **Багийн гишүүд** → тухайн хүний **Сэргээх код үүсгэх**-ийг дарж,
+`ABCD-EFGH-JKLM` маягийн кодыг ажилтанд биечлэн эсвэл хувийн мессежээр өгнө. Ажилтан нэвтрэх
+хуудасны **Нууц үгээ мартсан уу?** дээр нэвтрэх нэр, код, шинэ нууц үгээ оруулна. Код 24 цаг
+хүчинтэй, нэг удаа ажиллана, шинэ код үүсгэвэл хуучин нь хүчингүй. Серверт зөвхөн hash
+хадгалагдана; оролдлогыг login-ийн адил хязгаарлана. Амжилттай бол хуучин session-ууд хаагдана.
+Админ ажилтны шинэ нууц үгийг мэдэхгүй. Шууд шинэ нууц үг тохируулах (**Нууц үг шинэчлэх**)
+боломж хэвээр байна.
 
 ## Login хамгаалалт ба logout
 

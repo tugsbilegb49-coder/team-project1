@@ -23,10 +23,27 @@ analysis = Analysis(
         'desktop.usage',
         'desktop.usage_sync',
         'desktop.reminders',
+        'desktop.autostart',
+        'desktop.updates',
+        'desktop.tls',
+        'agent.transport',
+        'agent.version',
         'tzdata',
     ],
-    # Server and camera code is reachable only from modes this app never runs.
-    excludes=['backend', 'django', 'rest_framework', 'src', 'cv2', 'torch', 'ultralytics', 'numpy', 'tkinter'],
+    # Server and camera code is reachable only from modes this app never runs. cryptography only
+    # makes the office server's certificate; a team computer checks it with the standard library.
+    excludes=[
+        'backend',
+        'django',
+        'rest_framework',
+        'src',
+        'cv2',
+        'torch',
+        'ultralytics',
+        'numpy',
+        'tkinter',
+        'cryptography',
+    ],
 )
 pyz = PYZ(analysis.pure)
 executable = EXE(

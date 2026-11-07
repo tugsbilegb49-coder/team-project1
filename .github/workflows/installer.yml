@@ -1,6 +1,8 @@
 name: Installer
 # Builds the team-computer app (no Python/Node needed to run it) for Windows and macOS, runs it
 # against a throwaway server exactly as an employee would, and keeps the zip as a download.
+# A tag such as v1.1.0 also publishes both zips as a GitHub release (the link for the admin page).
+# Signing runs only when the certificate secrets exist (docs/admin.md, «Тоон гарын үсэг»).
 on:
   pull_request:
   push:
@@ -23,10 +25,13 @@ jobs:
             app: packaging/out/WorkTrack.app/Contents/MacOS/WorkTrack
             artifact: WorkTrack-macos
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 50
     env:
       DJANGO_CACHE_BACKEND: locmem
       DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+      # Only "true"/"false" here; the secrets themselves go to the signing steps alone.
+      SIGN_MACOS: ${{ secrets.MACOS_CERT_P12_BASE64 != '' }}
+      SIGN_WINDOWS: ${{ secrets.WINDOWS_CERT_PFX_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -44,9 +49,43 @@ jobs:
         run: npm ci
       - name: Build the app
         run: python .github/ci_step.py "Build the app" python packaging/build_client.py
-      - name: Use the installed app as an employee
+      - name: Sign and notarize (macOS, when a certificate is configured)
+        if: runner.os == 'macOS' && env.SIGN_MACOS == 'true'
+        shell: bash
+        env:
+          MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(openssl rand -hex 16)"
+          echo "$MACOS_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/cert.p12" -P "$MACOS_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          rm "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple: -k "$password" "$keychain"
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          python .github/ci_step.py "Sign the app" python packaging/build_client.py --sign-only
+      - name: Sign (Windows, when a certificate is configured)
+        if: runner.os == 'Windows' && env.SIGN_WINDOWS == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          WINDOWS_SIGN_PASSWORD: ${{ secrets.WINDOWS_SIGN_PASSWORD }}
+        run: |
+          $env:WINDOWS_SIGN_PFX = Join-Path $env:RUNNER_TEMP 'sign.pfx'
+          [IO.File]::WriteAllBytes($env:WINDOWS_SIGN_PFX, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
+          try { python .github/ci_step.py "Sign the app" python packaging/build_client.py --sign-only }
+          finally { Remove-Item $env:WINDOWS_SIGN_PFX }
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Use the installed app as an employee (office server over HTTPS with its code)
         if: ${{ !cancelled() }}
-        run: python .github/ci_step.py "Installed app" python verify_client.py --command ${{ matrix.app }}
+        run: python .github/ci_step.py "Installed app" python verify_client.py --tls --command ${{ matrix.app }}
       - name: Team computer from source
         if: ${{ !cancelled() }}
         run: python .github/ci_step.py "Team computer from source" python verify_client.py
@@ -55,3 +94,26 @@ jobs:
           name: ${{ matrix.artifact }}
           path: packaging/out/*.zip
           retention-days: 30
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: The tag matches agent/version.py
+        run: |
+          version=$(python3 -c "import sys; sys.path.insert(0, 'agent'); from version import VERSION; print(VERSION)")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME, but agent/version.py says $version. Update VERSION first."
+            exit 1
+          fi
+      - uses: actions/download-artifact@v8
+        with:
+          path: release
+          merge-multiple: true
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/*.zip --title "WorkTrack $GITHUB_REF_NAME" --generate-notes
