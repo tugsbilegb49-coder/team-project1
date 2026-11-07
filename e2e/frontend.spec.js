@@ -248,6 +248,30 @@ async function mockApp(page) {
         latest_application: { application: state.appName },
         tasks: [],
       });
+    if (path === '/api/me/week/') {
+      state.weekRequests = [...(state.weekRequests || []), url.searchParams.get('start') || ''];
+      const start = url.searchParams.get('start') || '2026-11-02';
+      const days = Array.from({ length: 7 }, (_, index) => {
+        const date = new Date(Date.parse(start + 'T00:00:00Z') + index * 86400000);
+        return {
+          date: date.toISOString().slice(0, 10),
+          task_seconds: index === 2 ? 7200 : index === 3 ? 1800 : 0,
+          application_seconds: index === 2 ? 10800 : index === 3 ? 3600 : 0,
+          idle_seconds: index === 2 ? 600 : 0,
+        };
+      });
+      return respond({
+        start,
+        end: days[6].date,
+        days,
+        totals: { task_seconds: 9000, application_seconds: 14400, idle_seconds: 600 },
+        tasks: [
+          { id: 11, title: 'Weekly design', status: 'IN_PROGRESS', seconds: 7200 },
+          { id: 12, title: 'Weekly review', status: 'DONE', seconds: 1800 },
+        ],
+        completed_tasks: 1,
+      });
+    }
     if (path === '/api/me/password/') {
       state.posts.push({ path, data });
       return respond({ detail: 'changed' });
@@ -370,7 +394,7 @@ test('launcher monthly clock survives navigation and reload and selects historic
     '1 цаг 0 мин',
   );
   await expect(summary.getByLabel('Өнөөдрийн аппын хэрэглээ', { exact: true })).toContainText(
-    'Идэвхгүй 0 цаг 1 мин-ийг хассан',
+    'Идэвхгүй 1 мин-ийг хассан',
   );
   await expect(clock).toHaveCount(1);
   await page.getByRole('button', { name: 'Багийн гишүүд', exact: true }).click();
@@ -1105,4 +1129,25 @@ test('login page explains how to create the first administrator', async ({ page 
   );
   await page.goto('/');
   await expect(page.getByText('Админ хараахан үүсээгүй байна.')).toBeVisible();
+});
+
+test('my week shows time per day and per task and moves between weeks', async ({ page }) => {
+  const state = await mockApp(page);
+  await page.goto('/');
+  const week = page.getByRole('region', { name: 'Миний 7 хоног', exact: true });
+  await expect(week).toContainText('11/02 – 11/08');
+  await expect(week).toContainText('Даалгаварт 2 цаг 30 мин');
+  await expect(
+    week.getByLabel('Даваа 11/02: даалгаварт 0 сек, компьютер дээр 0 сек'),
+  ).toContainText('Бүртгэлгүй');
+  await expect(
+    week.getByLabel('Лхагва 11/04: даалгаварт 2 цаг 0 мин, компьютер дээр 3 цаг 0 мин'),
+  ).toBeVisible();
+  await expect(week).toContainText('Weekly design');
+  await expect(week.getByRole('button', { name: 'Дараах ›' })).toBeDisabled();
+  await week.getByRole('button', { name: '‹ Өмнөх' }).click();
+  await expect(week).toContainText('10/26 – 11/01');
+  await week.getByRole('button', { name: 'Дараах ›' }).click();
+  await expect(week).toContainText('11/02 – 11/08');
+  expect(state.weekRequests).toEqual(expect.arrayContaining(['', '2026-10-26']));
 });

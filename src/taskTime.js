@@ -17,11 +17,12 @@ export function clockTime(seconds) {
     .join(':');
 }
 
-/** "45 сек" эсвэл "1 цаг 5 мин" гэх мэт уншихад хялбар хугацаа. */
+/** "45 сек", "30 мин" эсвэл "1 цаг 5 мин" гэх мэт уншихад хялбар хугацаа. */
 export function durationText(seconds) {
   const value = Math.max(0, Number(seconds) || 0);
   if (value < 60) return `${Math.floor(value)} сек`;
   const minutes = Math.floor(value / 60);
+  if (minutes < 60) return `${minutes} мин`;
   return `${Math.floor(minutes / 60)} цаг ${minutes % 60} мин`;
 }
 

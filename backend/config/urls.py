@@ -7,6 +7,7 @@ from users.first_run import FirstRunView
 from users.health import HealthView
 from users.self_service import PasswordChangeView, DesktopLinkView, MyTodayView
 from users.monthly import LauncherUsageView, MonthlyReportView
+from users.weekly import MyWeekView
 
 from activity.batch import ActivityBatchView
 from users.views import ConsentRecordViewSet, DeviceViewSet, UserViewSet
@@ -39,6 +40,7 @@ urlpatterns = [
     path('api/launcher-usage/', LauncherUsageView.as_view()),
     path('api/reports/monthly/', MonthlyReportView.as_view()),
     path('api/me/today/', MyTodayView.as_view()),
+    path('api/me/week/', MyWeekView.as_view()),
     path('api/me/password/', PasswordChangeView.as_view()),
     path('api/desktop/link/', DesktopLinkView.as_view()),
     path('api/monitoring-settings/', MonitoringSettingsView.as_view()),

@@ -4,6 +4,7 @@ import { LauncherClock, TaskWorkClock } from './WorkClocks';
 import { durationText, sessionTiming, useTick } from './taskTime';
 import { usePolling } from './usePolling';
 import { launcherName } from './platform';
+import WeekSummary from './WeekSummary';
 
 const DEFAULT_DEVICE_NAME = 'Миний компьютер';
 
@@ -448,6 +449,7 @@ export default function Today({ user, navigate, tasks, work, workday, busy }) {
           </section>
         </>
       )}
+      <WeekSummary key={`week:${user.id}`} user={user} />
     </section>
   );
 }
