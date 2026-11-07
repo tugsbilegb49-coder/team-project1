@@ -4,7 +4,7 @@ import { clockTime } from './taskTime';
 
 const transferLabels = {PENDING:'Хүлээгдэж байна', ACCEPTED:'Зөвшөөрсөн', DECLINED:'Татгалзсан', CANCELLED:'Цуцалсан'};
 
-export default function TaskCollaboration({task, user, busy, onAction, onStart, work}) {
+export default function TaskCollaboration({task, user, busy, onAction, onStart, onTaskOnlyStart, work}) {
   const data = task.collaboration || {contributions:[], progress_percent:0, total_seconds:0, transfers:[]};
   const mine = data.contributions.find(row => row.employee === user.id);
   const owner = task.employee === user.id;
@@ -29,8 +29,14 @@ export default function TaskCollaboration({task, user, busy, onAction, onStart, 
       <strong>{row.username}</strong><span>{clockTime(row.seconds)} · цагийн {row.time_share_percent}%</span>
       <span>Хийсэн хувь: {Number(row.percent)}%{row.running ? ' · Цаг ажиллаж байна' : ''}</span>
     </li>)}</ul>
-    {owner && task.status !== 'Дууссан' && <button type="button" disabled={busy || running}
-      onClick={() => onStart(task.id)}>{running ? 'Энэ даалгаврын цаг ажиллаж байна' : 'Ажиллаж эхлэх'}</button>}
+    {owner && task.status !== 'Дууссан' && <>
+      <button type="button" disabled={busy || running}
+        onClick={() => onStart(task.id)}>{running ? 'Энэ даалгаврын цаг ажиллаж байна' : 'Энэ ажлыг сонгох'}</button>
+      {!running && <details><summary>Аппын бүртгэлгүй ажиллах</summary>
+        <p>Өөр төхөөрөмжөөс зөвхөн энэ даалгаврын цагаа бүртгэх бол:</p>
+        <button type="button" disabled={busy} onClick={() => onTaskOnlyStart(task.id)}>Зөвхөн даалгаврын цаг эхлүүлэх</button>
+      </details>}
+    </>}
     {owner && <ProgressEditor key={`${task.id}:${mine?.percent ?? 0}`} task={task} current={mine?.percent ?? 0}
       total={data.progress_percent} busy={busy} onAction={onAction} />}
     <p>Шилжүүлсэн: {count} / 2</p>

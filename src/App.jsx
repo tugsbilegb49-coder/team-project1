@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { api, list, login, logout, hasAuth, onAuthCleared } from "./api";
 import Tasks from "./Tasks";
 import Members from "./Members";
-import { LauncherClock, TaskWorkClock } from './WorkClocks';
+import { TaskWorkClock } from './WorkClocks';
 import { useTaskWork } from './taskTime';
+import { useWorkday } from './useWorkday';
 import Today, { PasswordSettings } from './Today';
 import MonthlyReport from './MonthlyReport';
 import { AgentStatus, AuditHistory, MonitoringSettings, Notifications, ReportExport } from './Operations';
@@ -33,7 +34,7 @@ function App() {
     [employee, setEmployee] = useState("");
   const [date, setDate] = useState(localToday);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false),
+  const [appBusy, setBusy] = useState(false),
     [ready, setReady] = useState(() => !hasAuth()),
     [revision, setRevision] = useState(0);
   const mounted = useRef(false),
@@ -42,6 +43,8 @@ function App() {
     reportRequest = useRef(0);
   const today = localToday();
   const taskWork = useTaskWork(user);
+  const workday = useWorkday(user, taskWork);
+  const busy = appBusy || workday.busy;
   const validDate = /^\d{4}-\d{2}-\d{2}$/.test(date);
   const reportKey = `${user?.id}:${employee}:${date}`;
   const currentReport =
@@ -262,11 +265,11 @@ function App() {
         <nav>
           {[
             ['today', 'Миний өнөөдөр'],
-            ["dashboard", "Dashboard"],
+            ["dashboard", "Ерөнхий тойм"],
             ["tasks", "Даалгавар"],
             ["members", "Багийн гишүүд"],
             ["reports", "Тайлан"],
-            ['agents', 'Agent төлөв'],
+            ['agents', 'Төхөөрөмжийн төлөв'],
             ['audit', 'Өөрчлөлтийн түүх'],
             ...(user.is_admin ? [['settings', 'Тохиргоо']] : []),
             ['account', 'Миний бүртгэл'],
@@ -282,16 +285,16 @@ function App() {
           ))}
         </nav>
         <p>
-          {user.username} · {user.role}
+          {user.username} · {{ADMIN:'Админ', MANAGER:'Менежер', EMPLOYEE:'Ажилтан'}[user.role] || user.role}
         </p>
         <button disabled={busy} onClick={() => run(async () => {await taskWork.stop(); await logout();})}>
           Гарах
         </button>
       </aside>
       <main className="main" aria-busy={busy}>
-        {page !== 'today' && <LauncherClock key={`launcher:${user.id}`} user={user}/>}
-        <TaskWorkClock work={taskWork} busy={busy} navigate={setPage}
-          onStop={() => run(async () => {await taskWork.stop(); return load();})}/>
+        {page !== 'today' && (taskWork.sample?.data.session || taskWork.error) && <TaskWorkClock work={taskWork} busy={busy} navigate={setPage}
+          onStop={workday.pause}/>}
+        {page !== 'today' && workday.error && <p role="alert">{workday.error}</p>}
         <Notifications key={`notifications:${user.id}:${user.role}:${user.department}`} user={user} navigate={setPage}/>
         {user.role === "MANAGER" && !user.department && !user.is_admin && (
           <p role="alert">
@@ -302,11 +305,12 @@ function App() {
         {error && <p role="alert">{error}</p>}
         {busy && <p>Хадгалж байна…</p>}
         {page === 'today' && (user.is_admin || user.role === 'MANAGER') && <MonthlyReport key={`monthly:${user.id}:${user.role}:${user.department}`} user={user}/>}
-        {page === 'today' ? <Today key={`today:${user.id}`} user={user} navigate={setPage}/> : page === 'account' ? <PasswordSettings key={`password:${user.id}`}/> : page === "tasks" ? (
+        {page === 'today' ? <Today key={`today:${user.id}`} user={user} navigate={setPage} tasks={tasks} work={taskWork} workday={workday} busy={busy}/> : page === 'account' ? <PasswordSettings key={`password:${user.id}`}/> : page === "tasks" ? (
           <Tasks
             user={user}
             work={taskWork}
-            onStart={(id) => run(async () => {await taskWork.start(id); return load();})}
+            onStart={(id) => {workday.selectTask(id); setPage('today');}}
+            onTaskOnlyStart={(id) => run(async () => {await taskWork.start(id); return load();})}
             onAction={(id, action, data) => mutate(`/api/tasks/${id}/${action}/`, 'POST', data)}
             onRefresh={() => run(load)}
             tasks={tasks}
@@ -343,7 +347,7 @@ function App() {
         ) : (
           <section>
             <header className="header">
-              <h1>{page === "reports" ? "Тайлан" : "Dashboard"}</h1>
+              <h1>{page === "reports" ? "Тайлан" : "Ерөнхий тойм"}</h1>
               <button disabled={busy} onClick={() => run(load)}>
                 Шинэчлэх
               </button>

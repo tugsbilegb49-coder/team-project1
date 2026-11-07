@@ -14,6 +14,7 @@ function Tasks({
   user,
   work,
   onStart,
+  onTaskOnlyStart,
   onAction,
   onRefresh,
 }) {
@@ -195,7 +196,7 @@ function Tasks({
                   <option value="Хийгдэж байна">Хийгдэж байна</option>
                   <option value="Дууссан">Дууссан</option>
                 </select>
-                <TaskCollaboration task={task} user={user} busy={busy} onAction={onAction} onStart={onStart} work={work}/>
+                <TaskCollaboration task={task} user={user} busy={busy} onAction={onAction} onStart={onStart} onTaskOnlyStart={onTaskOnlyStart} work={work}/>
               </div>
 
               <div className="task-actions">

@@ -70,3 +70,16 @@ class SelfServiceTests(TestCase):
         self.assertEqual(client.get('/api/me/today/').status_code,401)
         for path in ('/api/me/password/','/api/desktop/link/'):
             self.assertEqual(client.post(path,{},format='json').status_code,401)
+
+    def test_today_separates_idle_even_outside_top_twenty_apps(self):
+        now = timezone.now()-timedelta(hours=1)
+        for index in range(21):
+            ComputerActivity.objects.create(employee=self.user, started_at=now+timedelta(seconds=index*60),
+                duration_seconds=60, application=f'App {index}')
+        ComputerActivity.objects.create(employee=self.user, started_at=now+timedelta(minutes=22), duration_seconds=15, application='Idle')
+        ComputerActivity.objects.create(employee=self.other, started_at=now, duration_seconds=999, application='Idle')
+        data = self.client.get('/api/me/today/').data
+        self.assertEqual(data['tracked_seconds'], 1275)
+        self.assertEqual(data['application_seconds'], 1260)
+        self.assertEqual(data['idle_seconds'], 15)
+        self.assertEqual(len(data['applications']), 20)

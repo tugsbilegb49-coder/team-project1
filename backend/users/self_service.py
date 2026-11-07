@@ -100,9 +100,12 @@ class MyTodayView(APIView):
         end = timezone.make_aware(datetime.combine(today+timedelta(days=1), time.min))
         events = ComputerActivity.objects.filter(employee=request.user, started_at__gte=begin, started_at__lt=end)
         apps = list(events.values('application').annotate(seconds=Sum('duration_seconds')).order_by('-seconds', 'application'))
+        total_seconds = sum(row['seconds'] for row in apps)
+        idle_seconds = sum(row['seconds'] for row in apps if row['application'].casefold() == 'idle')
         latest = events.order_by('-started_at').values('application', 'started_at').first()
         tasks = Task.objects.filter(employee=request.user).exclude(status=Task.Status.DONE).order_by('due_date', 'id')
-        return Response({'date': str(today), 'tracked_seconds': events.aggregate(value=Sum('duration_seconds'))['value'] or 0,
+        return Response({'date': str(today), 'tracked_seconds': total_seconds,
+            'application_seconds': total_seconds-idle_seconds, 'idle_seconds': idle_seconds,
             'applications': apps[:20], 'latest_application': latest,
             'open_tasks': tasks.count(), 'overdue_tasks': tasks.filter(due_date__lt=today).count(),
             'tasks': list(tasks.values('id', 'title', 'status', 'due_date')[:10])})

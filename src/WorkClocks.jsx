@@ -1,12 +1,6 @@
 import { useEffect, useState } from 'react';
-import { clockTime } from './taskTime';
+import { clockTime, useTick } from './taskTime';
 import { api } from './api';
-
-function useTick() {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
-  return now;
-}
 
 export function LauncherClock({user, card = false}) {
   const [sample, setSample] = useState(null);
@@ -44,7 +38,8 @@ export function LauncherClock({user, card = false}) {
   const liveSeconds = usage?.running && month?.month === usage.current_month && connected
     ? Math.min(Math.max(0, now-sample.at)/1000, Math.max(0, usage.month_ends_at-usage.as_of)) : 0;
   return <Container className={card ? 'stat-card launcher-time-card' : 'work-clock'} aria-label="WorkTrack сарын хугацаа">
-    <p>WorkTrack асаалттай байсан сарын нийт хугацаа</p>
+    {card && <p className="eyebrow">{month?.month === usage?.current_month ? 'Энэ сар' : month?.month || 'Сарын нийлбэр'}</p>}
+    <p>Програм нээлттэй байсан</p>
     <Value>{month ? clockTime(month.seconds + liveSeconds) : '—'}</Value>
     {usage && <label className="usage-month">Сар сонгох
       <select value={month?.month === usage.current_month ? '' : month?.month || ''} onChange={event => setSelectedMonth(event.target.value)}>
@@ -52,8 +47,8 @@ export function LauncherClock({user, card = false}) {
         {usage.months.filter(row => row.month !== usage.current_month).map(row => <option key={row.month} value={row.month}>{row.month}</option>)}
       </select>
     </label>}
-    {card && <small>Энэ account-тай холбосон төхөөрөмж дээр хааж, дахин нээсэн хугацаануудыг нийлүүлнэ.
-      Компьютер унтсан (Sleep) болон програм хаалттай байсан завсар орохгүй.</small>}
+    {card && <small>WorkTrack нээлттэй байсан сарын нийлбэр. Хааж дахин нээхэд хадгалагдана.
+      Компьютер унтсан, програм хаалттай завсрыг тооцохгүй.</small>}
     {usage && !usage.running && <small>Төхөөрөмжөө холбоно уу. Өмнөх хадгалсан хугацаа хэвээр үлдэнэ.</small>}
     {usage?.sync_error && usage.sync_error !== 'unlinked' && <small role="status">Серверт цаг илгээх холболт/зөвшөөрлөө шалгана уу. Хадгалсан хугацаа төхөөрөмж дээр үлдэнэ.</small>}
     {card && usage?.recorded_since && <small>Бүртгэж эхэлсэн: {new Date(usage.recorded_since).toLocaleDateString('mn-MN', {timeZone:'Asia/Ulaanbaatar'})}</small>}
@@ -61,19 +56,26 @@ export function LauncherClock({user, card = false}) {
   </Container>;
 }
 
-export function TaskWorkClock({work, busy, onStop, navigate}) {
+export function TaskWorkClock({work, busy, onStop, navigate, card=false}) {
   const now = useTick();
   const session = work.sample?.data.session;
   const allowance = session ? Math.max(0, (Date.parse(session.lease_expires_at)-Date.parse(work.sample.data.server_now))/1000) : 0;
   const delta = work.sample ? Math.max(0, now-work.sample.at)/1000 : 0;
   const running = session?.running && delta < allowance;
+  if (card) return <article className="stat-card" aria-label="Одоогийн даалгаврын цаг">
+    <p className="eyebrow">Энэ удаагийн бүртгэл</p><p>Даалгаврын цаг</p>
+    <h2>{clockTime(session ? session.seconds + (session.running ? Math.min(delta, allowance) : 0) : 0)}</h2>
+    <small>{session ? `${session.title} · ${running?'Бүртгэж байна':'Зогссон'}` : 'Даалгавар сонгоод ажил эхлүүлэхэд тоолно.'}</small>
+    <small>Өмнөх бүртгэлүүд даалгаврын дэлгэрэнгүй болон сарын тайланд хадгалагдана.</small>
+    {work.error && <small role="alert">Цагийн холболт: {work.error}</small>}
+  </article>;
   return <div className="task-work-clock">
     {session ? <>
       <span>{session.title} · {running ? 'Цаг бүртгэж байна' : 'Цаг зогссон'}</span>
       <strong aria-label="Даалгаврын session хугацаа">{clockTime(session.seconds + (session.running ? Math.min(delta, allowance) : 0))}</strong>
-      {running && <button type="button" disabled={busy} onClick={onStop}>Даалгаврын цаг зогсоох</button>}
-      <button type="button" onClick={() => navigate('tasks')}>Даалгаварт очих</button>
-    </> : <span>Даалгаврын цаг: даалгавраа сонгоод «Ажиллаж эхлэх» дарна.</span>}
+      {running && <button type="button" disabled={busy} onClick={onStop}>Түр зогсоох</button>}
+      <button type="button" onClick={() => navigate('today')}>Ажлын удирдлагад очих</button>
+    </> : <span>Даалгаврын цагийг «Миний өнөөдөр» хэсгээс эхлүүлнэ.</span>}
     {work.error && <p role="status">Цагийн холболт: {work.error}</p>}
   </div>;
 }

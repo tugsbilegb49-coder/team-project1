@@ -25,11 +25,25 @@ test("real Django login → department/manager → task/quality → inactive fil
   await page.getByRole('checkbox').check();
   await page.getByRole('button',{name:'Үргэлжлүүлэх',exact:true}).click();
   await page.getByRole('button',{name:'Төхөөрөмж холбох',exact:true}).click();
+  const workflowTokens = await page.evaluate(()=>JSON.parse(sessionStorage.getItem('worktrack-auth')));
+  const workflowHeaders = {Authorization:`Bearer ${workflowTokens.access}`};
+  const workflowUser = await (await request.get(`${process.env.VITE_API_URL}/api/users/me/`,{headers:workflowHeaders})).json();
+  const workflowCreated = await request.post(`${process.env.VITE_API_URL}/api/tasks/`,{headers:workflowHeaders,data:{title:'Unified workday QA',employee:workflowUser.id}});
+  expect(workflowCreated.status()).toBe(201);
+  const workflowTask = await workflowCreated.json();
+  await page.reload();
+  await page.getByLabel('Хийх даалгавар',{exact:true}).selectOption(String(workflowTask.id));
   await page.getByRole('button',{name:'Ажил эхлүүлэх',exact:true}).click();
+  await expect(page.getByLabel('Одоогийн даалгаврын цаг',{exact:true})).toContainText('Бүртгэж байна');
   await page.getByRole('button',{name:'Түр зогсоох',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Ажил үргэлжлүүлэх',exact:true})).toBeEnabled();
+  expect((await (await request.get(`${process.env.VITE_API_URL}/api/tasks/work-session/`,{headers:workflowHeaders})).json()).session).toBeNull();
   await page.getByRole('button',{name:'Ажил үргэлжлүүлэх',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Түр зогсоох',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Ажил дуусгах',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Ажил эхлүүлэх',exact:true})).toBeEnabled();
+  await expect(page.getByRole('button',{name:'Ажил эхлүүлэх',exact:true})).toBeDisabled();
+  expect((await (await request.get(`${process.env.VITE_API_URL}/api/tasks/work-session/`,{headers:workflowHeaders})).json()).session).toBeNull();
+  expect((await request.delete(`${process.env.VITE_API_URL}/api/tasks/${workflowTask.id}/`,{headers:workflowHeaders})).status()).toBe(204);
   await page
     .getByRole("button", { name: "Багийн гишүүд", exact: true })
     .click();
@@ -130,7 +144,7 @@ test("real Django login → department/manager → task/quality → inactive fil
   });
   expect(present.status()).toBe(201);
   await page.reload();
-  await page.getByRole('button',{name:'Dashboard',exact:true}).click();
+  await page.getByRole('button',{name:'Ерөнхий тойм',exact:true}).click();
   await expect(page.getByLabel("Camera presence", {exact: true})).toContainText("1 / 1");
   await expect(page.getByLabel("Camera presence", {exact: true})).toContainText("83.0%");
   const enrolled=await request.post(`${process.env.VITE_API_URL}/api/devices/enroll/`,{
@@ -221,8 +235,9 @@ async function exerciseTaskHandoff({page, request, browser, headers}) {
       await person.tab.getByRole('button', {name:'Даалгавар', exact:true}).click();
     }
     const card = person => person.tab.getByLabel('Shared live handoff — оролцоо', {exact:true});
-    await card(first).getByRole('button', {name:'Ажиллаж эхлэх', exact:true}).click();
-    await expect(first.tab.getByRole('button', {name:'Даалгаврын цаг зогсоох', exact:true})).toBeVisible();
+    await card(first).getByText('Аппын бүртгэлгүй ажиллах',{exact:true}).click();
+    await card(first).getByRole('button', {name:'Зөвхөн даалгаврын цаг эхлүүлэх', exact:true}).click();
+    await expect(first.tab.getByRole('button', {name:'Түр зогсоох', exact:true})).toBeVisible();
     await card(first).getByLabel('Миний хийсэн хувь', {exact:false}).fill('35');
     await card(first).getByRole('button', {name:'Хувь хадгалах', exact:true}).click();
     await expect(card(first)).toContainText('Хийсэн хувь: 35%');
@@ -236,11 +251,12 @@ async function exerciseTaskHandoff({page, request, browser, headers}) {
       expect(before.employee).toBe(sender.user.id);
       await receiver.tab.getByRole('button', {name:'Даалгавар шинэчлэх', exact:true}).click();
       await card(receiver).getByRole('button', {name:'Хүлээн авах', exact:true}).click();
-      await expect(card(receiver).getByRole('button', {name:'Ажиллаж эхлэх', exact:true})).toBeVisible();
+      await expect(card(receiver).getByRole('button', {name:'Энэ ажлыг сонгох', exact:true})).toBeVisible();
     }
     await handoff(first, second);
     expect((await request.get(`${api}/api/tasks/work-session/`, {headers:first.headers}).then(r => r.json())).session).toBeNull();
-    await card(second).getByRole('button', {name:'Ажиллаж эхлэх', exact:true}).click();
+    await card(second).getByText('Аппын бүртгэлгүй ажиллах',{exact:true}).click();
+    await card(second).getByRole('button', {name:'Зөвхөн даалгаврын цаг эхлүүлэх', exact:true}).click();
     await card(second).getByLabel('Миний хийсэн хувь', {exact:false}).fill('40');
     await card(second).getByRole('button', {name:'Хувь хадгалах', exact:true}).click();
     await expect(card(second)).toContainText('Хийсэн хувь: 40%');

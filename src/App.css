@@ -16,7 +16,8 @@
 .desktop-panel summary { cursor:pointer; }
 .today-page .activity-detail-card { margin:20px 0; overflow-wrap:anywhere; }
 .today-page .stat-card h2 { font-size:25px; }
-.today-page .today-time-stats, .today-page .today-task-stats { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+.today-page .today-time-stats { grid-template-columns:repeat(3, minmax(0, 1fr)); }
+.today-page .today-task-stats { grid-template-columns:repeat(2, minmax(0, 1fr)); }
 .today-time-stats .stat-card { min-width:0; overflow-wrap:anywhere; }
 .today-time-stats small { display:block; color:#596f65; line-height:1.5; margin-top:12px; }
 .launcher-time-card h2 { font-variant-numeric:tabular-nums; }
@@ -35,6 +36,20 @@
 .work-clock strong, .task-work-clock strong { font-variant-numeric:tabular-nums; font-size:22px; }
 .work-clock small, .task-work-clock p { flex-basis:100%; }
 .task-work-clock button { max-width:100%; }
+.workday-heading { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; }
+.eyebrow { color:#60796d; font-size:12px; font-weight:600; letter-spacing:.02em; }
+.work-status { border-radius:24px; padding:8px 12px; background:#f1f4f2; color:#52685e; font-weight:600; font-size:14px; }
+.work-status.is-working { background:#e0f6ec; color:#086c4c; }
+.workday-form { padding:4px 0 18px; border-bottom:1px solid #d9e9e2; margin-bottom:18px; }
+.workday-form select { padding:12px; width:100%; max-width:100%; min-width:0; box-sizing:border-box; border:1px solid #bbcfc5; border-radius:8px; }
+.workday-primary-actions button { padding:14px 20px; }
+.work-feedback { padding:12px; border-radius:8px; background:#eef9f4; color:#18593f; }
+.camera-controls { margin:16px 0; }
+.desktop-panel summary { padding:6px 0; }
+@media (min-width:651px) and (max-width:1100px) {
+  .today-page .today-time-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .today-time-stats .launcher-time-card { grid-column:1 / -1; }
+}
 
 /* Sidebar */
 .sidebar {
