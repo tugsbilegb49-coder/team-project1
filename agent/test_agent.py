@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from main import (
@@ -41,6 +42,23 @@ class AgentHelpersTests(unittest.TestCase):
             self.assertTrue(is_paused(control_file))
             set_paused(False, control_file)
             self.assertFalse(is_paused(control_file))
+
+    def test_unreadable_pause_control_stops_collection(self):
+        with TemporaryDirectory() as directory:
+            control_file = Path(directory) / 'control.json'
+            for content in ('', '{"paused": tr', '[]'):  # Mid-write, truncated, wrong shape.
+                with self.subTest(content=content):
+                    control_file.write_text(content, encoding='utf-8')
+                    self.assertTrue(is_paused(control_file))
+
+    def test_pause_control_is_replaced_atomically(self):
+        with TemporaryDirectory() as directory:
+            control_file = Path(directory) / 'control.json'
+            set_paused(True, control_file)
+            with patch('main.atomic_json_write') as write:
+                set_paused(False, control_file)
+            write.assert_called_once_with(control_file, {'paused': False})
+            self.assertTrue(is_paused(control_file))  # Untouched because the write was mocked.
 
     def test_idle_threshold_hides_foreground_application_without_reading_input(self):
         self.assertEqual(application_for_idle_state('Visual Studio Code', 301, 300), 'Idle')

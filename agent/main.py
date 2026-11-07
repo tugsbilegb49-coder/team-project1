@@ -152,16 +152,18 @@ def _write_json_list(path: Path, items: list[dict[str, Any]]) -> None:
 
 
 def is_paused(path: Path = DEFAULT_CONTROL_PATH) -> bool:
+    """No control file means never paused; an unreadable one counts as paused (like the camera)."""
     if not path.is_file():
         return False
     try:
         return bool(json.loads(path.read_text(encoding='utf-8')).get('paused', False))
     except (OSError, json.JSONDecodeError, AttributeError):
-        return False
+        return True
 
 
 def set_paused(paused: bool, path: Path = DEFAULT_CONTROL_PATH) -> None:
-    path.write_text(json.dumps({'paused': paused}) + '\n', encoding='utf-8')
+    # Atomic, so the agent polling this file every second never reads it half-written.
+    atomic_json_write(path, {'paused': paused})
 
 
 def _macos_foreground_application() -> str:
