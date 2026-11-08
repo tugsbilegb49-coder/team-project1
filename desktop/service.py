@@ -204,7 +204,7 @@ class DesktopController:
             actual = client.get('/api/users/me/')
         except AgentError as exc:
             raise DesktopError(
-                'Төхөөрөмжийн нэвтрэлт дууссан. «Төхөөрөмжийн нэмэлт үйлдэл» → «Дахин холбох» дарна уу.', 409
+                'Төхөөрөмжийн нэвтрэлт дууссан. «Бусад тохиргоо» → «Дахин холбох» дарна уу.', 409
             ) from exc
         if actual['id'] != user['id']:
             raise DesktopError(
@@ -331,7 +331,7 @@ class DesktopController:
                     if not self._running('agent') or is_paused(self.control):
                         raise DesktopError('Эхлээд ажлаа эхлүүлэх буюу үргэлжлүүлнэ үү.', 409)
                     if self.preparing or not self.state(user)['camera_ready']:
-                        raise DesktopError('Эхлээд «Камер бэлтгэх» дарна уу.', 409)
+                        raise DesktopError('Камер бэлэн болоогүй байна. «Камер ашиглах»-ыг асаахад өөрөө бэлдэнэ.', 409)
                     if not self._running('camera'):
                         self.processes['camera'] = self.spawn(
                             'camera', [self.python, '-u', 'main.py', '--mode', 'presence', '--consent']
@@ -446,7 +446,7 @@ class DesktopHandler(BaseHTTPRequestHandler):
         try:
             self.end_headers()
             self.wfile.write(body)
-        except (BrokenPipeError, ConnectionResetError):
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):  # Windows: WinError 10053
             pass  # A browser may cancel a status poll while navigating away.
 
     def _tray(self, post):

@@ -16,11 +16,15 @@ test('real Django login → department/manager → task/quality → inactive fil
   await page.getByRole('button', { name: 'Нэвтрэх', exact: true }).click();
   await expect(page.locator('.sidebar')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Миний өнөөдөр', exact: true })).toBeVisible();
-  await page.getByLabel('Төхөөрөмжийн нэр', { exact: true }).fill('Live desktop QA');
-  await page.getByRole('button', { name: 'Үргэлжлүүлэх', exact: true }).click();
-  await page.getByRole('checkbox').check();
-  await page.getByRole('button', { name: 'Үргэлжлүүлэх', exact: true }).click();
-  await page.getByRole('button', { name: 'Төхөөрөмж холбох', exact: true }).click();
+  // The first «Ажил эхлүүлэх» asks for consent once, links this computer and starts recording.
+  await page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true }).click();
+  const consent = page.getByRole('dialog');
+  await consent.getByLabel('Компьютерийн нэр').fill('Live desktop QA');
+  await consent.getByRole('checkbox', { name: 'Зөвшөөрч байна' }).check();
+  await consent.getByRole('button', { name: 'Зөвшөөрөөд эхлүүлэх' }).click();
+  await expect(page.getByRole('button', { name: 'Түр зогсоох', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true })).toBeEnabled();
   const workflowTokens = await page.evaluate(() =>
     JSON.parse(sessionStorage.getItem('worktrack-auth')),
   );
@@ -54,7 +58,11 @@ test('real Django login → department/manager → task/quality → inactive fil
   await page.getByRole('button', { name: 'Ажил үргэлжлүүлэх', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Түр зогсоох', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true })).toBeDisabled();
+  // The task stays chosen for the next one-click start.
+  await expect(page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true })).toBeEnabled();
+  await expect(page.getByLabel('Хийх даалгавар', { exact: true })).toHaveValue(
+    String(workflowTask.id),
+  );
   expect(
     (
       await (
@@ -162,7 +170,7 @@ test('real Django login → department/manager → task/quality → inactive fil
   });
   expect(present.status()).toBe(201);
   await page.reload();
-  await page.getByRole('button', { name: 'Ерөнхий тойм', exact: true }).click();
+  await page.getByRole('button', { name: 'Тайлан', exact: true }).click();
   await expect(page.getByLabel('Камерын илрүүлэлт', { exact: true })).toContainText('1 / 1');
   await expect(page.getByLabel('Камерын илрүүлэлт', { exact: true })).toContainText('83.0%');
   const enrolled = await request.post(`${process.env.VITE_API_URL}/api/devices/enroll/`, {

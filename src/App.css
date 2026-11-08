@@ -992,3 +992,120 @@ textarea:focus-visible {
 .empty-explained p {
   margin: 4px 0 8px;
 }
+
+/* «Миний өнөөдөр»: one big start button, a camera switch and rarely used settings folded away. */
+.workday-primary-actions .start-button {
+  min-width: 220px;
+  padding: 16px 28px;
+  font-size: 1.1rem;
+}
+.camera-switch,
+.more-settings {
+  margin-top: 14px;
+}
+.camera-switch label.toggle-field,
+.more-settings label.toggle-field {
+  margin: 0 0 4px;
+}
+.camera-switch .muted {
+  margin: 0;
+  font-size: 0.9em;
+}
+.more-settings summary,
+.today-more summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.more-settings-body {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+.device-line {
+  margin: 10px 0 0;
+  font-size: 0.9em;
+}
+.today-more {
+  margin-top: 8px;
+}
+.today-more[open] {
+  display: grid;
+  gap: 14px;
+}
+.overdue-count {
+  color: var(--danger);
+  font-size: 0.8em;
+  font-weight: 600;
+}
+.consent-dialog {
+  margin: auto; /* The global reset zeroes margins; a modal dialog centres itself with auto. */
+  width: min(520px, calc(100vw - 32px));
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 22px;
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.consent-dialog::backdrop {
+  background: rgba(20, 40, 34, 0.35);
+}
+.consent-dialog form {
+  display: grid;
+  gap: 12px;
+}
+.consent-dialog h3 {
+  margin: 0;
+}
+.consent-dialog label:not(.toggle-field) {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+.consent-dialog label.toggle-field {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.main .desktop-panel button.secondary-button,
+.main .consent-dialog button.secondary-button {
+  background: transparent;
+  color: var(--primary-dark);
+  border: 1px solid var(--primary);
+}
+.device-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.device-head h2 {
+  margin: 0;
+}
+.device-state {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.85em;
+  font-weight: 600;
+  background: var(--border);
+  color: var(--text);
+}
+.device-state.state-online {
+  background: var(--primary-light);
+  color: var(--primary-dark);
+}
+.device-state.state-paused {
+  background: #fdf3df;
+  color: #8a5a00;
+}
+.device-state.state-offline {
+  background: #fde8e8;
+  color: #a33a3a;
+}
+.device-card details summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-weight: 600;
+}

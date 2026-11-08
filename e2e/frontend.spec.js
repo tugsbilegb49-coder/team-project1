@@ -356,33 +356,44 @@ async function mockApp(page) {
   return state;
 }
 
-test('today home guides consent then controls work and camera explicitly', async ({ page }) => {
+test('one start button asks for consent once, then work and the camera switch follow', async ({
+  page,
+}) => {
   const state = await mockApp(page);
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Миний өнөөдөр', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: '1 цаг 0 мин', exact: true })).toBeVisible();
-  await page.getByLabel('Төхөөрөмжийн нэр', { exact: true }).fill('My QA Mac');
-  await page.getByRole('button', { name: 'Үргэлжлүүлэх', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Үргэлжлүүлэх', exact: true })).toBeDisabled();
-  await page.getByRole('checkbox').check();
-  await page.getByRole('button', { name: 'Үргэлжлүүлэх', exact: true }).click();
-  await page.getByRole('button', { name: 'Төхөөрөмж холбох', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true })).toBeDisabled();
-  await page.getByLabel('Хийх даалгавар', { exact: true }).selectOption('none');
-  await page.locator('.camera-controls summary').click();
-  await expect(page.getByRole('button', { name: 'Камер асаах', exact: true })).toBeDisabled();
-  await page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true }).click();
-  expect(state.desktop.camera_running).toBe(false);
-  await page.getByRole('button', { name: 'Камер асаах', exact: true }).click();
-  await page.getByRole('button', { name: 'Камер унтраах', exact: true }).click();
+  const start = page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true });
+  await expect(page.getByRole('checkbox', { name: 'Камер ашиглах' })).toHaveCount(0);
+  await start.click();
+  const dialog = page.getByRole('dialog', { name: 'Энэ компьютер дээр ажлаа бүртгэх' });
+  await expect(dialog).toContainText('Бүртгэхгүй: бичсэн текст, вэб хаяг, дэлгэцийн зураг');
+  const accept = dialog.getByRole('button', { name: 'Зөвшөөрөөд эхлүүлэх' });
+  await expect(accept).toBeDisabled();
+  await dialog.getByLabel('Компьютерийн нэр').fill('My QA Mac');
+  await dialog.getByRole('checkbox', { name: 'Зөвшөөрч байна' }).check();
+  await accept.click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Түр зогсоох', exact: true })).toBeVisible();
+  expect(state.desktopPosts.slice(0, 2)).toEqual(['connect', 'start']);
+  expect(state.desktop.device_name).toBe('My QA Mac');
+  expect(state.desktop.camera_running).toBe(false); // Never turned on by itself.
+  const camera = page.getByRole('checkbox', { name: 'Камер ашиглах' });
+  await camera.click();
+  await expect(camera).toBeChecked();
+  await camera.click();
+  await expect(camera).not.toBeChecked();
   await page.getByRole('button', { name: 'Түр зогсоох', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Камер асаах', exact: true })).toBeDisabled();
+  await expect(camera).toBeDisabled(); // Only while working.
   await page.getByRole('button', { name: 'Ажил үргэлжлүүлэх', exact: true }).click();
   await page.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
-  // The last choice stays, so the next start is one click.
-  await expect(page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true })).toBeEnabled();
+  // The last choice stays, so the next start is one click without asking again.
+  await expect(start).toBeEnabled();
   await expect(page.getByLabel('Хийх даалгавар', { exact: true })).toHaveValue('none');
   expect(state.desktop.computer_running).toBe(false);
+  await start.click();
+  await expect(page.getByRole('button', { name: 'Түр зогсоох', exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
 test('self-service password requires matching confirmation and returns to login after save', async ({
@@ -462,31 +473,28 @@ test('admin gives an employee a one-time reset code', async ({ page }) => {
   ]);
 });
 
-test('launcher monthly clock survives navigation and reload and selects historical totals', async ({
+test('launcher monthly clock waits under details and survives navigation and reload', async ({
   page,
 }) => {
   const state = await mockApp(page);
   state.desktop.launcher_usage.months[0].seconds = 3661;
   await page.goto('/');
-  const clock = page.getByLabel('WorkTrack сарын хугацаа', { exact: true });
-  await expect(clock).toContainText('01:01:01');
-  const summary = page.getByRole('region', { name: 'Хугацааны тойм', exact: true });
-  await expect(summary.getByLabel('WorkTrack сарын хугацаа', { exact: true })).toContainText(
-    'WorkTrack хаалттай байсан хугацааг тооцохгүй',
-  );
-  await expect(summary.getByLabel('Өнөөдрийн аппын хэрэглээ', { exact: true })).toContainText(
+  const summary = page.getByRole('region', { name: 'Өнөөдрийн цаг', exact: true });
+  await expect(summary.getByLabel('Өнөөдрийн компьютерийн цаг', { exact: true })).toContainText(
     '1 цаг 0 мин',
   );
-  await expect(summary.getByLabel('Өнөөдрийн аппын хэрэглээ', { exact: true })).toContainText(
-    'Идэвхгүй 1 мин-ийг хассан',
-  );
-  await expect(clock).toHaveCount(1);
+  const clock = page.getByLabel('WorkTrack сарын хугацаа', { exact: true });
+  await expect(clock).not.toBeVisible(); // Folded under «Дэлгэрэнгүй».
+  await page.getByText('Дэлгэрэнгүй', { exact: true }).click();
+  await expect(clock).toContainText('01:01:01');
+  await expect(clock).toContainText('WorkTrack хаалттай байсан хугацааг тооцохгүй');
+  await expect(page.getByText('Идэвхгүй 1 мин.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Багийн гишүүд', exact: true }).click();
   await expect(clock).toHaveCount(0);
   state.desktop.launcher_usage.months[0].seconds = 3670;
   await page.reload();
+  await page.getByText('Дэлгэрэнгүй', { exact: true }).click();
   await expect(clock).toContainText('01:01:10');
-  await expect(summary).toBeVisible();
   await expect(clock).toHaveCount(1);
   await clock.getByLabel('Сар сонгох').selectOption('2026-10');
   await expect(clock).toContainText('25:00:00');
@@ -737,6 +745,10 @@ for (const role of ['EMPLOYEE', 'MANAGER']) {
     const state = await mockApp(page);
     Object.assign(state.members[0], { role, is_admin: false, department: 1 });
     await page.goto('/');
+    if (role === 'EMPLOYEE') {
+      await expect(page.getByRole('button', { name: 'Багийн гишүүд', exact: true })).toHaveCount(0);
+      return;
+    }
     await page.getByRole('button', { name: 'Багийн гишүүд', exact: true }).click();
     await expect(page.getByText('Нэвтрэх нэр: worker', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Нууц үг шинэчлэх', exact: true })).toHaveCount(
@@ -795,8 +807,8 @@ test('camera permission failures explain the macOS setting', async ({ page }) =>
   await expect(page.getByRole('alert')).toContainText(
     'System Settings → Privacy & Security → Camera → WorkTrack Camera',
   );
-  await page.locator('.camera-controls summary').click();
-  await expect(page.getByRole('button', { name: 'Камер асаах', exact: true })).toBeDisabled();
+  // The switch only works while work is recording.
+  await expect(page.getByRole('checkbox', { name: 'Камер ашиглах' })).toBeDisabled();
 });
 
 test('failed app start stops the newly created task timer and leaves an actionable inline error', async ({
@@ -966,7 +978,7 @@ test('camera presence observations appear without being shown as worked minutes'
     present_percent: 60,
   };
   await page.goto('/');
-  await page.getByRole('button', { name: 'Ерөнхий тойм', exact: true }).click();
+  await page.getByRole('button', { name: 'Тайлан', exact: true }).click();
   const presence = page.getByLabel('Камерын илрүүлэлт', { exact: true });
   await expect(presence).toBeVisible();
   await expect(presence).toContainText('3 / 5');
@@ -982,7 +994,7 @@ test('camera presence observations appear without being shown as worked minutes'
     present_percent: 100,
   };
   await page.reload();
-  await page.getByRole('button', { name: 'Ерөнхий тойм', exact: true }).click();
+  await page.getByRole('button', { name: 'Тайлан', exact: true }).click();
   await expect(presence).toContainText('1 / 1');
   await expect(presence).toContainText('81.0%');
 });
@@ -1073,7 +1085,7 @@ test('report selection hides old data immediately and ignores a late response', 
     } else await route.fallback();
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Ерөнхий тойм', exact: true }).click();
+  await page.getByRole('button', { name: 'Тайлан', exact: true }).click();
   await expect(page.locator('.activity-score-card h3')).toHaveText('42.00');
   await page.getByLabel('Тайлангийн ажилтан').selectOption('2');
   await expect(page.locator('.activity-score-card')).toHaveCount(0);
@@ -1159,7 +1171,7 @@ test('activity charts fit a 320px viewport with long application names', async (
   state.appName = 'VeryLongApplicationName'.repeat(8);
   await page.setViewportSize({ width: 320, height: 800 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Ерөнхий тойм', exact: true }).click();
+  await page.getByRole('button', { name: 'Тайлан', exact: true }).click();
   await expect(page.locator('.activity-score-card')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
@@ -1257,9 +1269,11 @@ test('a reminder shows on the page and reminders can be turned off', async ({ pa
   await page.goto('/');
   const panel = page.getByRole('region', { name: 'Энэ компьютерийн удирдлага', exact: true });
   await expect(panel.getByRole('status')).toContainText('Ажил эхлүүлэхээ мартсан уу?');
-  await panel.getByText('Төхөөрөмжийн нэмэлт үйлдэл').click();
-  await panel.getByRole('button', { name: 'Сануулга унтраах', exact: true }).click();
-  await expect(panel.getByRole('button', { name: 'Сануулга асаах', exact: true })).toBeVisible();
+  await panel.getByText('Бусад тохиргоо').click();
+  const reminders = panel.getByRole('checkbox', { name: 'Ажил эхлүүлэхээ мартвал сануулах' });
+  await expect(reminders).toBeChecked();
+  await reminders.click();
+  await expect(reminders).not.toBeChecked();
   expect(state.desktop.reminders_enabled).toBe(false);
 });
 
@@ -1274,8 +1288,11 @@ test('starting at sign-in is explained before linking and can be switched off', 
   });
   await page.goto('/');
   const panel = page.getByRole('region', { name: 'Энэ компьютерийн удирдлага', exact: true });
-  await panel.getByRole('button', { name: 'Үргэлжлүүлэх' }).click();
-  await expect(panel.getByText('компьютер асахад WorkTrack далд асна')).toBeVisible();
+  await panel.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('Компьютер асахад WorkTrack далд асна')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Болих' }).click();
+  await panel.getByText('Бусад тохиргоо').click();
   const toggle = panel.getByRole('checkbox', {
     name: 'Компьютер асахад WorkTrack-ийг автоматаар асаах',
   });
@@ -1347,22 +1364,25 @@ test('admin sees how employees connect, the last backup and sets a second backup
 
 test('the next day starts with one click on the task used last time', async ({ page }) => {
   const state = await mockApp(page);
+  state.tasks[0].employee = 1; // A task of the signed-in person.
   Object.assign(state.desktop, { linked: true, username: 'admin', device_name: 'QA laptop' });
   await page.goto('/');
   const panel = page.getByRole('region', { name: 'Энэ компьютерийн удирдлага', exact: true });
   const start = panel.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true });
-  await expect(start).toBeDisabled(); // Nothing chosen on this computer yet.
-  await panel.getByLabel('Хийх даалгавар', { exact: true }).selectOption('none');
+  const task = panel.getByLabel('Хийх даалгавар', { exact: true });
+  await expect(start).toBeEnabled(); // Ready at once; without a choice it records computer time only.
+  await task.selectOption('11');
   await start.click();
   await expect(panel.getByRole('button', { name: 'Түр зогсоох', exact: true })).toBeVisible();
-  expect(state.desktop.last_task).toEqual({ task: 'none', title: '' });
+  expect(state.desktop.last_task).toEqual({ task: '11', title: 'Existing task' });
   await panel.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
   await expect(start).toBeEnabled();
   expect(state.desktop.computer_running).toBe(false);
   await page.reload(); // Next morning: the page remembers nothing, the computer does.
-  await expect(start).toBeEnabled();
+  await expect(task).toHaveValue('11');
   await start.click();
   await expect(panel.getByRole('button', { name: 'Түр зогсоох', exact: true })).toBeVisible();
+  expect(state.workSession.task_id).toBe(11);
   expect(state.desktopPosts.filter((action) => action === 'start')).toHaveLength(2);
 });
 
@@ -1373,7 +1393,7 @@ test('the day overview explains an empty day, speaks Mongolian and refreshes tod
   state.appName = null; // Nothing recorded yet today.
   await page.clock.install();
   await page.goto('/');
-  await page.getByRole('button', { name: 'Ерөнхий тойм', exact: true }).click();
+  await page.getByRole('button', { name: 'Тайлан', exact: true }).click();
   const apps = page
     .locator('.activity-detail-card')
     .filter({ has: page.getByRole('heading', { name: 'Аппын хэрэглээ', exact: true }) });
@@ -1394,4 +1414,33 @@ test('the day overview explains an empty day, speaks Mongolian and refreshes tod
   await expect(
     page.getByRole('heading', { name: 'Төхөөрөмжийн төлөв', exact: true }),
   ).toBeVisible();
+});
+
+test('each role sees only its own menu', async ({ page }) => {
+  const state = await mockApp(page);
+  const menu = () =>
+    page
+      .locator('.sidebar nav button')
+      .evaluateAll((items) => items.map((item) => item.textContent));
+  await page.goto('/');
+  await expect
+    .poll(menu)
+    .toEqual([
+      'Миний өнөөдөр',
+      'Даалгавар',
+      'Багийн гишүүд',
+      'Тайлан',
+      'Төхөөрөмжийн төлөв',
+      'Өөрчлөлтийн түүх',
+      'Тохиргоо',
+      'Миний бүртгэл',
+    ]);
+  Object.assign(state.members[0], { role: 'MANAGER', is_admin: false, department: 1 });
+  await page.reload();
+  await expect
+    .poll(menu)
+    .toEqual(['Миний өнөөдөр', 'Даалгавар', 'Багийн гишүүд', 'Тайлан', 'Миний бүртгэл']);
+  Object.assign(state.members[0], { role: 'EMPLOYEE', is_admin: false, department: 1 });
+  await page.reload();
+  await expect.poll(menu).toEqual(['Миний өнөөдөр', 'Даалгавар', 'Миний бүртгэл']);
 });

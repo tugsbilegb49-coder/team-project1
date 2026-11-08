@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { passwordFeedback } from './passwordFeedback';
 import { MemberResetCode } from './ResetPassword';
 
+const ROLE_NAMES = { EMPLOYEE: 'Ажилтан', MANAGER: 'Менежер', ADMIN: 'Админ' };
+
 function MemberPasswordReset({ member, busy, mutate }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState(null);
@@ -202,9 +204,9 @@ export default function Members({ user, members, departments, busy, mutate }) {
                 value={role}
                 onChange={(event) => setRole(event.target.value)}
               >
-                <option value="EMPLOYEE">Employee</option>
-                <option value="MANAGER">Manager</option>
-                <option value="ADMIN">Admin</option>
+                <option value="EMPLOYEE">Ажилтан</option>
+                <option value="MANAGER">Менежер</option>
+                <option value="ADMIN">Админ</option>
               </select>
               <label htmlFor="member-department">
                 Хэлтэс{role === 'MANAGER' ? ' (заавал)' : ''}
@@ -223,7 +225,7 @@ export default function Members({ user, members, departments, busy, mutate }) {
                 ))}
               </select>
               {role === 'MANAGER' && !departments.length && (
-                <p>Manager нэмэхийн өмнө хэлтэс үүсгэнэ үү.</p>
+                <p>Менежер нэмэхийн өмнө хэлтэс үүсгэнэ үү.</p>
               )}
               <button type="submit" disabled={role === 'MANAGER' && !departments.length}>
                 Гишүүн нэмэх
@@ -240,8 +242,13 @@ export default function Members({ user, members, departments, busy, mutate }) {
               Нэвтрэх нэр: <strong>{member.username}</strong>
             </p>
             <p>
-              {member.email} · {member.role}
-              {!member.is_active ? ' · Идэвхгүй' : ''}
+              {[
+                member.email,
+                ROLE_NAMES[member.role] || member.role,
+                !member.is_active && 'Идэвхгүй',
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </p>
             {user.is_admin ? (
               <label>

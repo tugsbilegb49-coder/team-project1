@@ -74,12 +74,19 @@ export function Notifications({ user, navigate }) {
     agent_offline: 'Төхөөрөмж холболтгүй',
     task_transfer: 'Даалгавар шилжүүлэх хүсэлт',
     upload_error: 'Илгээлтийн алдаа',
-    queue_pending: 'Илгээх бүртгэл хүлээгдэж байна',
+    queue_pending: 'Илгээгдээгүй бүртгэл байна',
     backup_failed: 'Backup амжилтгүй',
     backup_stale: 'Backup удаан хийгдээгүй. Сүүлийнх',
   };
+  // Device problems open the device list for admins; others see their own computer on «Миний өнөөдөр».
   const target = (kind) =>
-    kind.startsWith('task_') ? 'tasks' : kind.startsWith('backup_') ? 'settings' : 'agents';
+    kind.startsWith('task_')
+      ? 'tasks'
+      : kind.startsWith('backup_')
+        ? 'settings'
+        : user.is_admin
+          ? 'agents'
+          : 'today';
   return (
     <details className="notification-box">
       <summary>Мэдэгдэл ({data?.count ?? 0})</summary>
@@ -123,6 +130,9 @@ function Pager({ data, page, setPage }) {
   );
 }
 
+const KIND_NAMES = { computer: 'Компьютер', camera: 'Камер' };
+
+/** Компьютер бүр холбогдсон эсэх; нарийн мэдээлэл «Дэлгэрэнгүй» дотор. */
 export function AgentStatus({ user }) {
   const [page, setPage] = useState(1);
   const { data, error, refresh } = usePolling(`/api/agent-status/?page=${page}`, user);
@@ -130,8 +140,8 @@ export function AgentStatus({ user }) {
     <section className="task-section">
       <h1>Төхөөрөмжийн төлөв</h1>
       <p>
-        30 секунд тутам шинэчлэгдэнэ. Сүүлийн heartbeat 90 секундээс хуучирвал холболтгүй гэж
-        харуулна.
+        Компьютер бүр WorkTrack-тай холбогдсон эсэхийг харуулна. 30 секунд тутам шинэчлэгдэнэ; 1.5
+        минутаас удаан мэдээ ирээгүй бол «Холболтгүй».
       </p>
       <button type="button" onClick={refresh}>
         Төлөв шинэчлэх
@@ -139,47 +149,64 @@ export function AgentStatus({ user }) {
       {error && <p role="alert">{error}</p>}
       {!data && !error && <p>Уншиж байна…</p>}
       {data?.results?.length === 0 && <p>Бүртгэлтэй төхөөрөмж алга.</p>}
-      {data?.results?.map((device) => (
-        <article className="activity-detail-card" key={device.id}>
-          <h2>{device.name}</h2>
-          <p>
-            {device.employee_name} · {device.platform}
-            {!device.enabled ? ' · Идэвхгүй' : ''}
-          </p>
-          {!device.agents.length && (
-            <p>
-              Төхөөрөмж төлөвөө илгээгээгүй.{' '}
-              {device.platform === 'Windows' ? 'Start WorkTrack.bat' : 'Start WorkTrack.command'}
-              -аар асаана уу.
-            </p>
-          )}
-          {device.agents.map((agent) => (
-            <div key={agent.kind} aria-label={`${device.name} ${agent.kind}`}>
-              <h3>
-                {agent.kind === 'camera' ? 'Camera' : 'Computer agent'} — {stateLabels[agent.state]}
-              </h3>
-              <div className="activity-row">
-                <span>Сүүлд холбогдсон</span>
-                <strong>{when(agent.seen_at)}</strong>
-              </div>
-              <div className="activity-row">
-                <span>Сүүлд бүртгэл илгээсэн</span>
-                <strong>{when(agent.last_upload_at)}</strong>
-              </div>
-              <div className="activity-row">
-                <span>Queue-д хүлээгдэж буй</span>
-                <strong>{agent.queue_count}</strong>
-              </div>
-              {agent.error_code && (
-                <p role="status">{errorLabels[agent.error_code] || 'Алдаа гарсан'}</p>
-              )}
-              <p>
-                Програм {agent.agent_version || '—'} · Тохиргоо v{agent.settings_version}
-              </p>
+      {data?.results?.map((device) => {
+        const main = device.agents.find((agent) => agent.kind === 'computer') || device.agents[0];
+        const problems = device.agents.filter((agent) => agent.error_code);
+        return (
+          <article className="activity-detail-card device-card" key={device.id}>
+            <div className="device-head">
+              <h2>{device.name}</h2>
+              <span className={`device-state state-${main?.state || 'none'}`}>
+                {main ? stateLabels[main.state] : 'Мэдээ ирээгүй'}
+              </span>
             </div>
-          ))}
-        </article>
-      ))}
+            <p className="muted">
+              {device.employee_name} · {device.platform}
+              {!device.enabled ? ' · Идэвхгүй' : ''}
+            </p>
+            {!device.agents.length && (
+              <p>
+                Энэ компьютер WorkTrack-аас хараахан мэдээ илгээгээгүй. WorkTrack-аа нээгээд «Ажил
+                эхлүүлэх» дарна уу.
+              </p>
+            )}
+            {problems.map((agent) => (
+              <p role="status" key={agent.kind}>
+                {KIND_NAMES[agent.kind] || agent.kind}:{' '}
+                {errorLabels[agent.error_code] || 'Алдаа гарсан'}
+              </p>
+            ))}
+            {device.agents.length > 0 && (
+              <details>
+                <summary>Дэлгэрэнгүй</summary>
+                {device.agents.map((agent) => (
+                  <div key={agent.kind} aria-label={`${device.name} ${agent.kind}`}>
+                    <h3>
+                      {KIND_NAMES[agent.kind] || agent.kind} — {stateLabels[agent.state]}
+                    </h3>
+                    <div className="activity-row">
+                      <span>Сүүлд холбогдсон</span>
+                      <strong>{when(agent.seen_at)}</strong>
+                    </div>
+                    <div className="activity-row">
+                      <span>Сүүлд бүртгэл илгээсэн</span>
+                      <strong>{when(agent.last_upload_at)}</strong>
+                    </div>
+                    <div className="activity-row">
+                      <span>Илгээгдэхийг хүлээж буй бүртгэл</span>
+                      <strong>{agent.queue_count}</strong>
+                    </div>
+                    <p className="muted">
+                      Програмын хувилбар {agent.agent_version || '—'} · Тохиргоо{' '}
+                      {agent.settings_version}
+                    </p>
+                  </div>
+                ))}
+              </details>
+            )}
+          </article>
+        );
+      })}
       <Pager data={data} page={page} setPage={setPage} />
     </section>
   );
@@ -199,7 +226,7 @@ export function AuditHistory({ user }) {
     password_change: 'Нууц үг сольсон',
     password_reset_code: 'Нууц үг сэргээх код үүсгэсэн',
     password_reset: 'Кодоор нууц үгээ шинэчилсэн',
-    admin_change: 'Admin-аар зассан',
+    admin_change: 'Админ зассан',
     transfer_request: 'Шилжүүлэх хүсэлт',
     transfer_accept: 'Шилжүүлгийг зөвшөөрсөн',
     transfer_decline: 'Шилжүүлгээс татгалзсан',
@@ -228,7 +255,7 @@ export function AuditHistory({ user }) {
     department_id: 'Хэлтэс',
     productive_apps: 'Ажилд тооцох аппууд',
     camera_threshold: 'Камерын итгэлцлийн босго',
-    presence_log_retention_days: 'CSV хадгалах хоног',
+    presence_log_retention_days: 'Камерын түр файл хадгалах хоног',
     activity_retention_days: 'Өгөгдлийн санд хадгалах хоног',
     automatic_retention: 'Автомат цэвэрлэгээ',
     client_version: 'Ажилтны аппын хувилбар',
@@ -455,7 +482,7 @@ export function MonitoringSettings({ user }) {
   const update = (name, next) => setForm((previous) => ({ ...previous, [name]: next }));
   return (
     <section className="task-section">
-      <h1>Monitoring тохиргоо</h1>
+      <h1>Бүртгэлийн тохиргоо</h1>
       {error && <p role="alert">{error}</p>}
       {message && <p role="status">{message}</p>}
       <button type="button" disabled={busy} onClick={load}>
@@ -485,7 +512,7 @@ export function MonitoringSettings({ user }) {
               />
             </label>
             <label>
-              CSV файлын дээд хэмжээ (byte)
+              Камерын түр файлын дээд хэмжээ (байт)
               <input
                 required
                 type="number"
@@ -496,7 +523,7 @@ export function MonitoringSettings({ user }) {
               />
             </label>
             <label>
-              CSV backup тоо
+              Камерын түр файлын хуулбарын тоо
               <input
                 required
                 type="number"
@@ -507,7 +534,7 @@ export function MonitoringSettings({ user }) {
               />
             </label>
             <label>
-              Local CSV хадгалах хоног
+              Камерын түр файлыг компьютер дээр хадгалах хоног
               <input
                 required
                 type="number"
@@ -518,7 +545,7 @@ export function MonitoringSettings({ user }) {
               />
             </label>
             <label>
-              Database activity хадгалах хоног
+              Програмын бүртгэлийг серверт хадгалах хоног
               <input
                 required
                 type="number"
@@ -534,7 +561,7 @@ export function MonitoringSettings({ user }) {
                 checked={form.automatic_retention}
                 onChange={(e) => update('automatic_retention', e.target.checked)}
               />
-              Backup амжилттай болсны дараа хугацаа хэтэрсэн activity-г автоматаар цэвэрлэх
+              Backup амжилттай болсны дараа хугацаа хэтэрсэн бүртгэлийг автоматаар цэвэрлэх
             </label>
             <p>
               Автомат цэвэрлэгээ эхэндээ унтраалттай. Хэрэглэгч, даалгавар, зөвшөөрөл, оноог

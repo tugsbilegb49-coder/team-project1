@@ -34,6 +34,24 @@ function localToday() {
   const value = (key) => parts.find((part) => part.type === key).value;
   return `${value('year')}-${value('month')}-${value('day')}`;
 }
+// Ажилтан 3, менежер 5, админ 8 цэс харна. «Ерөнхий тойм» нь «Тайлан» дотор.
+const MENU = [
+  ['today', 'Миний өнөөдөр', 'all'],
+  ['tasks', 'Даалгавар', 'all'],
+  ['members', 'Багийн гишүүд', 'lead'],
+  ['reports', 'Тайлан', 'lead'],
+  ['agents', 'Төхөөрөмжийн төлөв', 'admin'],
+  ['audit', 'Өөрчлөлтийн түүх', 'admin'],
+  ['settings', 'Тохиргоо', 'admin'],
+  ['account', 'Миний бүртгэл', 'all'],
+];
+function menuFor(user) {
+  const lead = user.is_admin || user.role === 'MANAGER';
+  return MENU.filter(
+    ([, , who]) => who === 'all' || (who === 'lead' && lead) || (who === 'admin' && user.is_admin),
+  );
+}
+
 const appCategories = {
   WORK: 'Ажлын програм',
   COMMUNICATION: 'Харилцаа',
@@ -61,9 +79,11 @@ function NoAppUse({ name, isToday, onDevices }) {
           ? 'Төхөөрөмж холбогдоогүй, ажил эхлүүлээгүй эсвэл дөнгөж эхэлсэн байж болно. Ажил эхэлснээс хойш 1 минут орчмын дараа энд гарна; хуудас 30 секунд тутам шинэчлэгдэнэ.'
           : 'Тэр өдөр ажил эхлүүлээгүй, эсвэл компьютер нь WorkTrack-д холбогдоогүй байжээ.'}
       </p>
-      <button type="button" className="secondary-button" onClick={onDevices}>
-        Төхөөрөмжийн төлөв харах
-      </button>
+      {onDevices && (
+        <button type="button" className="secondary-button" onClick={onDevices}>
+          Төхөөрөмжийн төлөв харах
+        </button>
+      )}
     </div>
   );
 }
@@ -229,7 +249,7 @@ function App() {
   }, [user?.id, employee, date, validDate, reportKey, revision, reportTick]);
   useEffect(() => {
     // Today's numbers grow while people work; past days do not change.
-    if (!user?.id || page !== 'dashboard' || date !== today) return;
+    if (!user?.id || page !== 'reports' || date !== today) return;
     const timer = setInterval(() => setReportTick((value) => value + 1), 30000);
     return () => clearInterval(timer);
   }, [user?.id, page, date, today]);
@@ -330,26 +350,24 @@ function App() {
       </main>
     );
   const done = tasks.filter((t) => t.status === statuses.DONE).length;
+  const menu = menuFor(user);
+  const allowed = new Set(menu.map(([key]) => key));
+  // An old link or a notification may point at a page this person does not have.
+  const shown = allowed.has(page)
+    ? page
+    : page === 'dashboard' && allowed.has('reports')
+      ? 'reports'
+      : 'today';
   return (
     <div className="app">
       <aside className="sidebar">
         <h2>WorkTrack</h2>
         <nav>
-          {[
-            ['today', 'Миний өнөөдөр'],
-            ['dashboard', 'Ерөнхий тойм'],
-            ['tasks', 'Даалгавар'],
-            ['members', 'Багийн гишүүд'],
-            ['reports', 'Тайлан'],
-            ['agents', 'Төхөөрөмжийн төлөв'],
-            ['audit', 'Өөрчлөлтийн түүх'],
-            ...(user.is_admin ? [['settings', 'Тохиргоо']] : []),
-            ['account', 'Миний бүртгэл'],
-          ].map(([key, label]) => (
+          {menu.map(([key, label]) => (
             <button
               type="button"
               key={key}
-              className={page === key ? 'active' : ''}
+              className={shown === key ? 'active' : ''}
               onClick={() => setPage(key)}
             >
               {label}
@@ -373,23 +391,21 @@ function App() {
         </button>
       </aside>
       <main className="main" aria-busy={busy}>
-        {page !== 'today' && (taskWork.sample?.data.session || taskWork.error) && (
+        {shown !== 'today' && (taskWork.sample?.data.session || taskWork.error) && (
           <TaskWorkClock work={taskWork} busy={busy} navigate={setPage} onStop={workday.pause} />
         )}
-        {page !== 'today' && workday.error && <p role="alert">{workday.error}</p>}
+        {shown !== 'today' && workday.error && <p role="alert">{workday.error}</p>}
         <Notifications
           key={`notifications:${user.id}:${user.role}:${user.department}`}
           user={user}
           navigate={setPage}
         />
         {user.role === 'MANAGER' && !user.department && !user.is_admin && (
-          <p role="alert">
-            Manager-ийн хэлтэс тохируулагдаагүй байна. Admin-аар хэлтэс сонгуулна уу.
-          </p>
+          <p role="alert">Таны хэлтэс тохируулагдаагүй байна. Админаар хэлтсээ сонгуулна уу.</p>
         )}
         {error && <p role="alert">{error}</p>}
         {busy && <p>Хадгалж байна…</p>}
-        {page === 'today' ? (
+        {shown === 'today' ? (
           <Today
             key={`today:${user.id}`}
             user={user}
@@ -399,9 +415,9 @@ function App() {
             workday={workday}
             busy={busy}
           />
-        ) : page === 'account' ? (
+        ) : shown === 'account' ? (
           <PasswordSettings key={`password:${user.id}`} />
-        ) : page === 'tasks' ? (
+        ) : shown === 'tasks' ? (
           <Tasks
             user={user}
             work={taskWork}
@@ -432,7 +448,7 @@ function App() {
             }
             onDelete={(id) => mutate(`/api/tasks/${id}/`, 'DELETE')}
           />
-        ) : page === 'members' ? (
+        ) : shown === 'members' ? (
           <Members
             user={user}
             members={members}
@@ -440,11 +456,11 @@ function App() {
             busy={busy}
             mutate={mutate}
           />
-        ) : page === 'agents' ? (
+        ) : shown === 'agents' ? (
           <AgentStatus key={`agents:${user.id}:${user.role}:${user.department}`} user={user} />
-        ) : page === 'audit' ? (
+        ) : shown === 'audit' ? (
           <AuditHistory key={`audit:${user.id}:${user.role}:${user.department}`} user={user} />
-        ) : page === 'settings' && user.is_admin ? (
+        ) : shown === 'settings' ? (
           <>
             <ServerStatus key={`server:${user.id}`} user={user} />
             <MonitoringSettings key={`settings:${user.id}`} user={user} />
@@ -452,25 +468,11 @@ function App() {
         ) : (
           <section>
             <header className="header">
-              <h1>{page === 'reports' ? 'Тайлан' : 'Ерөнхий тойм'}</h1>
+              <h1>Тайлан</h1>
               <button disabled={busy} onClick={() => run(load)}>
                 Шинэчлэх
               </button>
             </header>
-            {page === 'reports' && (
-              <ReportExport
-                key={`${user.id}:${user.role}:${user.department}`}
-                user={user}
-                members={members}
-                date={date}
-              />
-            )}
-            {page === 'reports' && (
-              <MonthlyReport
-                key={`monthly:${user.id}:${user.role}:${user.department}`}
-                user={user}
-              />
-            )}
             <section className="stats">
               <div className="stat-card">
                 <p>Нийт даалгавар</p>
@@ -593,7 +595,7 @@ function App() {
                       <NoAppUse
                         name={members.find((m) => String(m.id) === String(employee))?.name}
                         isToday={date === today}
-                        onDevices={() => setPage('agents')}
+                        onDevices={user.is_admin ? () => setPage('agents') : null}
                       />
                     )}
                   </div>
@@ -641,6 +643,13 @@ function App() {
                 </div>
               )}
             </section>
+            <MonthlyReport key={`monthly:${user.id}:${user.role}:${user.department}`} user={user} />
+            <ReportExport
+              key={`${user.id}:${user.role}:${user.department}`}
+              user={user}
+              members={members}
+              date={date}
+            />
           </section>
         )}
       </main>

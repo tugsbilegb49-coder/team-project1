@@ -213,7 +213,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
             self.end_headers()
             if self.command != 'HEAD':
                 self.wfile.write(body)
-        except (BrokenPipeError, ConnectionResetError):
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):  # Windows: WinError 10053
             pass
 
     def _json(self, status, data):
