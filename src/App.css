@@ -1641,3 +1641,54 @@ textarea:focus-visible {
   background: var(--primary-dark);
   opacity: 1;
 }
+
+/* Ажлын хуваарь */
+.viz-schedule {
+  position: relative;
+  height: 22px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.viz-schedule i {
+  position: absolute;
+  top: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--text);
+  opacity: 0.55;
+}
+.viz-schedule span {
+  position: absolute;
+  top: 6px;
+  white-space: nowrap;
+}
+.work-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  border: 0;
+  padding: 0;
+  margin: 0 0 8px;
+}
+.work-days legend {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.work-hours {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+/* Checkboxes keep their own size beside their text (the general input rule makes them full width). */
+.main label.toggle-field {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+}
+.main label.toggle-field input[type='checkbox'] {
+  width: auto;
+  flex: none;
+  padding: 0;
+  margin: 0;
+}

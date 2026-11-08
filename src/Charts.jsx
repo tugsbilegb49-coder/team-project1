@@ -156,7 +156,7 @@ const KIND_STYLE = {
 };
 
 /** Өглөөнөөс орой хүртэл 15 минут тутам: аль төрөл давамгайлсан. */
-export function Timeline({ title, slots }) {
+export function Timeline({ title, slots, schedule }) {
   const { box, bind, layer } = useTip();
   if (!slots.length)
     return (
@@ -208,6 +208,7 @@ export function Timeline({ title, slots }) {
           );
         })}
       </div>
+      {schedule && <ScheduleBand schedule={schedule} first={first} last={last} />}
       <div className="viz-hours" aria-hidden="true">
         {hours.map((hour) => (
           <span key={hour} style={{ left: `${((hour * 4 - first) / (last - first)) * 100}%` }}>
@@ -232,6 +233,31 @@ export function Timeline({ title, slots }) {
 }
 
 /** Оноо = 0.4·T + 0.3·Q + 0.2·D + 0.1·W: хэсэг бүр 0–100, сул хэсэг шууд харагдана. */
+/** Ажлын хуваарийн цаг timeline дээр: нимгэн зураас, гадна нь хичээл гэх мэт. */
+function ScheduleBand({ schedule, first, last }) {
+  const minutes = (value) => {
+    const [hours, mins] = value.split(':').map(Number);
+    return hours * 60 + mins;
+  };
+  const from = Math.max(first * 15, minutes(schedule.start));
+  const to = Math.min(last * 15, minutes(schedule.end));
+  if (to <= from) return null;
+  const span = (last - first) * 15;
+  return (
+    <div className="viz-schedule" aria-label={`Ажлын хуваарь ${schedule.start}–${schedule.end}`}>
+      <i
+        style={{
+          left: `${((from - first * 15) / span) * 100}%`,
+          width: `${((to - from) / span) * 100}%`,
+        }}
+      />
+      <span style={{ left: `${((from - first * 15) / span) * 100}%` }}>
+        Ажлын хуваарь {schedule.start}–{schedule.end}
+      </span>
+    </div>
+  );
+}
+
 export function ScoreBreakdown({ score }) {
   const values = SCORE_PARTS.map(([key, letter, name, weight]) => ({
     key,

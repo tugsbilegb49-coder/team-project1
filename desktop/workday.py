@@ -15,6 +15,23 @@ from agent.main import AgentError, ApiClient, ApiError, is_paused
 from agent.token_store import atomic_json_write
 
 BEAT_EVERY = 30  # Well inside the server's 90-second lease.
+SCHEDULE_EVERY = 20  # Beats between reads of the working schedule (10 minutes).
+
+
+def parse_schedule(settings):
+    """{'days': {0…6}, 'start': minutes, 'end': minutes} from /api/monitoring-settings/."""
+
+    def minutes(value):
+        hours, mins = str(value).split(':')[:2]
+        return int(hours) * 60 + int(mins)
+
+    return {
+        'days': {int(day) for day in settings['work_days']},
+        'start': minutes(settings['work_start']),
+        'end': minutes(settings['work_end']),
+    }
+
+
 NO_TASK = 'none'
 
 
@@ -93,8 +110,21 @@ class Workday:
         except (AgentError, OSError, ValueError, KeyError):
             pass  # Offline: try again next time; the page or the next beat catches up.
 
+    def refresh_schedule(self):
+        """The working schedule for reminders (desktop/reminders.py); kept as it was when offline."""
+        if not self.controller.owner:
+            return
+        try:
+            self.controller.schedule = parse_schedule(self._client().get('/api/monitoring-settings/'))
+        except (AgentError, OSError, ValueError, KeyError, TypeError):
+            pass
+
     def _run(self):
+        beats = 0
         while not self.stopping.wait(BEAT_EVERY):
+            if beats % SCHEDULE_EVERY == 0:
+                self.refresh_schedule()
+            beats += 1
             self.beat()
 
     def close(self):

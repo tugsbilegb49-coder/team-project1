@@ -95,6 +95,7 @@ class DesktopController:
             self.autostart = Autostart(None)
         from desktop.workday import Workday
 
+        self.schedule = None  # The organisation's working schedule, once read (desktop/workday.py).
         self.workday = Workday(self, autostart=sync)
         self.open_page = open_page or (lambda: None)
         # The tray icon is a separate process (desktop/tray.py) that proves itself with this secret.

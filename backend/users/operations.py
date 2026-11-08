@@ -42,6 +42,9 @@ SETTING_FIELDS = (
     'automatic_retention',
     'client_version',
     'client_download_url',
+    'work_days',
+    'work_start',
+    'work_end',
 )
 
 
@@ -72,7 +75,9 @@ def audit_event(actor, resource, object_id, action, changes=None, employee=None)
 
 def snapshot(instance, fields):
     return {
-        name: str(value) if isinstance(value := getattr(instance, name, None), (Decimal, date, datetime)) else value
+        name: str(value)
+        if isinstance(value := getattr(instance, name, None), (Decimal, date, datetime, time))
+        else value
         for name in fields
     }
 
@@ -112,6 +117,14 @@ class SettingsInput(StrictSerializer):
         r'^(\d{1,4}(\.\d{1,4}){0,3})?$', max_length=20, allow_blank=True, required=False
     )
     client_download_url = serializers.URLField(max_length=500, allow_blank=True, required=False)
+    work_days = serializers.ListField(
+        child=serializers.IntegerField(min_value=0, max_value=6), min_length=1, max_length=7, required=False
+    )
+    work_start = serializers.TimeField(required=False)
+    work_end = serializers.TimeField(required=False)
+
+    def validate_work_days(self, values):
+        return sorted(set(values))
 
     def validate_client_download_url(self, value):
         if value and not value.lower().startswith(('https://', 'http://')):
@@ -119,8 +132,11 @@ class SettingsInput(StrictSerializer):
         return value
 
     def validate(self, data):
-        if data.get('client_version') and not data.get('client_download_url', current_settings().client_download_url):
+        policy = current_settings()
+        if data.get('client_version') and not data.get('client_download_url', policy.client_download_url):
             raise ValidationError({'client_download_url': 'Add the download link for the new version.'})
+        if data.get('work_start', policy.work_start) >= data.get('work_end', policy.work_end):
+            raise ValidationError({'work_end': 'Ажлын цаг дуусах цаг нь эхлэхээсээ хойно байна.'})
         return data
 
     def validate_productive_apps(self, values):

@@ -77,13 +77,13 @@ def test_no_forgot_reminder_while_away_outside_work_hours_or_without_idle_access
 
 def test_late_work_reminds_once_per_evening(tmp_path):
     fake = Fake(tmp_path, working=True)
-    fake.now = at('2026-11-04T19:58:00')
+    fake.now = at('2026-11-04T18:58:00')  # The default schedule ends at 18:00; an hour later counts as late.
     item = fake.reminders()
     run(fake, item, 2)
     assert fake.sent == []
     run(fake, item, 120)
     assert fake.sent == [LATE]
-    fake.now = at('2026-11-05T20:30:00')
+    fake.now = at('2026-11-05T19:30:00')
     item.tick()
     assert fake.sent == [LATE, LATE]
 
@@ -126,3 +126,21 @@ def test_notification_failure_is_ignored():
         patch.object(reminders.subprocess, 'Popen', side_effect=OSError),
     ):
         reminders.notify('hello')
+
+
+def test_the_organisations_schedule_decides_when_to_remind(tmp_path):
+    fake = Fake(tmp_path)
+    fake.schedule = {'days': {0, 1, 2, 3, 4}, 'start': 14 * 60, 'end': 20 * 60}  # Classes in the morning.
+    item = fake.reminders()
+    run(fake, item, 15)  # 10:00–10:15 on a Wednesday: class time.
+    assert fake.sent == []
+    fake.now = at('2026-11-04T14:30:00')
+    run(fake, item, 11)
+    assert fake.sent == [FORGOT]
+
+
+def test_the_schedule_is_read_from_the_server_settings():
+    from desktop.workday import parse_schedule
+
+    value = parse_schedule({'work_days': [4, 0], 'work_start': '13:30:00', 'work_end': '19:00'})
+    assert value == {'days': {0, 4}, 'start': 13 * 60 + 30, 'end': 19 * 60}

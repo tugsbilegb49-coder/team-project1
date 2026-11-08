@@ -152,6 +152,7 @@ class MonthlyReportView(APIView):
                 'launcher_recorded_since': None,
                 'launcher_last_upload': None,
                 'application_seconds': 0,
+                'outside_schedule_seconds': 0.0,
                 'idle_seconds': 0,
                 'tracked_seconds': 0,
                 'task_seconds': 0,
@@ -174,12 +175,18 @@ class MonthlyReportView(APIView):
         for item in ArchivedMonthlyActivity.objects.filter(employee_id__in=ids, month=start.date()):
             rows[item.employee_id]['applications'][item.application] += item.seconds
         # Historical imports may span a month boundary, so filter on END in Python.
+        from activity.schedule import Schedule
+
+        schedule = Schedule.current()
         for item in ComputerActivity.objects.filter(employee_id__in=ids, started_at__lt=end).iterator():
             seconds = clipped_seconds(
                 item.started_at, item.started_at + timedelta(seconds=item.duration_seconds), start, min(end, now)
             )
             if seconds:
                 rows[item.employee_id]['applications'][item.application] += seconds
+                if item.application.casefold() != 'idle':
+                    outside = seconds - schedule.inside_seconds(item.started_at, item.duration_seconds)
+                    rows[item.employee_id]['outside_schedule_seconds'] += max(0.0, outside)
         for item in (
             TaskWorkSession.objects.filter(employee_id__in=ids, started_at__lt=end)
             .filter(Q(ended_at__isnull=True) | Q(ended_at__gt=start))
@@ -223,4 +230,12 @@ class MonthlyReportView(APIView):
                 for app, value in sorted(row['applications'].items(), key=lambda pair: -pair[1])
             ]
             row['tasks'] = sorted(row['tasks'].values(), key=lambda item: -item['seconds'])
-        return Response({'month': month, 'timezone': str(ZONE), 'generated_at': now, 'employees': list(rows.values())})
+        return Response(
+            {
+                'month': month,
+                'timezone': str(ZONE),
+                'generated_at': now,
+                'schedule': schedule.as_dict(),
+                'employees': list(rows.values()),
+            }
+        )

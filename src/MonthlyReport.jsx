@@ -119,6 +119,10 @@ export default function MonthlyReport({ user }) {
                     <dd>{clockTime(row.application_seconds)}</dd>
                   </div>
                   <div>
+                    <dt>Үүнээс ажлын хуваарийн гадна</dt>
+                    <dd>{clockTime(row.outside_schedule_seconds || 0)}</dd>
+                  </div>
+                  <div>
                     <dt>Идэвхгүй</dt>
                     <dd>{clockTime(row.idle_seconds)}</dd>
                   </div>

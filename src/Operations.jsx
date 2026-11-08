@@ -259,6 +259,9 @@ export function AuditHistory({ user }) {
     activity_retention_days: 'Өгөгдлийн санд хадгалах хоног',
     automatic_retention: 'Автомат цэвэрлэгээ',
     client_version: 'Ажилтны аппын хувилбар',
+    work_days: 'Ажлын өдрүүд',
+    work_start: 'Ажил эхлэх цаг',
+    work_end: 'Ажил дуусах цаг',
     client_download_url: 'Аппын татах холбоос',
     records_revoked: 'Цуцалсан зөвшөөрөл',
     policy_version: 'Зөвшөөрлийн хувилбар',
@@ -405,6 +408,8 @@ export function ServerStatus({ user }) {
   );
 }
 
+const WEEKDAY_NAMES = ['Даваа', 'Мягмар', 'Лхагва', 'Пүрэв', 'Баасан', 'Бямба', 'Ням'];
+
 export function MonitoringSettings({ user }) {
   const [value, setValue] = useState(null),
     [form, setForm] = useState(null);
@@ -460,6 +465,9 @@ export function MonitoringSettings({ user }) {
       automatic_retention: form.automatic_retention,
       client_version: form.client_version.trim(),
       client_download_url: form.client_download_url.trim(),
+      work_days: form.work_days || [0, 1, 2, 3, 4],
+      work_start: (form.work_start || '09:00').slice(0, 5),
+      work_end: (form.work_end || '18:00').slice(0, 5),
     };
     try {
       const result = await api('/api/monitoring-settings/', {
@@ -567,10 +575,56 @@ export function MonitoringSettings({ user }) {
               Автомат цэвэрлэгээ эхэндээ унтраалттай. Хэрэглэгч, даалгавар, зөвшөөрөл, оноог
               устгахгүй.
             </p>
+            <h2>Ажлын хуваарь</h2>
+            <p>
+              Сануулга зөвхөн энэ хуваарьт гарна; онооны «ажлын програмын хувь» (W) энэ цагаас
+              тооцогдоно; хуваарийн гаднах цагийг (жишээ нь оюутны хичээл) тайланд тусад нь
+              харуулна.
+            </p>
+            <fieldset className="work-days">
+              <legend>Ажлын өдрүүд</legend>
+              {WEEKDAY_NAMES.map((name, day) => (
+                <label className="toggle-field" key={name}>
+                  <input
+                    type="checkbox"
+                    checked={(form.work_days || []).includes(day)}
+                    onChange={(e) =>
+                      update(
+                        'work_days',
+                        e.target.checked
+                          ? [...(form.work_days || []), day].sort()
+                          : (form.work_days || []).filter((value) => value !== day),
+                      )
+                    }
+                  />
+                  {name}
+                </label>
+              ))}
+            </fieldset>
+            <div className="work-hours">
+              <label>
+                Эхлэх цаг
+                <input
+                  type="time"
+                  required
+                  value={(form.work_start || '').slice(0, 5)}
+                  onChange={(e) => update('work_start', e.target.value)}
+                />
+              </label>
+              <label>
+                Дуусах цаг
+                <input
+                  type="time"
+                  required
+                  value={(form.work_end || '').slice(0, 5)}
+                  onChange={(e) => update('work_end', e.target.value)}
+                />
+              </label>
+            </div>
             <h2>Ажилтны аппын шинэ хувилбар</h2>
             <p>
               Шинэ хувилбар гаргасан бол энд бичнэ. Хуучин хувилбартай компьютерууд мэдэгдэл авч,
-              татах холбоосыг харна. Компьютер бүрийн хувилбарыг «Agent төлөв»-өөс харна.
+              татах холбоосыг харна. Компьютер бүрийн хувилбарыг «Төхөөрөмжийн төлөв»-өөс харна.
             </p>
             <label>
               Хувилбар (жишээ нь 1.1.0)

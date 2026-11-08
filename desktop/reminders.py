@@ -17,12 +17,14 @@ import time
 from agent.main import AgentError, idle_seconds, is_paused
 from agent.token_store import atomic_json_write
 
-WORK_HOURS = range(8, 19)  # A forgotten start is only worth a reminder during the working day...
-WORK_DAYS = range(0, 5)  # ...Monday to Friday.
+# The organisation's working schedule (Тохиргоо → Ажлын хуваарь), read from the server by
+# desktop/workday.py. Until it arrives: Monday–Friday 09:00–18:00, the server's default. Outside the
+# schedule (e.g. a student's classes) nobody is reminded to start.
+DEFAULT_SCHEDULE = {'days': {0, 1, 2, 3, 4}, 'start': 9 * 60, 'end': 18 * 60}
+LATE_AFTER = 60  # Minutes after the schedule ends before «still running» is worth a reminder.
 FORGOT_AFTER = 10 * 60  # Minutes of use without started work before the first reminder.
 FORGOT_REPEAT = 2 * 60 * 60
 ACTIVE_IDLE_LIMIT = 120  # Input within the last two minutes counts as "at the computer".
-LATE_HOUR = 20
 SHOW_FOR = 30 * 60  # How long the web page keeps showing the latest reminder.
 
 FORGOT = 'Ажил эхлүүлэхээ мартсан уу? WorkTrack-ийн дүрс эсвэл хуудаснаас «Ажил эхлүүлэх»-ийг дарна уу.'
@@ -99,13 +101,15 @@ class Reminders:
             working = controller._running('agent') and not is_paused(controller.control)
         now = self.clock()
         local = datetime.fromtimestamp(now)
+        schedule = getattr(controller, 'schedule', None) or DEFAULT_SCHEDULE
+        minute = local.hour * 60 + local.minute
         if working:
             self.active_since = None
-            if local.hour >= LATE_HOUR and self.late_day != local.date():
+            if minute >= schedule['end'] + LATE_AFTER and self.late_day != local.date():
                 self.late_day = local.date()
                 self._remind(LATE, now)
             return
-        if local.weekday() not in WORK_DAYS or local.hour not in WORK_HOURS:
+        if local.weekday() not in schedule['days'] or not schedule['start'] <= minute < schedule['end']:
             self.active_since = None
             return
         try:

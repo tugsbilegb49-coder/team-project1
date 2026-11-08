@@ -68,6 +68,9 @@ async function mockApp(page) {
       automatic_retention: false,
       client_version: '',
       client_download_url: '',
+      work_days: [0, 1, 2, 3, 4],
+      work_start: '09:00:00',
+      work_end: '18:00:00',
       version: 1,
     },
     desktop: {
@@ -327,6 +330,8 @@ async function mockApp(page) {
         latest_application: { application: state.appName },
         tasks: [],
         split: { work: 2400, other: 1200, idle: 60 },
+        schedule: { days: [0, 1, 2, 3, 4], start: '09:00', end: '18:00' },
+        outside_schedule_seconds: state.outsideSchedule || 0,
         timeline: [
           { slot: 36, start: '09:00', work: 600, other: 200, idle: 0 },
           { slot: 37, start: '09:15', work: 100, other: 700, idle: 60 },
@@ -1655,4 +1660,26 @@ test('a real server shows no demo shortcuts', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'WorkTrack — Нэвтрэх' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Демо горим' })).toHaveCount(0);
+});
+
+test('the working schedule is set in settings and shown on the day', async ({ page }) => {
+  const state = await mockApp(page);
+  state.outsideSchedule = 5400;
+  await page.goto('/');
+  await expect(page.getByLabel('Ажлын хуваарь 09:00–18:00')).toBeVisible();
+  await expect(
+    page.getByText('Үүнээс ажлын хуваарийн (09:00–18:00) гадна: 1 цаг 30 мин'),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Тохиргоо', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Бямба' }).check();
+  await page.getByLabel('Эхлэх цаг').fill('14:00');
+  await page.getByLabel('Дуусах цаг').fill('20:00');
+  await page.getByRole('button', { name: 'Тохиргоо хадгалах', exact: true }).click();
+  await expect(page.getByText('Хадгаллаа.', { exact: false })).toBeVisible();
+  const saved = state.patches.find((row) => row.path === '/api/monitoring-settings/').data;
+  expect([saved.work_days, saved.work_start, saved.work_end]).toEqual([
+    [0, 1, 2, 3, 4, 5],
+    '14:00',
+    '20:00',
+  ]);
 });

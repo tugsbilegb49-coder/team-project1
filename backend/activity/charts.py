@@ -24,6 +24,20 @@ def kind_of(application, category):
     return 'work' if category == ComputerActivity.Category.WORK else 'other'
 
 
+def outside_schedule_seconds(employee, day, schedule=None):
+    """Seconds at the computer (not idle) outside the working schedule, e.g. a student's classes."""
+    from .schedule import Schedule
+
+    schedule = schedule or Schedule.current()
+    start, end = day_bounds(day)
+    rows = (
+        ComputerActivity.objects.filter(employee=employee, started_at__gte=start, started_at__lt=end)
+        .exclude(application__iexact='idle')
+        .values_list('started_at', 'duration_seconds')
+    )
+    return round(sum(duration - schedule.inside_seconds(started, duration) for started, duration in rows))
+
+
 def time_split(employee, day):
     """Seconds in work programs, other programs and idle for one day."""
     start, end = day_bounds(day)

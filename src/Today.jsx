@@ -6,6 +6,7 @@ import { usePolling } from './usePolling';
 import { launcherName } from './platform';
 import WeekSummary from './WeekSummary';
 import { SegmentedBar, Timeline } from './Charts';
+import { minutesText } from './chartFormat';
 
 const DEFAULT_DEVICE_NAME = 'Миний компьютер';
 
@@ -621,7 +622,17 @@ export default function Today({ user, navigate, tasks, work, workday, busy }) {
               { label: 'Идэвхгүй', value: result.split.idle, color: '--viz-idle' },
             ]}
           />
-          <Timeline title="Өглөөнөөс орой хүртэл (15 минут тутам)" slots={result.timeline || []} />
+          {result.outside_schedule_seconds > 0 && (
+            <p className="muted">
+              Үүнээс ажлын хуваарийн ({result.schedule?.start}–{result.schedule?.end}) гадна:{' '}
+              {minutesText(result.outside_schedule_seconds)}. Энэ нь оноонд нөлөөлөхгүй.
+            </p>
+          )}
+          <Timeline
+            title="Өглөөнөөс орой хүртэл (15 минут тутам)"
+            slots={result.timeline || []}
+            schedule={result.schedule}
+          />
         </section>
       )}
       {error && <p role="alert">{error}</p>}

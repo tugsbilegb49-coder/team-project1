@@ -109,7 +109,10 @@ class MyTodayView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from activity.charts import day_timeline, time_split
+        from activity.charts import day_timeline, outside_schedule_seconds, time_split
+        from activity.schedule import Schedule
+
+        schedule = Schedule.current()
         from activity.models import ComputerActivity
         from workforce.models import Task
 
@@ -137,5 +140,7 @@ class MyTodayView(APIView):
                 'tasks': list(tasks.values('id', 'title', 'status', 'due_date')[:10]),
                 'split': time_split(request.user, today),
                 'timeline': day_timeline(request.user, today),
+                'schedule': schedule.as_dict(),
+                'outside_schedule_seconds': outside_schedule_seconds(request.user, today, schedule),
             }
         )

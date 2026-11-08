@@ -4,11 +4,12 @@ from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, time, timedelta
 from django.db import transaction
 
-from django.db.models import Avg, Sum
+from django.db.models import Avg
 from django.utils import timezone
 
 from activity.models import ActivityEvent, ComputerActivity
 from activity.reporting import camera_totals_for_day
+from activity.schedule import Schedule
 from workforce.models import Task
 from .models import ProductivityScore
 
@@ -65,9 +66,11 @@ def calculate_daily_score(employee, score_date):
     T = completed tasks / tasks due that day
     Q = mean manager quality assessment for completed tasks
     D = tasks completed no later than their due date / tasks due that day
-    W = productive foreground-app seconds / all desktop-agent seconds. If the
-    desktop agent has not supplied data for the day, camera WORKING seconds /
-    all camera activity seconds is used as a fallback.
+    W = productive foreground-app seconds / all desktop-agent seconds, counted within the
+    working schedule (Тохиргоо → Ажлын хуваарь) so that, say, a student's class hours do not
+    lower it; on a day with nothing inside the schedule the whole day counts. If the desktop
+    agent has not supplied data for the day, camera WORKING seconds / all camera activity
+    seconds is used as a fallback.
     """
     tasks = Task.objects.filter(employee=employee, due_date=score_date)
     task_count = tasks.count()
@@ -94,16 +97,20 @@ def calculate_daily_score(employee, score_date):
     quality = _clamp(completed.aggregate(value=Avg('quality_score'))['value'])
     deadline_completion = _percentage(on_time_count, task_count)
 
-    computer_totals = ComputerActivity.objects.filter(employee=employee, started_at__date=score_date)
-    computer_seconds = computer_totals.aggregate(value=Sum('duration_seconds'))['value'] or 0
-    if computer_seconds:
-        productive_seconds = (
-            computer_totals.filter(category=ComputerActivity.Category.WORK).aggregate(value=Sum('duration_seconds'))[
-                'value'
-            ]
-            or 0
+    segments = list(
+        ComputerActivity.objects.filter(employee=employee, started_at__date=score_date).values_list(
+            'started_at', 'duration_seconds', 'category'
         )
-        work_process = _percentage(productive_seconds, computer_seconds)
+    )
+    if segments:
+        schedule = Schedule.current()
+        inside = [(category, schedule.inside_seconds(start, duration)) for start, duration, category in segments]
+        if not any(seconds for _, seconds in inside):  # Nothing inside the schedule: use the whole day.
+            inside = [(category, duration) for _, duration, category in segments]
+        work = ComputerActivity.Category.WORK
+        work_process = _percentage(
+            sum(seconds for category, seconds in inside if category == work), sum(seconds for _, seconds in inside)
+        )
     else:
         state_totals = camera_totals_for_day(employee, score_date)
         all_activity_seconds = sum(state_totals.values())

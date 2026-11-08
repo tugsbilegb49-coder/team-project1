@@ -2,6 +2,9 @@ from django.contrib.auth.models import AbstractUser
 from django.conf import settings
 from django.db import models
 import uuid
+from datetime import time
+
+from activity.schedule import default_work_days
 
 
 class Department(models.Model):
@@ -90,6 +93,10 @@ class MonitoringSettings(models.Model):
     # The newest employee app the admin wants everyone on; older apps show where to download it.
     client_version = models.CharField(max_length=20, blank=True)
     client_download_url = models.URLField(max_length=500, blank=True)
+    # The working schedule (activity/schedule.py): reminders, the score's W and «outside the schedule».
+    work_days = models.JSONField(default=default_work_days)
+    work_start = models.TimeField(default=time(9))
+    work_end = models.TimeField(default=time(18))
     # A second place for the daily backup (USB disk, network share, synced cloud folder).
     # BACKUP_COPY_DIR in the server environment takes precedence. Admin-only; not in settings_data.
     backup_copy_dir = models.CharField(max_length=500, blank=True)
