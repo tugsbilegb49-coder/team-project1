@@ -13,7 +13,9 @@ def main():
     parser = argparse.ArgumentParser(description='Worker Activity Monitor')
     parser.add_argument('--config', default='config.yaml', help='Path to config YAML file (default: config.yaml)')
     parser.add_argument(
-        '--mode', choices=('presence', 'activity'), help='Default: presence; activity is the legacy experiment.'
+        '--mode',
+        choices=('presence', 'activity', 'measure'),
+        help='Default: presence; measure = guided accuracy test (src/camera_accuracy.py); activity is the legacy experiment.',
     )
     parser.add_argument(
         '--consent',
@@ -47,7 +49,7 @@ def main():
         arguments = [*arguments, '--consent']
     ensure_host(arguments)
     mode = args.mode or config.get('camera_mode', 'presence')
-    if mode not in {'presence', 'activity'}:
+    if mode not in {'presence', 'activity', 'measure'}:
         parser.error('camera_mode must be presence or activity.')
     from agent.process_lock import collector_lock, AlreadyRunningError
     from src.camera_capture import CameraPermissionError, CameraSessionCancelled
@@ -65,6 +67,11 @@ def main():
 
 
 def run_monitor(config, mode, seconds):
+    if mode == 'measure':
+        from src.camera_accuracy import AccuracySession
+
+        AccuracySession(config).run(seconds=seconds)
+        return
     if mode == 'presence':
         from src.presence import PresenceMonitor
 
