@@ -1,3 +1,4 @@
+import { SegmentedBar } from './Charts';
 import { useEffect, useRef, useState } from 'react';
 import TaskCollaboration from './TaskCollaboration';
 import './Tasks.css';
@@ -136,6 +137,7 @@ function Tasks({
         </form>
       )}
 
+      <TaskStatusChart tasks={tasks} />
       <section className="tasks-list">
         <label>Гишүүнээр шүүх</label>
         <select value={filterMember} onChange={(e) => setFilterMember(e.target.value)}>
@@ -286,5 +288,43 @@ function QualityEditor({ task, onSave, disabled }) {
         </p>
       )}
     </form>
+  );
+}
+
+/** Хэдэн даалгавар хүлээгдэж, хийгдэж, дууссан, хоцорсон бэ. */
+function ulaanbaatarToday() {
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Ulaanbaatar' });
+}
+
+function TaskStatusChart({ tasks }) {
+  if (!tasks.length) return null;
+  const today = ulaanbaatarToday();
+  const late = (task) => task.status !== 'Дууссан' && task.due_date && task.due_date < today;
+  const count = (test) => tasks.filter(test).length;
+  return (
+    <section className="chart-card task-status-chart">
+      <SegmentedBar
+        title={`Даалгаврын төлөв · нийт ${tasks.length}`}
+        format={(value) => `${value} даалгавар`}
+        parts={[
+          { label: 'Хоцорсон', value: count(late), color: '--viz-critical' },
+          {
+            label: 'Хүлээгдэж байна',
+            value: count((task) => task.status === 'Хүлээгдэж байна' && !late(task)),
+            color: '--viz-idle',
+          },
+          {
+            label: 'Хийгдэж байна',
+            value: count((task) => task.status === 'Хийгдэж байна' && !late(task)),
+            color: '--viz-1',
+          },
+          {
+            label: 'Дууссан',
+            value: count((task) => task.status === 'Дууссан'),
+            color: '--viz-good',
+          },
+        ]}
+      />
+    </section>
   );
 }

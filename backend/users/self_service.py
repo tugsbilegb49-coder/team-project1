@@ -109,6 +109,7 @@ class MyTodayView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        from activity.charts import day_timeline, time_split
         from activity.models import ComputerActivity
         from workforce.models import Task
 
@@ -134,5 +135,7 @@ class MyTodayView(APIView):
                 'open_tasks': tasks.count(),
                 'overdue_tasks': tasks.filter(due_date__lt=today).count(),
                 'tasks': list(tasks.values('id', 'title', 'status', 'due_date')[:10]),
+                'split': time_split(request.user, today),
+                'timeline': day_timeline(request.user, today),
             }
         )

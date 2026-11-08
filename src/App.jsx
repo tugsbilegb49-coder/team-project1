@@ -10,6 +10,7 @@ import MonthlyReport from './MonthlyReport';
 import { FirstAdminSetup, FirstRunHint } from './FirstRun';
 import { readSetupToken } from './setupToken';
 import { ResetWithCode } from './ResetPassword';
+import { PresenceHours, ScoreBreakdown, ScoreTrend } from './Charts';
 import {
   AgentStatus,
   AuditHistory,
@@ -539,14 +540,23 @@ function App() {
               {!validDate && <p>Тайлангийн огноо сонгоно уу.</p>}
               {report && (
                 <div className="activity-dashboard">
-                  <div className="activity-score-card">
-                    <p>Өдрийн бүтээмжийн оноо</p>
-                    <h3>{report.score ? report.score.score : '—'}</h3>
-                    <span>
-                      {report.score
-                        ? scoreLevels[report.score.category] || report.score.category
-                        : 'Тооцоолоогүй'}
-                    </span>
+                  <div className="activity-score-card wide score-overview">
+                    <div>
+                      <p>Өдрийн бүтээмжийн оноо</p>
+                      <h3>{report.score ? report.score.score : '—'}</h3>
+                      <span>
+                        {report.score
+                          ? scoreLevels[report.score.category] || report.score.category
+                          : 'Тооцоолоогүй'}
+                      </span>
+                    </div>
+                    {report.score && <ScoreBreakdown score={report.score} />}
+                  </div>
+                  <div className="activity-detail-card wide">
+                    <ScoreTrend
+                      title="Сүүлийн 30 хоногийн оноо"
+                      points={report.score_trend || []}
+                    />
                   </div>
                   <div className="activity-detail-card">
                     <h3>Аппын ангилал</h3>
@@ -634,6 +644,12 @@ function App() {
                           <strong>{(row.seconds / 60).toFixed(1)} мин</strong>
                         </div>
                       ))}
+                    {report.presence_by_hour?.length > 0 && (
+                      <PresenceHours
+                        title="Цаг бүрт хүн байсан эсэх"
+                        rows={report.presence_by_hour}
+                      />
+                    )}
                     {!report.camera.length && !report.presence?.samples && (
                       <p className="muted">
                         Камер ашиглаагүй. Камерыг зөвхөн ажилтан өөрөө асаадаг.

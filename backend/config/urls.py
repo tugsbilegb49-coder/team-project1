@@ -5,6 +5,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from users.auth import LoginView, LogoutView
 from users.first_run import FirstRunView
 from users.health import HealthView
+from users.report_charts import ReportChartsView
 from users.reset_codes import PasswordResetWithCodeView
 from users.self_rating import SelfRatingView
 from users.server_status import ServerStatusView
@@ -51,6 +52,7 @@ urlpatterns = [
     path('api/notifications/', NotificationsView.as_view()),
     path('api/server-status/', ServerStatusView.as_view()),
     path('api/reports/export/', ReportExportView.as_view()),
+    path('api/reports/charts/', ReportChartsView.as_view()),
     path('api/health/', HealthView.as_view()),
     path('api/setup/', FirstRunView.as_view()),
     path('api/v1/activity', ActivityBatchView.as_view()),

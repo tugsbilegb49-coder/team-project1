@@ -5,6 +5,7 @@ import { durationText, sessionTiming, useTick } from './taskTime';
 import { usePolling } from './usePolling';
 import { launcherName } from './platform';
 import WeekSummary from './WeekSummary';
+import { SegmentedBar, Timeline } from './Charts';
 
 const DEFAULT_DEVICE_NAME = 'Миний компьютер';
 
@@ -610,6 +611,19 @@ export default function Today({ user, navigate, tasks, work, workday, busy }) {
           <small>Идэвхгүй байсан хугацааг хассан.</small>
         </article>
       </section>
+      {result?.split && (
+        <section className="chart-card day-charts" aria-label="Өнөөдрийн цаг юунд зарцуулагдав">
+          <SegmentedBar
+            title="Өнөөдөр компьютер дээрх цаг"
+            parts={[
+              { label: 'Ажлын програм', value: result.split.work, color: '--viz-1' },
+              { label: 'Бусад програм', value: result.split.other, color: '--viz-2' },
+              { label: 'Идэвхгүй', value: result.split.idle, color: '--viz-idle' },
+            ]}
+          />
+          <Timeline title="Өглөөнөөс орой хүртэл (15 минут тутам)" slots={result.timeline || []} />
+        </section>
+      )}
       {error && <p role="alert">{error}</p>}
       {!result && !error && <p>Өнөөдрийн мэдээлэл уншиж байна…</p>}
       {result && (

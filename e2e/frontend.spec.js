@@ -149,6 +149,45 @@ async function mockApp(page) {
     }
     if (path === '/api/tasks/work-session/')
       return respond({ session: state.workSession, server_now: new Date().toISOString() });
+    if (path === '/api/reports/charts/')
+      return respond({
+        month: url.searchParams.get('month'),
+        employees: [
+          {
+            employee: 1,
+            name: 'Admin',
+            department: 'Хэлтэсгүй',
+            average_score: 81.5,
+            scored_days: 4,
+            work_seconds: 36000,
+          },
+          {
+            employee: 2,
+            name: 'Worker',
+            department: 'Development',
+            average_score: 64.2,
+            scored_days: 5,
+            work_seconds: 54000,
+          },
+          {
+            employee: 3,
+            name: 'Inactive',
+            department: 'Development',
+            average_score: null,
+            scored_days: 0,
+            work_seconds: 0,
+          },
+        ],
+        departments: [
+          { department: 'Development', people: 2, average_score: 64.2, work_seconds: 54000 },
+          { department: 'Хэлтэсгүй', people: 1, average_score: 81.5, work_seconds: 36000 },
+        ],
+        heatmap: Array.from({ length: 7 }, (_, day) =>
+          Array.from({ length: 24 }, (_, hour) =>
+            day < 5 && hour >= 9 && hour < 18 ? (hour === 10 ? 3000 : 1200) : 0,
+          ),
+        ),
+      });
     if (path === '/api/reports/monthly/')
       return respond({
         month: url.searchParams.get('month'),
@@ -277,6 +316,12 @@ async function mockApp(page) {
         applications: [{ application: state.appName, seconds: 3660 }],
         latest_application: { application: state.appName },
         tasks: [],
+        split: { work: 2400, other: 1200, idle: 60 },
+        timeline: [
+          { slot: 36, start: '09:00', work: 600, other: 200, idle: 0 },
+          { slot: 37, start: '09:15', work: 100, other: 700, idle: 60 },
+          { slot: 40, start: '10:00', work: 900, other: 0, idle: 0 },
+        ],
       });
     if (path === '/api/me/week/') {
       state.weekRequests = [...(state.weekRequests || []), url.searchParams.get('start') || ''];
@@ -1477,4 +1522,93 @@ test('finishing the day asks once how productive it was', async ({ page }) => {
   await page.getByRole('dialog').getByRole('button', { name: 'Өндөр' }).click();
   await expect(panel.getByText('Өнөөдрийн үнэлгээ:')).toContainText('Өндөр');
   expect(state.ratings).toEqual(['MEDIUM', 'HIGH']);
+});
+
+test('charts show the day, the score, the month and the tasks, each with a table view', async ({
+  page,
+}) => {
+  const state = await mockApp(page);
+  await page.route('**/api/scores/dashboard/**', (route) =>
+    route.fulfill({
+      json: {
+        score: {
+          score: '71.80',
+          category: 'MEDIUM',
+          task_completion: '75.00',
+          quality: '82.00',
+          deadline_completion: '70.00',
+          work_process: '38.00',
+        },
+        applications: [],
+        application_categories: [],
+        camera: [],
+        presence: null,
+        score_trend: [
+          {
+            date: '2026-11-04',
+            score: 60,
+            task_completion: 50,
+            quality: 80,
+            deadline_completion: 50,
+            work_process: 40,
+          },
+          {
+            date: '2026-11-05',
+            score: 71.8,
+            task_completion: 75,
+            quality: 82,
+            deadline_completion: 70,
+            work_process: 38,
+          },
+        ],
+        presence_by_hour: [{ hour: 9, present: 3000, absent: 600 }],
+      },
+    }),
+  );
+  await page.goto('/');
+  // Миний өнөөдөр: where the time went, and when.
+  await expect(
+    page.getByRole('img', { name: /Өнөөдөр компьютер дээрх цаг: Ажлын програм 40 мин \(66%\)/ }),
+  ).toBeVisible();
+  const slot = page.getByLabel('09:00–09:15: Ажлын програм 10 мин, Бусад програм 3 мин');
+  await slot.focus();
+  await expect(page.locator('.viz-tip')).toContainText('Ихэнхдээ: Ажлын програм');
+  // Тайлан: the four parts of the score, the weakest flagged, the 30-day line and the camera.
+  await page.getByRole('button', { name: 'Тайлан', exact: true }).click();
+  const breakdown = page.locator('.score-breakdown');
+  await expect(breakdown).toContainText('Нийт: 30.0 + 24.6 + 14.0 + 3.8 = 71.8');
+  await expect(breakdown.locator('.score-part').filter({ hasText: 'хамгийн сул' })).toContainText(
+    'Ажлын програмын хувь',
+  );
+  await page.getByRole('img', { name: 'Сүүлийн 30 хоногийн оноо' }).focus();
+  await expect(page.locator('.viz-line-frame .viz-tip')).toContainText('71.8 оноо');
+  await expect(page.getByLabel('9:00 — хүн байсан 50 мин, байгаагүй 10 мин')).toBeVisible();
+  // The month: people and departments ranked, and the busy hours.
+  const month = page.getByRole('region', { name: 'Сарын харьцуулалт' });
+  await expect(month.locator('.viz-ranked-name').first()).toHaveText('Admin');
+  await expect(month).toContainText('Оноогүй: Inactive');
+  await expect(month.getByLabel('Мя 10:00 — 50 мин')).toBeVisible();
+  await month.getByText('Хүснэгтээр харах').first().click();
+  await expect(month.locator('table').first()).toContainText('64.2');
+  // Даалгавар: one bar for how many wait, run, are done or late.
+  state.tasks.push({
+    id: 12,
+    title: 'Late one',
+    employee: 2,
+    status: 'TODO',
+    due_date: '2020-01-01',
+  });
+  await page.getByRole('button', { name: 'Даалгавар', exact: true }).click();
+  await page.getByRole('button', { name: 'Шинэчлэх' }).first().click();
+  await expect(
+    page.getByRole('img', { name: /Даалгаврын төлөв · нийт 2: Хоцорсон 1 даалгавар \(50%\)/ }),
+  ).toBeVisible();
+});
+
+test('employees do not see the team comparison', async ({ page }) => {
+  const state = await mockApp(page);
+  Object.assign(state.members[0], { role: 'EMPLOYEE', is_admin: false, department: 1 });
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Тайлан', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Сарын харьцуулалт' })).toHaveCount(0);
 });

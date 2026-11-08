@@ -1,3 +1,4 @@
+import { SegmentedBar } from './Charts';
 import { useEffect, useState } from 'react';
 import { api } from './api';
 import { clockTime } from './taskTime';
@@ -40,10 +41,34 @@ export default function TaskCollaboration({
   return (
     <section className="task-collaboration" aria-label={`${task.title} — оролцоо`}>
       <h4>Оролцоо · нийт {Number(data.progress_percent)}%</h4>
-      <progress
-        max="100"
-        value={Number(data.progress_percent)}
-        aria-label="Даалгаврын нийт гүйцэтгэл"
+      <SegmentedBar
+        thin
+        table={false}
+        format={(value) => `${value}%`}
+        parts={[
+          // Three people by name; anyone after them folds into one part so colours stay distinct.
+          ...data.contributions.slice(0, 3).map((row, index) => ({
+            label: row.username,
+            value: Number(row.percent),
+            color: ['--viz-1', '--viz-2', '--viz-3'][index],
+          })),
+          ...(data.contributions.length > 3
+            ? [
+                {
+                  label: 'Бусад гишүүд',
+                  value: data.contributions
+                    .slice(3)
+                    .reduce((sum, row) => sum + Number(row.percent), 0),
+                  color: '--viz-4',
+                },
+              ]
+            : []),
+          {
+            label: 'Үлдсэн',
+            value: Math.max(0, 100 - Number(data.progress_percent)),
+            color: '--viz-idle',
+          },
+        ]}
       />
       <p>
         Даалгаварт бүртгэсэн нийт цаг: <strong>{clockTime(data.total_seconds)}</strong>

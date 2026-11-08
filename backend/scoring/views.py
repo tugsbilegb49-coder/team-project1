@@ -14,6 +14,7 @@ from .models import ProductivityScore
 from .serializers import ProductivityScoreSerializer
 from .services import calculate_daily_score, ScoreNotReady
 from activity.models import ComputerActivity
+from activity.charts import presence_by_hour, score_trend
 from activity.reporting import camera_totals_for_day, presence_summary_for_day
 
 
@@ -98,5 +99,8 @@ class ProductivityScoreViewSet(viewsets.ReadOnlyModelViewSet):
                 'presence': presence_summary_for_day(employee, report_date),
                 'applications': list(app_rows),
                 'application_categories': list(category_rows),
+                # For the charts: the last 30 days' scores and the camera hour by hour.
+                'score_trend': score_trend(employee, report_date),
+                'presence_by_hour': presence_by_hour(employee, report_date),
             }
         )

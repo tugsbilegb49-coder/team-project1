@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import MonthCharts from './MonthCharts';
 import { api } from './api';
 import { clockTime } from './taskTime';
 import { usePolling } from './usePolling';
@@ -83,6 +84,9 @@ export default function MonthlyReport({ user }) {
         Програм асаалттай цаг, аппын болон идэвхгүй хугацаа, даалгаврын цаг нь тусдаа хэмжилт тул
         хооронд нь нэмэхгүй. Аппын цаг нь ажил гүйцэтгэсэн эсвэл бүтээмжтэй байсны баталгаа биш.
       </p>
+      {(user.is_admin || user.role === 'MANAGER') && (
+        <MonthCharts key={key} month={month} revision={revision} />
+      )}
       {error && <p role="alert">Сарын тайлан: {error}</p>}
       {!report && !error && <p role="status">Сарын тайлан уншиж байна…</p>}
       {report && (
