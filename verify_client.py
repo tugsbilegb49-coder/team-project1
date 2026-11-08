@@ -96,7 +96,10 @@ def check_tray(client, home, expect, status):
         for name in ('tray.log', 'app.log')
         if (home / '.runtime' / name).exists()
     )
-    message = f'The tray icon process is not running (exit code {state.get("tray_exit")}).\n{logs}'
+    message = (
+        f'The tray icon process is not running (exit code {state.get("tray_exit")}, '
+        f'restarted {state.get("tray_restarts")} times).\n{logs}'
+    )
     assert not expect, message
     print('WARNING: ' + message, flush=True)
     return found

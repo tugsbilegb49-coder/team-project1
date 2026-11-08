@@ -165,3 +165,22 @@ def test_the_menu_reads_the_state():
     lost_timer = {**working, 'task': None}  # E.g. the computer slept and the server ended the timer.
     assert can_start(lost_timer) and start_label(lost_timer) == 'Даалгаврын цаг эхлүүлэх: Тайлан'
     assert not can_start({'linked': False})
+
+
+def test_a_tray_icon_that_went_away_is_started_again_a_few_times(tmp_path):
+    (tmp_path / 'agent').mkdir()
+    (tmp_path / 'agent/config.example.json').write_text(json.dumps({'productive_apps': []}))
+    gone = Mock()
+    gone.poll.return_value = 0
+    spawn = Mock(return_value=gone)
+    controller = DesktopController(
+        tmp_path, 'http://server', 'python', Mock(), spawn=spawn, stop=Mock(), sync=False, tray_command=['tray']
+    )
+    try:
+        assert spawn.call_args.args[2] == {'WORKTRACK_TRAY_SECRET': controller.tray_secret}
+        for _ in range(5):
+            state = controller.state(USER)
+        assert spawn.call_count == 4  # The first start and three more.
+        assert state['tray_running'] is False and state['tray_restarts'] == 3 and state['tray_exit'] == 0
+    finally:
+        controller.close()

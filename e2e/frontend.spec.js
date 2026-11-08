@@ -609,7 +609,7 @@ test('admin finds monthly employees under reports and can inspect another month 
   await page.getByRole('button', { name: 'Тайлан', exact: true }).click();
   await expect(report).toContainText('Worker');
   await expect(report).toContainText('10:00:00');
-  await report.locator('summary').click();
+  await report.getByText('Worker — ажлын дэлгэрэнгүй').click();
   await expect(report).toContainText('35.00%');
   await expect(report).toContainText('Visual Studio Code');
   await report.getByLabel('Тайлангийн сар').fill('2026-10');

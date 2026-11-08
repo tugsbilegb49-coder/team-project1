@@ -100,11 +100,22 @@ class DesktopController:
         # The tray icon is a separate process (desktop/tray.py) that proves itself with this secret.
         self.tray_secret = secrets.token_urlsafe(32)
         self.tray_process = None
-        if tray_command:
-            try:
-                self.tray_process = self.spawn('tray', tray_command, {'WORKTRACK_TRAY_SECRET': self.tray_secret})
-            except OSError:
-                self.tray_process = None  # The web page still does everything.
+        self.tray_command, self.tray_restarts = tray_command, 0
+        self._start_tray()
+
+    def _start_tray(self):
+        if not self.tray_command:
+            return
+        try:
+            self.tray_process = self.spawn('tray', self.tray_command, {'WORKTRACK_TRAY_SECRET': self.tray_secret})
+        except OSError:
+            self.tray_process = None  # The web page still does everything.
+
+    def _keep_tray(self):
+        """Start the icon again if it went away while WorkTrack runs (at most three times)."""
+        if self.tray_process is not None and self.tray_process.poll() is not None and self.tray_restarts < 3:
+            self.tray_restarts += 1
+            self._start_tray()
 
     def backend(self, route, access, payload=None):
         request = Request(
@@ -137,6 +148,7 @@ class DesktopController:
     def state(self, user):
         from desktop.usage_sync import usage_scope
 
+        self._keep_tray()  # The page asks every few seconds: a good moment to notice a vanished icon.
         linked = bool(self.owner and self.owner.get('user_id') == user['id'])
         camera = self.processes.get('camera')
         camera_code = camera.poll() if linked and camera is not None else None
@@ -167,6 +179,7 @@ class DesktopController:
             'update': self.updates.available,
             # Whether the menu bar / notification area icon is up (for support and the smoke test).
             'tray_running': self.tray_process is not None and self.tray_process.poll() is None,
+            'tray_restarts': self.tray_restarts,
             'tray_exit': None if self.tray_process is None else self.tray_process.poll(),
             'autostart_supported': self.autostart.supported,
             'autostart_enabled': self.autostart.enabled,

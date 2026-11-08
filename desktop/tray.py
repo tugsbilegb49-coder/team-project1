@@ -163,11 +163,14 @@ class Tray:
             except HTTPError as error:
                 error.close()
                 if error.code in (403, 409):  # WorkTrack is closing, or this is not our launcher.
+                    reason = f'WorkTrack answered HTTP {error.code}'
                     break
-            except (URLError, OSError, ValueError):
+            except (URLError, OSError, ValueError) as error:
                 if time.monotonic() - last_seen > GIVE_UP_AFTER:
+                    reason = f'WorkTrack unreachable for {GIVE_UP_AFTER} s: {error}'
                     break
             time.sleep(POLL)
+        print('WorkTrack tray stopping:', reason, flush=True)
         self.on_main(self.icon.stop)
 
     def run(self):
@@ -183,6 +186,7 @@ class Tray:
             threading.Thread(target=self.poll, name='tray-poll', daemon=True).start()
 
         self.icon.run(setup=setup)
+        print('WorkTrack tray stopped', flush=True)
 
 
 def main():
