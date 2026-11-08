@@ -37,6 +37,21 @@ def category_for(score: Decimal) -> str:
     return ProductivityScore.Category.LOW
 
 
+def has_work_on(employee, score_date):
+    """Anything to score: a task due that day, computer activity, or camera activity.
+
+    Without any of these (a weekend, a day off, an admin who does not track time) a score would
+    only be a misleading 0 that drags monthly averages down.
+    """
+    start = timezone.make_aware(datetime.combine(score_date, time.min))
+    end = start + timedelta(days=1)
+    return (
+        Task.objects.filter(employee=employee, due_date=score_date).exists()
+        or ComputerActivity.objects.filter(employee=employee, started_at__gte=start, started_at__lt=end).exists()
+        or ActivityEvent.objects.filter(employee=employee, timestamp__gte=start, timestamp__lt=end).exists()
+    )
+
+
 class ScoreNotReady(ValueError):
     def __init__(self, message, task_ids):
         super().__init__(message)

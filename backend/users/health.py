@@ -34,6 +34,18 @@ class HealthView(APIView):
             'source_digest': settings.BACKEND_SOURCE_DIGEST,
             'workspace_id': settings.BACKEND_WORKSPACE_ID,
         }
+        if settings.WORKTRACK_DEMO:
+            # Only in the separate demo database: the example accounts, for one-click sign-in.
+            from activity.management.commands.seed_demo import PASSWORD
+
+            data['demo'] = {
+                'password': PASSWORD,
+                'accounts': [
+                    {'username': 'demo-admin', 'label': 'Админ', 'name': 'Болд'},
+                    {'username': 'demo-manager', 'label': 'Менежер', 'name': 'Ганаа'},
+                    {'username': 'bat', 'label': 'Ажилтан', 'name': 'Бат'},
+                ],
+            }
         if policy.client_version and policy.client_download_url:
             # Employee apps read this to offer an update (desktop/updates.py).
             data['client'] = {'version': policy.client_version, 'download_url': policy.client_download_url}

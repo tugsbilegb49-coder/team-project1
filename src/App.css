@@ -1604,3 +1604,40 @@ textarea:focus-visible {
   margin: 0;
   color: var(--text-muted);
 }
+
+/* Демо горим */
+.demo-box {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #fff6e0;
+  border: 1px solid #f2d48a;
+}
+.demo-box p {
+  margin: 0;
+}
+.demo-accounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.demo-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #fff6e0;
+  border: 1px solid #f2d48a;
+  font-size: 0.9rem;
+}
+.main .demo-banner button {
+  padding: 6px 12px;
+}
+.main .demo-banner button[aria-pressed='true'] {
+  background: var(--primary-dark);
+  opacity: 1;
+}

@@ -16,6 +16,8 @@ load_dotenv(BASE_DIR / '.env')
 # Override in deployment with a long, private environment variable.
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'dev-only-change-this-secret-key-before-deployment')
 DEBUG = os.environ.get('DJANGO_DEBUG', 'true').lower() == 'true'
+# `worktrack.py --demo`: a separate example database; the login page offers one-click demo accounts.
+WORKTRACK_DEMO = os.environ.get('WORKTRACK_DEMO') == '1'
 if not DEBUG and (len(SECRET_KEY) < 50 or SECRET_KEY.startswith(('dev-only-', 'replace-'))):
     from django.core.exceptions import ImproperlyConfigured
 

@@ -40,6 +40,10 @@ if FROZEN:  # The program folder is read-only once installed; keep data in the u
     os.environ.setdefault('WORKTRACK_HOME', str(default_data_home()))
 
 ROOT = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent))
+# `--demo` (Start WorkTrack Demo): example data in a folder of its own, never beside real data.
+DEMO = '--demo' in sys.argv[1:] and not FROZEN
+if DEMO:
+    os.environ['WORKTRACK_HOME'] = str(ROOT / '.runtime' / 'demo')
 API = 'http://127.0.0.1:8000'
 WEB = 'http://127.0.0.1:5173'
 # User data; an installed copy points WORKTRACK_HOME at the user's profile (see agent/main.py).
@@ -235,6 +239,36 @@ def run_client(args, started_at):
         if usage:
             usage.close()
         gateway.close()
+
+
+def port_in_use(port):
+    with socket.socket() as probe:
+        probe.settimeout(0.5)
+        return probe.connect_ex(('127.0.0.1', port)) == 0
+
+
+def prepare_demo():
+    """A fresh example database dated around today; the backend, scheduler and agent all use it."""
+    busy = [port for port in (8000, 5173, 8766) if port_in_use(port)]
+    if busy:
+        raise RuntimeError(f'Демо асаахын өмнө ажиллаж буй WorkTrack-аа хаана уу (эзэлсэн порт: {busy}).')
+    RUNTIME.mkdir(parents=True, exist_ok=True)
+    database = RUNTIME / 'demo.sqlite3'
+    for suffix in ('', '-wal', '-shm', '-journal'):
+        Path(str(database) + suffix).unlink(missing_ok=True)
+    (RUNTIME / 'demo_settings.py').write_text(
+        'from pathlib import Path\n'
+        'from config.settings import *  # noqa: F403\n'
+        f'BASE_DIR = Path({str(RUNTIME)!r})  # Backups of the demo stay in the demo folder.\n'
+        'DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "OPTIONS": SQLITE_OPTIONS, '  # noqa: F405
+        f'"NAME": {str(database)!r}}}}}\n',
+        encoding='utf-8',
+    )
+    os.environ.update(
+        DJANGO_SETTINGS_MODULE='demo_settings',
+        WORKTRACK_DEMO='1',
+        PYTHONPATH=os.pathsep.join(filter(None, [str(RUNTIME), str(ROOT / 'backend'), os.environ.get('PYTHONPATH')])),
+    )
 
 
 def autostart_command(args):
@@ -474,6 +508,7 @@ def main():
     parser.add_argument(
         '--share', action='store_true', help='Оффисын сервер: бусад компьютер оффисын сүлжээгээр холбогдоно'
     )
+    parser.add_argument('--demo', action='store_true', help='Хамгаалалт/танилцуулгад: жишээ өгөгдөлтэй тусдаа database')
     parser.add_argument('--app-id', help=argparse.SUPPRESS)
     args = parser.parse_args()
     use_utf8()
@@ -504,7 +539,9 @@ def main():
         return
     if args.local:
         (RUNTIME / 'server.json').unlink(missing_ok=True)
-    if FROZEN or args.team or args.server or load_server():
+    if args.demo and FROZEN:
+        raise RuntimeError('Демо горим эх кодоос (Start WorkTrack Demo) л ажиллана.')
+    if not args.demo and (FROZEN or args.team or args.server or load_server()):
         try:
             run_client(args, started_at)
         except KeyboardInterrupt:
@@ -524,8 +561,14 @@ def main():
         return process
 
     try:
+        if args.demo:
+            prepare_demo()
         existing_backend = backend_is_current()  # Refuse stale servers before running migrations.
         python, node, needs_admin = bootstrap()
+        if args.demo:
+            print('Демо өгөгдөл бэлдэж байна…', flush=True)
+            subprocess.run([str(python), 'manage.py', 'seed_demo'], cwd=ROOT, check=True)
+            needs_admin = False
         setup_url = None
         if needs_admin:
             if existing_backend:
@@ -595,7 +638,7 @@ def main():
                 shutdown.set,
                 started_at=started_at,
                 usage=usage,
-                autostart_command=autostart_command(args),
+                autostart_command=None if args.demo else autostart_command(args),
                 open_page=open_browser,
                 tray_command=tray_command(),
             )
@@ -619,6 +662,12 @@ def main():
         )
         if setup_url:
             print(f'Анхны админаа үүсгэх хуудас: {setup_url}', flush=True)
+        if args.demo:
+            print(
+                '\nДЕМО ГОРИМ: жишээ өгөгдөл, таны жинхэнэ өгөгдөлд хүрэхгүй.\n'
+                'Нэвтрэх хуудсанд «Админ», «Менежер», «Ажилтан» товчоор нэг дарж орно (нууц үг demo1234).',
+                flush=True,
+            )
         if shared:
             print('\nОффисын бусад компьютерийн WorkTrack-д оруулах:', flush=True)
             for address in shared:

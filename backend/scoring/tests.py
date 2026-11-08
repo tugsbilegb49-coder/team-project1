@@ -204,6 +204,7 @@ class ScorePolicyTests(TestCase):
 
         self.task(quality_score=None)
         other = User.objects.create_user('ready-worker')
+        Task.objects.create(employee=other, title='Ready', due_date=self.day)  # Something to score.
         out, errors = StringIO(), StringIO()
         call_command('calculate_daily_scores', date=self.day.isoformat(), stdout=out, stderr=errors)
         self.assertTrue(ProductivityScore.objects.filter(employee=other).exists())

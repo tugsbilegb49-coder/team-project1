@@ -304,7 +304,17 @@ async function mockApp(page) {
         contentType: 'text/csv',
         body: 'date,username\n2026-11-05,worker\n',
       });
-    if (path === '/api/auth/login/') return respond(auth);
+    if (path === '/api/auth/login/') {
+      state.logins = [...(state.logins || []), data.username];
+      return respond(auth);
+    }
+    if (path === '/api/health/')
+      return respond({
+        status: 'ok',
+        service: 'worktrack-api',
+        protocol: 1,
+        ...(state.demo ? { demo: state.demo } : {}),
+      });
     if (path === '/api/me/today/')
       return respond({
         date: '2026-11-06',
@@ -1612,4 +1622,37 @@ test('employees do not see the team comparison', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'Тайлан', exact: true })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Сарын харьцуулалт' })).toHaveCount(0);
+});
+
+test('demo mode signs in with one click and switches between admin and employee', async ({
+  page,
+}) => {
+  const state = await mockApp(page);
+  state.demo = {
+    password: 'demo1234',
+    accounts: [
+      { username: 'demo-admin', label: 'Админ', name: 'Болд' },
+      { username: 'demo-manager', label: 'Менежер', name: 'Ганаа' },
+      { username: 'bat', label: 'Ажилтан', name: 'Бат' },
+    ],
+  };
+  await page.addInitScript(() => sessionStorage.removeItem('worktrack-auth'));
+  await page.goto('/');
+  const demo = page.getByRole('region', { name: 'Демо горим' });
+  await demo.getByRole('button', { name: 'Ажилтан — Бат' }).click();
+  await expect(page.locator('.sidebar')).toBeVisible();
+  expect(state.logins).toEqual(['bat']);
+  const banner = page.getByRole('region', { name: 'Демо горим' });
+  await expect(banner).toContainText('жишээ өгөгдөл');
+  await banner.getByRole('button', { name: 'Админ' }).click();
+  await expect.poll(() => state.logins).toEqual(['bat', 'demo-admin']);
+  expect(state.posts.some((row) => row.path === '/api/auth/logout/')).toBe(true);
+});
+
+test('a real server shows no demo shortcuts', async ({ page }) => {
+  await mockApp(page);
+  await page.addInitScript(() => sessionStorage.removeItem('worktrack-auth'));
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'WorkTrack — Нэвтрэх' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Демо горим' })).toHaveCount(0);
 });

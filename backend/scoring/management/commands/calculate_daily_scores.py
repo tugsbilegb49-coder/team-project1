@@ -4,7 +4,8 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.core.management.base import BaseCommand, CommandError
 
-from scoring.services import calculate_daily_score, ScoreNotReady
+from scoring.models import ProductivityScore
+from scoring.services import calculate_daily_score, has_work_on, ScoreNotReady
 
 
 class Command(BaseCommand):
@@ -29,7 +30,13 @@ class Command(BaseCommand):
 
         count = 0
         skipped = 0
+        idle = 0
         for employee in users.iterator():
+            if not has_work_on(employee, score_date):
+                # Nothing was due or recorded: no score, and no stale 0 from an earlier run.
+                ProductivityScore.objects.filter(employee=employee, date=score_date).delete()
+                idle += 1
+                continue
             try:
                 result = calculate_daily_score(employee, score_date)
             except ScoreNotReady as exc:
@@ -38,4 +45,8 @@ class Command(BaseCommand):
                 continue
             count += 1
             self.stdout.write(f'{employee.username}: {result.score} ({result.category})')
-        self.stdout.write(self.style.SUCCESS(f'Calculated {count} score(s) for {score_date}; skipped {skipped}.'))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f'Calculated {count} score(s) for {score_date}; skipped {skipped}; {idle} with nothing to score.'
+            )
+        )

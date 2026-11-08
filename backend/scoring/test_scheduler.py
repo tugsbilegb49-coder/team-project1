@@ -91,11 +91,52 @@ class SchedulerDataTests(TestCase):
         with patch('scoring.management.commands.run_score_scheduler.close_old_connections'):
             call_command('run_score_scheduler', once=True, stdout=out, stderr=errors)
             self.assertFalse(ProductivityScore.objects.filter(employee=user, date=today).exists())
-            self.assertTrue(ProductivityScore.objects.filter(employee=user, date=today - timedelta(days=1)).exists())
+            # Nothing was due or recorded yesterday: no score rather than a misleading 0.
+            self.assertFalse(ProductivityScore.objects.filter(employee=user, date=today - timedelta(days=1)).exists())
             task.quality_score = 90
             task.save()
             call_command('run_score_scheduler', once=True, stdout=out, stderr=errors)
             score = ProductivityScore.objects.get(employee=user, date=today)
             self.assertEqual(float(score.score), 87)
             call_command('run_score_scheduler', once=True, stdout=out, stderr=errors)
-        self.assertEqual(ProductivityScore.objects.filter(employee=user).count(), 2)
+        self.assertEqual(ProductivityScore.objects.filter(employee=user).count(), 1)
+
+
+class NothingToScoreTests(TestCase):
+    def test_days_without_tasks_or_activity_get_no_score_and_lose_a_stale_zero(self):
+        from datetime import datetime, time
+        from decimal import Decimal
+        from io import StringIO
+
+        from django.core.management import call_command
+        from django.utils import timezone
+
+        from activity.models import ComputerActivity
+        from scoring.models import ProductivityScore
+        from users.models import User
+
+        day = timezone.localdate()
+        resting = User.objects.create_user('resting')
+        working = User.objects.create_user('working')
+        ProductivityScore.objects.create(
+            employee=resting,
+            date=day,
+            task_completion=Decimal(0),
+            quality=Decimal(0),
+            deadline_completion=Decimal(0),
+            work_process=Decimal(0),
+            score=Decimal(0),
+            category='LOW',
+        )
+        ComputerActivity.objects.create(
+            employee=working,
+            started_at=timezone.make_aware(datetime.combine(day, time(10))),
+            duration_seconds=600,
+            application='Code',
+            category='WORK',
+        )
+        output = StringIO()
+        call_command('calculate_daily_scores', date=day.isoformat(), stdout=output, stderr=StringIO())
+        self.assertFalse(ProductivityScore.objects.filter(employee=resting).exists())
+        self.assertTrue(ProductivityScore.objects.filter(employee=working, date=day).exists())
+        self.assertIn('1 with nothing to score', output.getvalue())

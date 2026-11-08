@@ -10,6 +10,7 @@ import MonthlyReport from './MonthlyReport';
 import { FirstAdminSetup, FirstRunHint } from './FirstRun';
 import { readSetupToken } from './setupToken';
 import { ResetWithCode } from './ResetPassword';
+import { DemoBanner, DemoLogin } from './DemoMode';
 import { PresenceHours, ScoreBreakdown, ScoreTrend } from './Charts';
 import {
   AgentStatus,
@@ -318,6 +319,15 @@ function App() {
       <main className="main">
         <form className="task-form" onSubmit={signIn}>
           <h1>WorkTrack — Нэвтрэх</h1>
+          <DemoLogin
+            busy={busy}
+            onLogin={(username, password) =>
+              run(async () => {
+                await login(username, password);
+                return load();
+              })
+            }
+          />
           <label htmlFor="login-username">Хэрэглэгчийн нэр</label>
           {resetDone && <p role="status">Нууц үг шинэчлэгдлээ. Шинэ нууц үгээрээ нэвтэрнэ үү.</p>}
           <input
@@ -392,6 +402,18 @@ function App() {
         </button>
       </aside>
       <main className="main" aria-busy={busy}>
+        <DemoBanner
+          user={user}
+          busy={busy}
+          onSwitch={(username, password) =>
+            run(async () => {
+              await taskWork.stop();
+              await logout();
+              await login(username, password);
+              return load();
+            })
+          }
+        />
         {shown !== 'today' && (taskWork.sample?.data.session || taskWork.error) && (
           <TaskWorkClock work={taskWork} busy={busy} navigate={setPage} onStop={workday.pause} />
         )}
