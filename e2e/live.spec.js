@@ -24,6 +24,7 @@ test('real Django login → department/manager → task/quality → inactive fil
   await consent.getByRole('button', { name: 'Зөвшөөрөөд эхлүүлэх' }).click();
   await expect(page.getByRole('button', { name: 'Түр зогсоох', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Дараа' }).click();
   await expect(page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true })).toBeEnabled();
   const workflowTokens = await page.evaluate(() =>
     JSON.parse(sessionStorage.getItem('worktrack-auth')),
@@ -58,6 +59,9 @@ test('real Django login → department/manager → task/quality → inactive fil
   await page.getByRole('button', { name: 'Ажил үргэлжлүүлэх', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Түр зогсоох', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
+  // Answer the end-of-day question for real this time: it is stored on the server.
+  await page.getByRole('dialog').getByRole('button', { name: 'Дунд' }).click();
+  await expect(page.getByText('Өнөөдрийн үнэлгээ:')).toContainText('Дунд');
   // The task stays chosen for the next one-click start.
   await expect(page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true })).toBeEnabled();
   await expect(page.getByLabel('Хийх даалгавар', { exact: true })).toHaveValue(

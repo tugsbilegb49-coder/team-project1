@@ -29,6 +29,96 @@ function deviceErrorMessage(state) {
   return 'Камер гэнэт зогссон байна. «Камер ашиглах» унтраалгыг дахин асаана уу. Болохгүй бол WorkTrack-аа хааж дахин нээнэ үү.';
 }
 
+const RATINGS = [
+  ['LOW', 'Бага'],
+  ['MEDIUM', 'Дунд'],
+  ['HIGH', 'Өндөр'],
+];
+const RATING_NAMES = Object.fromEntries(RATINGS);
+
+/** Өнөөдрийн өөрийн үнэлгээ (AI туршилтын шошго): уншина, хадгална. */
+function useSelfRating(userId) {
+  const [rating, setRating] = useState(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    api('/api/me/self-rating/', { signal: controller.signal })
+      .then((data) => setRating(data))
+      .catch(() => {}); // Optional: the page works without it.
+    return () => controller.abort();
+  }, [userId]);
+  async function save(label) {
+    setRating(
+      await api('/api/me/self-rating/', { method: 'PUT', body: JSON.stringify({ label }) }),
+    );
+  }
+  return { label: rating?.label || null, loaded: rating !== null, save };
+}
+
+function RatingButtons({ current, onPick, busy }) {
+  return (
+    <div className="rating-buttons" role="group" aria-label="Өнөөдрийн бүтээмж">
+      {RATINGS.map(([value, name]) => (
+        <button
+          type="button"
+          key={value}
+          className={current === value ? 'is-selected' : 'secondary-button'}
+          aria-pressed={current === value}
+          disabled={busy}
+          onClick={() => onPick(value)}
+        >
+          {name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** «Ажил дуусгах»-ын дараа: өнөөдөр хэр бүтээмжтэй байсныг өөрөө үнэлнэ. */
+function RatingDialog({ current, onPick, onClose }) {
+  const dialog = useRef(null);
+  const [saving, setSaving] = useState(false),
+    [failure, setFailure] = useState('');
+  useEffect(() => {
+    const element = dialog.current;
+    if (element && !element.open) element.showModal();
+    return () => element?.open && element.close();
+  }, []);
+  async function pick(value) {
+    setSaving(true);
+    setFailure('');
+    try {
+      await onPick(value);
+      onClose();
+    } catch (error) {
+      setFailure(error.message);
+      setSaving(false);
+    }
+  }
+  return (
+    <dialog
+      ref={dialog}
+      className="consent-dialog"
+      aria-labelledby="rating-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+    >
+      <div className="rating-dialog">
+        <h3 id="rating-title">Өнөөдөр хэр бүтээмжтэй байсан бэ?</h3>
+        <RatingButtons current={current} onPick={pick} busy={saving} />
+        <p className="muted">
+          Таны өөрийн үнэлгээ. Албан ёсны оноонд нөлөөлөхгүй; нэргүйгээр AI судалгаанд ашиглагдана.
+        </p>
+        {failure && <p role="alert">{failure}</p>}
+        <button type="button" className="secondary-button" onClick={onClose}>
+          Дараа
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
 /** Анх «Ажил эхлүүлэх» дарахад гарах жижиг цонх: юу бүртгэгдэхийг хэлээд зөвшөөрөл авна. */
 function ConsentDialog({ user, busy, initialName, autostart, relink, onAccept, onCancel }) {
   const dialog = useRef(null);
@@ -117,6 +207,7 @@ function WorkControls({
   working,
   busy,
   onStart,
+  onFinish,
 }) {
   const selectId = useId();
   const paused = Boolean(state?.computer_running && state.paused);
@@ -163,12 +254,7 @@ function WorkControls({
           </button>
         )}
         {canFinish && (
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={busy}
-            onClick={workday.finish}
-          >
+          <button type="button" className="secondary-button" disabled={busy} onClick={onFinish}>
             Ажил дуусгах
           </button>
         )}
@@ -319,8 +405,10 @@ function MoreSettings({ state, busy, act, onRelink }) {
   );
 }
 
-export function DesktopPanel({ user, tasks, work, workday, busy }) {
+export function DesktopPanel({ user, tasks, work, workday, busy, workedToday }) {
   const { state, error, connectionError, message, closed } = workday;
+  const rating = useSelfRating(user.id);
+  const [ratingOpen, setRatingOpen] = useState(false);
   const { session, running: taskRunning } = sessionTiming(work.sample, useTick());
   const [asking, setAsking] = useState(null); // null | 'start' | 'relink'
   const pendingStart = useRef(null);
@@ -335,6 +423,10 @@ export function DesktopPanel({ user, tasks, work, workday, busy }) {
       return;
     }
     workday.start(task, title);
+  }
+  async function finish() {
+    // The end of the day is when people know how it went: ask once, unless already answered.
+    if ((await workday.finish()) && rating.loaded && !rating.label) setRatingOpen(true);
   }
   async function accept(body) {
     const next = asking === 'start' ? pendingStart.current : null;
@@ -411,7 +503,22 @@ export function DesktopPanel({ user, tasks, work, workday, busy }) {
                 working={working}
                 busy={busy}
                 onStart={start}
+                onFinish={finish}
               />
+              {rating.loaded && !rating.label && workedToday && !working && (
+                <div className="rating-prompt">
+                  <p>Өнөөдөр хэр бүтээмжтэй байсан бэ?</p>
+                  <RatingButtons current={null} onPick={rating.save} busy={busy} />
+                </div>
+              )}
+              {rating.label && (
+                <p className="muted rating-line">
+                  Өнөөдрийн үнэлгээ: <strong>{RATING_NAMES[rating.label]}</strong> ·{' '}
+                  <button type="button" className="link-button" onClick={() => setRatingOpen(true)}>
+                    Өөрчлөх
+                  </button>
+                </p>
+              )}
               {state.linked && state.camera_supported !== false && (
                 <CameraSwitch state={state} busy={busy} act={act} />
               )}
@@ -429,6 +536,13 @@ export function DesktopPanel({ user, tasks, work, workday, busy }) {
               busy={busy}
               act={act}
               onRelink={() => setAsking('relink')}
+            />
+          )}
+          {ratingOpen && (
+            <RatingDialog
+              current={rating.label}
+              onPick={rating.save}
+              onClose={() => setRatingOpen(false)}
             />
           )}
           {asking && state && (
@@ -483,6 +597,7 @@ export default function Today({ user, navigate, tasks, work, workday, busy }) {
         work={work}
         workday={workday}
         busy={busy}
+        workedToday={Boolean(result?.application_seconds)}
       />
       <section className="stats today-time-stats" aria-label="Өнөөдрийн цаг">
         <TaskWorkClock work={work} card />

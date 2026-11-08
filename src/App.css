@@ -1109,3 +1109,53 @@ textarea:focus-visible {
   color: var(--text-muted);
   font-weight: 600;
 }
+
+/* Өдрийн өөрийн үнэлгээ */
+.rating-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.main .rating-buttons button {
+  min-width: 96px;
+}
+.main .rating-buttons button.is-selected {
+  background: var(--primary-dark);
+  color: #fff;
+}
+.main .rating-buttons button.secondary-button {
+  background: transparent;
+  color: var(--primary-dark);
+  border: 1px solid var(--primary);
+}
+.rating-dialog {
+  display: grid;
+  gap: 14px;
+}
+.rating-dialog h3 {
+  margin: 0;
+}
+.rating-prompt {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--primary-light);
+}
+.rating-prompt p {
+  margin: 0;
+  font-weight: 600;
+}
+.rating-line {
+  margin: 8px 0 0;
+}
+.main button.link-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--primary-dark);
+  text-decoration: underline;
+  font-weight: 600;
+  cursor: pointer;
+}

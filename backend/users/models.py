@@ -165,3 +165,23 @@ class PasswordResetCode(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
+
+
+class DailySelfRating(models.Model):
+    """How productive the person felt their day was: the label the AI experiment learns from.
+
+    Collected after «Ажил дуусгах». It never changes the official score.
+    """
+
+    class Label(models.TextChoices):
+        LOW = 'LOW', 'Low'
+        MEDIUM = 'MEDIUM', 'Medium'
+        HIGH = 'HIGH', 'High'
+
+    employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='self_ratings')
+    date = models.DateField()
+    label = models.CharField(max_length=6, choices=Label.choices)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['employee', 'date'], name='one_self_rating_per_day')]

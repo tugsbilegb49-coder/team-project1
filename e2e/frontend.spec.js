@@ -235,6 +235,13 @@ async function mockApp(page) {
         next: null,
         previous: null,
       });
+    if (path === '/api/me/self-rating/') {
+      if (method === 'PUT') {
+        state.ratings = [...(state.ratings || []), data.label];
+        state.selfRating = data.label;
+      }
+      return respond({ date: '2026-11-06', label: state.selfRating || null });
+    }
     if (path === '/api/server-status/') {
       if (method === 'PATCH') {
         state.patches.push({ path, data });
@@ -387,6 +394,7 @@ test('one start button asks for consent once, then work and the camera switch fo
   await expect(camera).toBeDisabled(); // Only while working.
   await page.getByRole('button', { name: 'Ажил үргэлжлүүлэх', exact: true }).click();
   await page.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Дараа' }).click(); // The day's rating can wait.
   // The last choice stays, so the next start is one click without asking again.
   await expect(start).toBeEnabled();
   await expect(page.getByLabel('Хийх даалгавар', { exact: true })).toHaveValue('none');
@@ -612,6 +620,7 @@ test('task owner records time and percent then requests a handoff without changi
   expect(state.workSession.task_id).toBe(11);
   expect(state.desktop.paused).toBe(false);
   await page.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Дараа' }).click();
   await expect(page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true })).toBeEnabled();
   expect(state.workSession).toBeNull();
   expect(state.desktop.computer_running).toBe(false);
@@ -1443,4 +1452,29 @@ test('each role sees only its own menu', async ({ page }) => {
   Object.assign(state.members[0], { role: 'EMPLOYEE', is_admin: false, department: 1 });
   await page.reload();
   await expect.poll(menu).toEqual(['Миний өнөөдөр', 'Даалгавар', 'Миний бүртгэл']);
+});
+
+test('finishing the day asks once how productive it was', async ({ page }) => {
+  const state = await mockApp(page);
+  Object.assign(state.desktop, { linked: true, username: 'admin', device_name: 'QA laptop' });
+  await page.goto('/');
+  const panel = page.getByRole('region', { name: 'Энэ компьютерийн удирдлага', exact: true });
+  // Worked today but not rated yet: the page offers the question without a pop-up.
+  await expect(panel.getByText('Өнөөдөр хэр бүтээмжтэй байсан бэ?')).toBeVisible();
+  await panel.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true }).click();
+  await panel.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Өнөөдөр хэр бүтээмжтэй байсан бэ?' });
+  await expect(dialog).toContainText('Албан ёсны оноонд нөлөөлөхгүй');
+  await dialog.getByRole('button', { name: 'Дунд' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(panel.getByText('Өнөөдрийн үнэлгээ:')).toContainText('Дунд');
+  expect(state.ratings).toEqual(['MEDIUM']);
+  await panel.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true }).click();
+  await panel.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
+  await expect(panel.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true })).toBeEnabled();
+  await expect(page.getByRole('dialog')).toHaveCount(0); // Answered already: not asked again.
+  await panel.getByRole('button', { name: 'Өөрчлөх' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Өндөр' }).click();
+  await expect(panel.getByText('Өнөөдрийн үнэлгээ:')).toContainText('Өндөр');
+  expect(state.ratings).toEqual(['MEDIUM', 'HIGH']);
 });
