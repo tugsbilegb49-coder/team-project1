@@ -179,12 +179,14 @@ class Tray:
 
         def setup(icon):
             icon.visible = True
+            print('WorkTrack tray ready', flush=True)
             threading.Thread(target=self.poll, name='tray-poll', daemon=True).start()
 
         self.icon.run(setup=setup)
 
 
 def main():
+    print('WorkTrack tray starting', flush=True)
     Tray().run()
 
 

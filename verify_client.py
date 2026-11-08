@@ -77,28 +77,29 @@ def tray_processes(client):
     return found
 
 
-def check_tray(client, home, expect):
-    deadline = time.monotonic() + 20
-    found = tray_processes(client)
-    while found == [] and time.monotonic() < deadline:
+def check_tray(client, home, expect, status):
+    """The tray icon must be running a few seconds after linking; status() reads /desktop/status."""
+    deadline = time.monotonic() + 30
+    state = status()
+    while not state.get('tray_running') and state.get('tray_exit') is None and time.monotonic() < deadline:
         time.sleep(1)
-        found = tray_processes(client)
-    log = home / '.runtime' / 'tray.log'
-    if found is None:
-        print('SKIPPED: tray check (psutil is not installed)', flush=True)
-    elif found and all(process.is_running() for process in found):
+        state = status()
+    if state.get('tray_running'):
         time.sleep(3)  # Still there a moment later: it did not crash at start.
-        assert all(process.is_running() for process in found), 'The tray icon process stopped:\n' + (
-            log.read_text(encoding='utf-8', errors='replace')[-2000:] if log.exists() else ''
-        )
+        state = status()
+    found = tray_processes(client) or []
+    if state.get('tray_running'):
         print('PASSED: the tray icon process is running', flush=True)
-    else:
-        message = 'The tray icon process did not start.\n' + (
-            log.read_text(encoding='utf-8', errors='replace')[-2000:] if log.exists() else '(no tray.log)'
-        )
-        assert not expect, message
-        print('WARNING: ' + message, flush=True)
-    return found or []
+        return found
+    logs = '\n'.join(
+        f'--- {name}\n' + (home / '.runtime' / name).read_text(encoding='utf-8', errors='replace')[-2000:]
+        for name in ('tray.log', 'app.log')
+        if (home / '.runtime' / name).exists()
+    )
+    message = f'The tray icon process is not running (exit code {state.get("tray_exit")}).\n{logs}'
+    assert not expect, message
+    print('WARNING: ' + message, flush=True)
+    return found
 
 
 def exercise_tray(trays, headers):
@@ -190,7 +191,7 @@ def exercise(client, command, env, home, log, password, code=None, expect_tray=F
 
     state = act('connect', {'device_name': 'Ажилтны компьютер', 'consent': True})
     assert state['linked'], state
-    trays = check_tray(client, home, expect_tray)
+    trays = check_tray(client, home, expect_tray, lambda: request(WEB + '/desktop/status/', headers=headers)[1] or {})
     _, devices = request(WEB + '/api/devices/', headers={'Authorization': headers['Authorization']})
     names = [row['name'] for row in (devices.get('results', devices) if isinstance(devices, dict) else devices)]
     assert 'Ажилтны компьютер' in names, f'The server does not list the device: {devices}'

@@ -1428,7 +1428,8 @@ test('the next day starts with one click on the task used last time', async ({ p
   await task.selectOption('11');
   await start.click();
   await expect(panel.getByRole('button', { name: 'Түр зогсоох', exact: true })).toBeVisible();
-  expect(state.desktop.last_task).toEqual({ task: '11', title: 'Existing task' });
+  // Saved right after the start; slower machines may need a moment.
+  await expect.poll(() => state.desktop.last_task).toEqual({ task: '11', title: 'Existing task' });
   await panel.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
   await expect(start).toBeEnabled();
   expect(state.desktop.computer_running).toBe(false);

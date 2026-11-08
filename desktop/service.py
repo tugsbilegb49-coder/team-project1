@@ -165,6 +165,9 @@ class DesktopController:
             'last_task': self.workday.remembered(user['id']) if linked else None,
             'version': VERSION,
             'update': self.updates.available,
+            # Whether the menu bar / notification area icon is up (for support and the smoke test).
+            'tray_running': self.tray_process is not None and self.tray_process.poll() is None,
+            'tray_exit': None if self.tray_process is None else self.tray_process.poll(),
             'autostart_supported': self.autostart.supported,
             'autostart_enabled': self.autostart.enabled,
             'autostart_note': self.autostart.note,
