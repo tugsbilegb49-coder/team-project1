@@ -606,6 +606,17 @@ export function DesktopPanel({ user, tasks, work, workday, busy, workedToday, re
             </p>
           )}
           {error && <p role="alert">{error}</p>}
+          {/* An expired computer login: offer the fix right here, not only under «Бусад тохиргоо». */}
+          {error?.includes('«Дахин холбох»') &&
+            state?.linked &&
+            !state.computer_running &&
+            !state.camera_running && (
+              <div className="desktop-actions">
+                <button type="button" disabled={busy} onClick={() => setAsking('relink')}>
+                  Дахин холбох
+                </button>
+              </div>
+            )}
           {message && (
             <p role="status" className="work-feedback">
               {message}

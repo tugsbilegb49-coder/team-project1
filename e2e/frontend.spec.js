@@ -903,6 +903,25 @@ test('failed app start stops the newly created task timer and leaves an actionab
   await expect(panel.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true })).toBeEnabled();
 });
 
+test('an expired computer login offers «Дахин холбох» next to the error', async ({ page }) => {
+  const state = await mockApp(page);
+  Object.assign(state.desktop, { linked: true, username: 'admin', device_name: 'QA laptop' });
+  await page.route('**/desktop/start/', (route) =>
+    route.fulfill({
+      status: 409,
+      json: {
+        detail: 'Төхөөрөмжийн нэвтрэлт дууссан. «Бусад тохиргоо» → «Дахин холбох» дарна уу.',
+      },
+    }),
+  );
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true }).click();
+  const panel = page.getByRole('region', { name: 'Энэ компьютерийн удирдлага', exact: true });
+  await expect(panel.getByRole('alert')).toContainText('Төхөөрөмжийн нэвтрэлт дууссан');
+  await panel.getByRole('button', { name: 'Дахин холбох', exact: true }).first().click();
+  await expect(page.getByRole('dialog')).toContainText('Компьютерийг дахин холбох');
+});
+
 test('a rejected task cannot start application collection', async ({ page }) => {
   const state = await mockApp(page);
   Object.assign(state.desktop, { linked: true, username: 'admin', device_name: 'QA laptop' });
