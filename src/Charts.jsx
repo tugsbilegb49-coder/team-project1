@@ -101,6 +101,9 @@ function TableView({ caption, head, rows }) {
   );
 }
 
+// Light fills (idle grey, the «not recorded» texture) take dark text instead of white.
+const LIGHT_PARTS = new Set(['--viz-idle', '--viz-none']);
+
 /** Нэг бүхлийг хэсгүүдэд хуваасан өндөр бар (≤ 6 хэсэг). thin=true бол текстгүй 8px. */
 export function SegmentedBar({ title, parts, format = minutesText, thin = false, table = true }) {
   const { box, bind, layer } = useTip();
@@ -119,7 +122,7 @@ export function SegmentedBar({ title, parts, format = minutesText, thin = false,
           {shown.map((part) => (
             <div
               key={part.label}
-              className="viz-segment"
+              className={`viz-segment ${LIGHT_PARTS.has(part.color) ? 'light' : ''}`}
               style={{ flexGrow: part.value, background: `var(${part.color})` }}
               aria-label={`${part.label}: ${format(part.value)}, ${share(part.value)}%`}
               {...bind(
@@ -607,6 +610,108 @@ export function Heatmap({ title, grid }) {
           WEEKDAYS[day],
           ...hours.map((value) => (value ? Math.round(value / 60) : '')),
         ])}
+      />
+    </figure>
+  );
+}
+
+const DAY_PARTS = [
+  ['--viz-1', 'Апп ашигласан'],
+  ['--viz-idle', 'Идэвхгүй'],
+];
+
+/** Сарын өдөр бүр: апп + идэвхгүй хугацааны багана, даалгаврын цаг нь ногоон зураас (нэг тэнхлэг). */
+export function DailyColumns({ title, month, days, schedule, today }) {
+  const { box, bind, layer } = useTip();
+  const [year, number] = month.split('-').map(Number);
+  const count = new Date(Date.UTC(year, number, 0)).getUTCDate();
+  const byDate = Object.fromEntries((days || []).map((day) => [day.date, day]));
+  const workDays = new Set(schedule?.days ?? [0, 1, 2, 3, 4]);
+  const rows = Array.from({ length: count }, (_, index) => {
+    const date = `${month}-${String(index + 1).padStart(2, '0')}`;
+    const weekday = (new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7; // 0 = Даваа
+    const day = byDate[date] || {};
+    return {
+      date,
+      label: index + 1,
+      weekday,
+      off: !workDays.has(weekday),
+      future: Boolean(today) && date > today,
+      app: day.app_seconds || 0,
+      idle: day.idle_seconds || 0,
+      task: day.task_seconds || 0,
+    };
+  });
+  const peak = Math.max(...rows.map((row) => Math.max(row.app + row.idle, row.task)), 0);
+  const top = Math.max(3600, Math.ceil(peak / 3600) * 3600); // A whole number of hours.
+  const shown = new Set([1, 5, 10, 15, 20, 25, count]);
+  if (today?.startsWith(month)) shown.add(Number(today.slice(8)));
+  const height = (value) => `${(value / top) * 100}%`;
+  return (
+    <figure className="viz" ref={box}>
+      <figcaption>{title}</figcaption>
+      <div className="viz-days-frame">
+        <span className="viz-days-top">{minutesText(top)}</span>
+        <div className="viz-columns viz-days" role="img" aria-label={title}>
+          <i className="viz-days-grid" aria-hidden="true" />
+          <i className="viz-days-grid half" aria-hidden="true" />
+          {rows.map((row) => (
+            <div
+              className={`viz-column ${row.off ? 'off' : ''} ${row.future ? 'future' : ''} ${row.date === today ? 'today' : ''}`}
+              key={row.date}
+              aria-label={`${row.date}: апп ${minutesText(row.app)}, идэвхгүй ${minutesText(row.idle)}, даалгавар ${minutesText(row.task)}`}
+              {...bind(
+                <TipBody
+                  value={`${row.date.slice(5).replace('-', '/')} · ${WEEKDAYS[row.weekday]}`}
+                  label={row.off ? 'Ажлын хуваарийн бус өдөр' : 'Ажлын өдөр'}
+                  rows={[
+                    ['--viz-1', 'Апп ашигласан', minutesText(row.app)],
+                    ['--viz-idle', 'Идэвхгүй', minutesText(row.idle)],
+                    ['--viz-3', 'Даалгаврын цаг', minutesText(row.task)],
+                  ]}
+                />,
+              )}
+            >
+              {row.app + row.idle > 0 && (
+                <div className="viz-stack" style={{ height: height(row.app + row.idle) }}>
+                  <i style={{ flexGrow: row.idle, background: 'var(--viz-idle)' }} />
+                  <i style={{ flexGrow: row.app, background: 'var(--viz-1)' }} />
+                </div>
+              )}
+              {row.task > 0 && <i className="viz-day-task" style={{ bottom: height(row.task) }} />}
+              <span className="viz-axis-label">{shown.has(row.label) ? row.label : ''}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <ul className="viz-legend">
+        {DAY_PARTS.map(([color, name]) => (
+          <li key={name}>
+            <i style={{ background: `var(${color})` }} />
+            {name}
+          </li>
+        ))}
+        <li>
+          <i className="viz-legend-line" />
+          Даалгаврын цаг
+        </li>
+        <li>
+          <i className="viz-legend-off" />
+          Хуваарийн бус өдөр
+        </li>
+      </ul>
+      {layer}
+      <TableView
+        caption={title}
+        head={['Өдөр', 'Апп ашигласан', 'Идэвхгүй', 'Даалгаврын цаг']}
+        rows={rows
+          .filter((row) => row.app || row.idle || row.task)
+          .map((row) => [
+            row.date,
+            minutesText(row.app),
+            minutesText(row.idle),
+            minutesText(row.task),
+          ])}
       />
     </figure>
   );

@@ -59,6 +59,43 @@ class MonthlyTests(TestCase):
         self.assertEqual(self.upload([self.interval(), changed]).status_code, 400)
         self.assertEqual(LauncherInterval.objects.count(), 1)
 
+    def test_daily_breakdown_splits_at_midnight_and_counts_work_programs(self):
+        def segment(start, seconds, application, category):
+            ComputerActivity.objects.create(
+                employee=self.employee,
+                started_at=dt(start),
+                duration_seconds=seconds,
+                application=application,
+                category=category,
+            )
+
+        segment('2026-11-03T23:30:00', 3600, 'Code', ComputerActivity.Category.WORK)  # 30 min each side of midnight
+        segment('2026-11-04T09:00:00', 600, 'Idle', ComputerActivity.Category.OTHER)
+        segment('2026-11-04T10:00:00', 900, 'Chrome', ComputerActivity.Category.BROWSER)
+        task = Task.objects.create(employee=self.employee, title='Report', due_date=dt('2026-11-04').date())
+        contribution = TaskContribution.objects.create(task=task, employee=self.employee)
+        TaskWorkSession.objects.create(
+            contribution=contribution,
+            employee=self.employee,
+            started_at=dt('2026-11-04T11:00:00'),
+            last_heartbeat=dt('2026-11-04T11:20:00'),
+            ended_at=dt('2026-11-04T11:20:00'),
+        )
+        row = self.report()[0]
+        self.assertEqual(
+            row['daily'],
+            [
+                {'date': '2026-11-03', 'app_seconds': 1800.0, 'idle_seconds': 0.0, 'task_seconds': 0.0},
+                {'date': '2026-11-04', 'app_seconds': 2700.0, 'idle_seconds': 600.0, 'task_seconds': 1200.0},
+            ],
+        )
+        self.assertEqual(row['work_seconds'], 3600.0)
+        self.assertEqual(row['application_seconds'], 4500.0)
+        self.assertEqual(
+            {item['application']: item['category'] for item in row['applications']},
+            {'Code': 'WORK', 'Chrome': 'BROWSER', 'Idle': 'OTHER'},
+        )
+
     def test_rejects_other_owner_disabled_consent_future_and_extra_fields(self):
         self.client.force_authenticate(self.other)
         self.assertEqual(self.upload([]).status_code, 403)

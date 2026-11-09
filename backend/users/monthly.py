@@ -44,6 +44,17 @@ def clipped_seconds(left, right, start, end):
     return max(0, (min(right, end) - max(left, start)).total_seconds())
 
 
+def daily_seconds(left, right, start, end):
+    """(Ulaanbaatar date, seconds) for the part of [left, right) inside [start, end), split at midnight."""
+    left, right = max(left, start), min(right, end)
+    while left < right:
+        local = left.astimezone(ZONE)
+        midnight = datetime.combine(local.date() + timedelta(days=1), datetime.min.time(), ZONE)
+        cut = min(right, midnight)
+        yield local.date(), (cut - left).total_seconds()
+        left = cut
+
+
 def union_seconds(intervals, start, end):
     total, cursor = 0.0, start
     for left, right in sorted(intervals):
@@ -161,9 +172,13 @@ class MonthlyReportView(APIView):
                 'transfers_sent': 0,
                 'transfers_received': 0,
                 'applications': defaultdict(float),
+                'work_seconds': 0.0,
+                # Per day (Ulaanbaatar): [apps, idle, task] seconds, for the month chart.
+                'daily': defaultdict(lambda: [0.0, 0.0, 0.0]),
             }
             for person in people
         }
+        categories = defaultdict(dict)
         intervals = defaultdict(list)
         usage = LauncherInterval.objects.filter(employee_id__in=ids)
         for item in usage.values('employee_id').annotate(first=Min('started_at'), last=Max('received_at')):
@@ -183,10 +198,18 @@ class MonthlyReportView(APIView):
                 item.started_at, item.started_at + timedelta(seconds=item.duration_seconds), start, min(end, now)
             )
             if seconds:
-                rows[item.employee_id]['applications'][item.application] += seconds
-                if item.application.casefold() != 'idle':
+                row = rows[item.employee_id]
+                row['applications'][item.application] += seconds
+                categories[item.employee_id][item.application] = item.category
+                idle = item.application.casefold() == 'idle'
+                if not idle:
                     outside = seconds - schedule.inside_seconds(item.started_at, item.duration_seconds)
-                    rows[item.employee_id]['outside_schedule_seconds'] += max(0.0, outside)
+                    row['outside_schedule_seconds'] += max(0.0, outside)
+                    if item.category == ComputerActivity.Category.WORK:
+                        row['work_seconds'] += seconds
+                finish = item.started_at + timedelta(seconds=item.duration_seconds)
+                for day, part in daily_seconds(item.started_at, finish, start, min(end, now)):
+                    row['daily'][day][1 if idle else 0] += part
         for item in (
             TaskWorkSession.objects.filter(employee_id__in=ids, started_at__lt=end)
             .filter(Q(ended_at__isnull=True) | Q(ended_at__gt=start))
@@ -197,6 +220,8 @@ class MonthlyReportView(APIView):
                 continue
             row, task = rows[item.employee_id], item.contribution.task
             row['task_seconds'] += seconds
+            for day, part in daily_seconds(item.started_at, session_end(item, now), start, min(end, now)):
+                row['daily'][day][2] += part
             detail = row['tasks'].setdefault(
                 task.pk,
                 {
@@ -225,9 +250,14 @@ class MonthlyReportView(APIView):
             row['idle_seconds'] = sum(value for app, value in row['applications'].items() if app.casefold() == 'idle')
             row['tracked_seconds'] = sum(row['applications'].values())
             row['application_seconds'] = row['tracked_seconds'] - row['idle_seconds']
+            known = categories[row['employee']]
             row['applications'] = [
-                {'application': app, 'seconds': value}
+                {'application': app, 'seconds': value, 'category': known.get(app, '')}
                 for app, value in sorted(row['applications'].items(), key=lambda pair: -pair[1])
+            ]
+            row['daily'] = [
+                {'date': day.isoformat(), 'app_seconds': app, 'idle_seconds': idle, 'task_seconds': task}
+                for day, (app, idle, task) in sorted(row['daily'].items())
             ]
             row['tasks'] = sorted(row['tasks'].values(), key=lambda item: -item['seconds'])
         return Response(

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import MonthCharts from './MonthCharts';
+import MonthlyEmployee from './MonthlyEmployee';
 import { api } from './api';
-import { clockTime } from './taskTime';
 import { usePolling } from './usePolling';
 
 function currentMonth() {
@@ -100,91 +100,12 @@ export default function MonthlyReport({ user }) {
           {!report.employees.length && <p>Харах боломжтой ажилтан алга.</p>}
           <div className="monthly-employees">
             {report.employees.map((row) => (
-              <article className="monthly-employee" key={row.employee}>
-                <h3>
-                  {row.name}{' '}
-                  <small>
-                    @{row.username}
-                    {!row.is_active && ' · идэвхгүй'}
-                  </small>
-                </h3>
-                {row.department && <p>{row.department}</p>}
-                <dl className="monthly-metrics">
-                  <div>
-                    <dt>WorkTrack асаалттай</dt>
-                    <dd>{row.launcher_recorded_since ? clockTime(row.launcher_seconds) : '—'}</dd>
-                  </div>
-                  <div>
-                    <dt>Апп ашигласан (идэвхгүйг хассан)</dt>
-                    <dd>{clockTime(row.application_seconds)}</dd>
-                  </div>
-                  <div>
-                    <dt>Үүнээс ажлын хуваарийн гадна</dt>
-                    <dd>{clockTime(row.outside_schedule_seconds || 0)}</dd>
-                  </div>
-                  <div>
-                    <dt>Идэвхгүй</dt>
-                    <dd>{clockTime(row.idle_seconds)}</dd>
-                  </div>
-                  <div>
-                    <dt>Даалгаварт бүртгэсэн</dt>
-                    <dd>{clockTime(row.task_seconds)}</dd>
-                  </div>
-                  <div>
-                    <dt>Энэ сард дуусгасан</dt>
-                    <dd>{row.completed_tasks.length}</dd>
-                  </div>
-                  <div>
-                    <dt>Шилжүүлсэн / хүлээн авсан</dt>
-                    <dd>
-                      {row.transfers_sent} / {row.transfers_received}
-                    </dd>
-                  </div>
-                </dl>
-                <p className="muted">
-                  {row.launcher_last_upload
-                    ? `Програмын цаг илгээсэн: ${new Date(row.launcher_last_upload).toLocaleString('mn-MN', { timeZone: 'Asia/Ulaanbaatar' })}`
-                    : 'Програмын цаг хараахан ирээгүй. Ажилтан WorkTrack-аа дахин асааж төхөөрөмжөө холбоно.'}
-                </p>
-                <details>
-                  <summary>{row.name} — ажлын дэлгэрэнгүй</summary>
-                  <h4>Энэ сард цаг бүртгэсэн даалгавар</h4>
-                  {row.tasks.length ? (
-                    <ul>
-                      {row.tasks.map((task) => (
-                        <li key={task.id}>
-                          {task.title} — {clockTime(task.seconds)}; нийт даалгаварт оруулсан
-                          одоогийн хувь: {task.contribution_percent}%
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p>Даалгаврын цаг бүртгээгүй.</p>
-                  )}
-                  <h4>Энэ сард дуусгасан даалгавар</h4>
-                  {row.completed_tasks.length ? (
-                    <ul>
-                      {row.completed_tasks.map((task) => (
-                        <li key={task.id}>{task.title}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p>Дуусгасан даалгавар алга.</p>
-                  )}
-                  <h4>Аппын бүртгэл</h4>
-                  {row.applications.length ? (
-                    <ul>
-                      {row.applications.map((app) => (
-                        <li key={app.application}>
-                          {app.application} — {clockTime(app.seconds)}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p>Аппын бүртгэл ирээгүй.</p>
-                  )}
-                </details>
-              </article>
+              <MonthlyEmployee
+                key={row.employee}
+                row={row}
+                month={report.month || month}
+                schedule={report.schedule}
+              />
             ))}
           </div>
           <p className="muted">

@@ -607,14 +607,34 @@ test('admin finds monthly employees under reports and can inspect another month 
               },
             ],
             applications: [
-              { application: 'Visual Studio Code', seconds: 18000 },
-              { application: 'Idle', seconds: 3600 },
+              { application: 'Visual Studio Code', seconds: 14000, category: 'WORK' },
+              { application: 'Google Chrome', seconds: 4000, category: 'BROWSER' },
+              { application: 'Idle', seconds: 3600, category: 'OTHER' },
+            ],
+            work_seconds: 14000,
+            outside_schedule_seconds: 600,
+            daily: [
+              { date: `${month}-03`, app_seconds: 9000, idle_seconds: 1200, task_seconds: 3600 },
+              { date: `${month}-04`, app_seconds: 6000, idle_seconds: 1800, task_seconds: 2400 },
+              { date: `${month}-07`, app_seconds: 3000, idle_seconds: 600, task_seconds: 1200 },
             ],
           },
         ],
+        schedule: { days: [0, 1, 2, 3, 4], start: '09:00', end: '18:00' },
       },
     });
   });
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Тайлан', exact: true }).click();
+  const wide = page.getByRole('region', { name: 'Сарын ажилтны тайлан', exact: true });
+  await expect(wide.getByText('WorkTrack асаалттай цаг юунд зарцуулагдсан').first()).toBeVisible();
+  await expect(wide.getByLabel('Бүртгээгүй', { exact: false }).first()).toBeAttached();
+  await expect(wide.getByText('Өдөр бүрийн ажил').first()).toBeVisible();
+  await expect(wide.getByText('ажлын програм 78%')).toBeVisible();
+  await wide
+    .locator('.monthly-employee')
+    .screenshot({ path: '.runtime/qa/monthly-employee-wide.png' });
   await page.setViewportSize({ width: 320, height: 800 });
   await page.goto('/');
   const report = page.getByRole('region', { name: 'Сарын ажилтны тайлан', exact: true });

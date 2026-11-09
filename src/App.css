@@ -1318,6 +1318,8 @@ textarea:focus-visible {
   --viz-3: #1baf7a;
   --viz-4: #eda100;
   --viz-idle: #c3c2b7;
+  /* «Бүртгээгүй»: өгөгдөл байхгүй хэсэг — 135° зураасан бүтэц, өнгө биш. */
+  --viz-none: repeating-linear-gradient(135deg, #cfcec6 0 2px, #f1f0eb 2px 6px);
   --viz-track: #cde2fb;
   --viz-grid: #e1e0d9;
   --viz-axis: #898781;
@@ -1842,4 +1844,163 @@ textarea:focus-visible {
   flex: none;
   padding: 0;
   margin: 0;
+}
+
+/* Сарын тайлангийн ажилтны карт */
+.monthly-employee {
+  display: grid;
+  gap: 1.1rem;
+  background: #fff;
+}
+.monthly-head {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  min-width: 0;
+}
+.monthly-head > div {
+  min-width: 0;
+}
+.monthly-head h3 {
+  margin: 0;
+}
+.monthly-head p {
+  margin: 0.15rem 0 0;
+}
+.monthly-avatar {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--viz-track);
+  color: var(--seq-5);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.monthly-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin: 0;
+}
+.monthly-stats > div {
+  display: grid;
+  align-content: start;
+  gap: 0.2rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  background: #f4f7fb;
+  min-width: 0;
+}
+.monthly-stats dt {
+  font-size: 0.8rem;
+  color: #526174;
+}
+.monthly-stats dd {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.monthly-stats span {
+  font-size: 0.78rem;
+  color: #526174;
+}
+.monthly-charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.2rem;
+}
+@media (max-width: 760px) {
+  .monthly-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .monthly-charts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Сарын өдөр бүрийн багана */
+.viz-days-frame {
+  position: relative;
+  padding-top: 16px;
+}
+.viz-days-top {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: 0.72rem;
+  color: var(--viz-axis);
+}
+.viz-columns.viz-days {
+  gap: 2px;
+  height: 130px;
+}
+.viz-days .viz-column {
+  max-width: none;
+  min-width: 0;
+}
+.viz-days .viz-column.off {
+  background: linear-gradient(to top, #f1f0eb, #f1f0eb);
+  border-radius: 3px 3px 0 0;
+}
+.viz-days .viz-column.off .viz-axis-label,
+.viz-days .viz-column.future .viz-axis-label {
+  opacity: 0.55;
+}
+.viz-days .viz-column.today .viz-axis-label {
+  color: var(--text);
+  font-weight: 700;
+}
+.viz-days .viz-stack {
+  gap: 1px;
+}
+.viz-days-grid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  border-top: 1px dashed var(--viz-grid);
+  pointer-events: none;
+}
+.viz-days-grid.half {
+  top: calc((100% - 18px) / 2);
+}
+.viz-day-task {
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--viz-3);
+  box-shadow: 0 0 0 1px #fff;
+}
+.viz-legend .viz-legend-line {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--viz-3);
+}
+.viz-legend .viz-legend-off {
+  background: #f1f0eb;
+  border: 1px solid var(--viz-grid);
+}
+.viz-segment.light span {
+  color: var(--text);
+}
+.viz-days .viz-axis-label {
+  white-space: nowrap;
+  font-size: 0.68rem;
+}
+.monthly-stats dd {
+  white-space: nowrap;
+}
+@media (max-width: 420px) {
+  .monthly-stats > div {
+    padding: 0.6rem 0.65rem;
+  }
+  .monthly-stats dd {
+    font-size: 1.05rem;
+  }
 }
