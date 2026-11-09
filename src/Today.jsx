@@ -270,6 +270,129 @@ function WorkControls({
   );
 }
 
+function TaskOnlyControls({ user, tasks, work, busy, refresh }) {
+  const { session, running } = sessionTiming(work.sample, useTick());
+  const available = tasks.filter((task) => task.employee === user.id && task.status !== 'Дууссан');
+  const [selectedTask, setSelectedTask] = useState('');
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const selected = session?.task_id
+    ? String(session.task_id)
+    : available.some((task) => String(task.id) === selectedTask)
+      ? selectedTask
+      : String(available[0]?.id || '');
+
+  async function changeWork(action) {
+    if (pending) return;
+    setPending(true);
+    setMessage('');
+    setError('');
+    try {
+      if (action === 'start') await work.start(Number(selected));
+      else await work.stop({ complete: action === 'finish' });
+      setMessage(
+        action === 'start'
+          ? 'Даалгаврын цаг эхэллээ.'
+          : action === 'finish'
+            ? 'Даалгаврын төлөв Дууссан боллоо.'
+            : 'Даалгаврын цаг түр зогслоо.',
+      );
+      try {
+        if (refresh) await refresh();
+      } catch (failure) {
+        setMessage(`Өөрчлөлт хадгалагдсан. Жагсаалтыг шинэчилж чадсангүй: ${failure.message}`);
+      }
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="task-only-status">
+      <h3>Даалгаврын цаг</h3>
+      <p className="muted">WorkTrack төхөөрөмжийн холболтгүй үед даалгаврын цагийг хөтчөөс бүртгэнэ.</p>
+      {session ? (
+        <>
+          <p>
+            <strong>{session.title}</strong> · {running ? 'Цаг ажиллаж байна.' : 'Цаг түр зогссон.'}
+          </p>
+          <div className="desktop-actions">
+            {running && (
+              <button type="button" disabled={busy || pending} onClick={() => changeWork('pause')}>
+                Түр зогсоох
+              </button>
+            )}
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={busy || pending}
+              onClick={() => changeWork('finish')}
+            >
+              Ажил дуусгах
+            </button>
+          </div>
+        </>
+      ) : available.length ? (
+        <div className="workday-form">
+          <label htmlFor="task-only-select">Хийх даалгавар</label>
+          <select
+            id="task-only-select"
+            value={selected}
+            disabled={busy || pending || Boolean(work.error)}
+            onChange={(event) => setSelectedTask(event.target.value)}
+          >
+            {available.map((task) => (
+              <option key={task.id} value={task.id}>
+                {task.title}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="start-button"
+            disabled={busy || pending || !selected || Boolean(work.error)}
+            onClick={() => changeWork('start')}
+          >
+            {pending ? 'Бүртгэж байна…' : 'Ажил эхлүүлэх'}
+          </button>
+        </div>
+      ) : (
+        <p>Танд эхлүүлэх боломжтой даалгавар алга. Менежерээр даалгавар хуваарилуулна уу.</p>
+      )}
+      {work.error && <p role="alert">Даалгаврын цагийн алдаа: {work.error}</p>}
+      {error && <p role="alert">{error}</p>}
+      {message && <p role="status">{message}</p>}
+    </div>
+  );
+}
+
+function BrowserTrackingHelp() {
+  return (
+    <details className="more-settings">
+      <summary>Edge / Chrome вэбсайтын бүртгэл эхлүүлэх</summary>
+      <div className="more-settings-body">
+        <ol>
+          <li>
+            <code>edge://extensions</code> нээгээд Developer mode-ийг асаана.
+          </li>
+          <li>
+            Load unpacked дарж төслийн <code>browser_extension</code> хавтсыг сонгоно.
+          </li>
+          <li>
+            WorkTrack Website Time → Options хэсэгт ажилтны эрхээр нэвтэрч, мониторингийн зөвшөөрөл өгнө.
+          </li>
+        </ol>
+        <p className="muted">
+          Extension нь зөвхөн идэвхтэй tab-ын домэйн ба хугацааг бүртгэнэ. URL зам болон хуудасны агуулгыг хадгалахгүй.
+        </p>
+      </div>
+    </details>
+  );
+}
+
 /** Камерыг нэг унтраалгаар: анх асаахад шаардлагатай зүйлсийг өөрөө бэлдээд асаана. */
 function CameraSwitch({ state, busy, act }) {
   const waiting = useRef(false);
@@ -487,6 +610,15 @@ export function DesktopPanel({ user, tasks, work, workday, busy, workedToday, re
               <button disabled={busy} onClick={workday.refresh}>
                 Дахин холбогдох
               </button>
+              {!state && (
+                <TaskOnlyControls
+                  user={user}
+                  tasks={tasks}
+                  work={work}
+                  busy={busy}
+                  refresh={refresh}
+                />
+              )}
             </>
           )}
           {!state && !connectionError && <p>WorkTrack-тэй холбогдож байна…</p>}
@@ -552,6 +684,7 @@ export function DesktopPanel({ user, tasks, work, workday, busy, workedToday, re
               onRelink={() => setAsking('relink')}
             />
           )}
+          <BrowserTrackingHelp />
           {ratingOpen && (
             <RatingDialog
               current={rating.label}
