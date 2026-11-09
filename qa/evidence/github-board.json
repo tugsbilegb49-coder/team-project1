@@ -1,0 +1,43 @@
+{
+  "kind": "issue-milestone-board",
+  "repository": "tugsbilegb49-coder/team-project1",
+  "milestone": "https://github.com/tugsbilegb49-coder/team-project1/milestone/1",
+  "board": "https://github.com/tugsbilegb49-coder/team-project1/issues/9",
+  "issues": [
+    {
+      "key": "CAM-QA-01",
+      "number": 2,
+      "url": "https://github.com/tugsbilegb49-coder/team-project1/issues/2"
+    },
+    {
+      "key": "CAM-QA-02",
+      "number": 3,
+      "url": "https://github.com/tugsbilegb49-coder/team-project1/issues/3"
+    },
+    {
+      "key": "CAM-QA-03",
+      "number": 4,
+      "url": "https://github.com/tugsbilegb49-coder/team-project1/issues/4"
+    },
+    {
+      "key": "CAM-QA-04",
+      "number": 5,
+      "url": "https://github.com/tugsbilegb49-coder/team-project1/issues/5"
+    },
+    {
+      "key": "CAM-QA-05",
+      "number": 6,
+      "url": "https://github.com/tugsbilegb49-coder/team-project1/issues/6"
+    },
+    {
+      "key": "CAM-QA-06",
+      "number": 7,
+      "url": "https://github.com/tugsbilegb49-coder/team-project1/issues/7"
+    },
+    {
+      "key": "CAM-QA-07",
+      "number": 8,
+      "url": "https://github.com/tugsbilegb49-coder/team-project1/issues/8"
+    }
+  ]
+}

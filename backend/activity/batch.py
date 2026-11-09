@@ -1,4 +1,5 @@
 """Compatibility ingest for the activity_agent v1 batch contract."""
+
 from datetime import timedelta
 import hashlib
 from django.db import transaction
@@ -43,7 +44,21 @@ class BatchSerializer(serializers.Serializer):
             raise serializers.ValidationError('Activity exceeds the batch duration.')
         if sum(app['seconds'] for app in data['apps']) > data['active_seconds'] + 2:
             raise serializers.ValidationError('Application seconds exceed active time.')
-        if any(key in self.initial_data for key in ['keys','text','keystrokes','password','clipboard','x','y','coordinates','window_title','file_content']):
+        if any(
+            key in self.initial_data
+            for key in [
+                'keys',
+                'text',
+                'keystrokes',
+                'password',
+                'clipboard',
+                'x',
+                'y',
+                'coordinates',
+                'window_title',
+                'file_content',
+            ]
+        ):
             raise serializers.ValidationError('Private content fields are not accepted.')
         return data
 
@@ -56,35 +71,43 @@ class ActivityBatchView(APIView):
         data = serializer.validated_data
         if data['employee_id'] not in {str(request.user.pk), request.user.username}:
             from rest_framework.exceptions import PermissionDenied
+
             raise PermissionDenied('employee_id must match the authenticated user.')
         # Keep this legacy device namespace separate from enrolled UUID workstations.
         device_name = 'activity-agent-' + hashlib.sha256(data['device_id'].encode()).hexdigest()[:32]
         with transaction.atomic():
             lock_employee(request.user)
-            device, _ = Device.objects.get_or_create(employee=request.user, name=device_name, defaults={'platform':'activity_agent'})
+            device, _ = Device.objects.get_or_create(
+                employee=request.user, name=device_name, defaults={'platform': 'activity_agent'}
+            )
             if not device.enabled:
                 from rest_framework.exceptions import PermissionDenied
+
                 raise PermissionDenied('This device is disabled.')
             cursor = data['period_start']
             created = 0
+
             # Alphabetical order provides deterministic replay keys. This contract
             # has aggregate app times; offsets do not represent observed app order.
             def store(application, seconds, category):
                 nonlocal cursor, created
                 if seconds <= 0:
                     return
-                identity = {'started_at':cursor, 'duration_seconds':seconds, 'application':application}
+                identity = {'started_at': cursor, 'duration_seconds': seconds, 'application': application}
                 # Classification settings can change after an accepted batch.
                 # Replay preserves its original category rather than duplicating it.
                 existing = ComputerActivity.objects.filter(employee=request.user, **identity).first()
                 if existing is None:
-                    _, new = save_segment(ComputerActivity, request.user, {**identity, 'category':category}, device)
+                    _, new = save_segment(ComputerActivity, request.user, {**identity, 'category': category}, device)
                     created += int(new)
                 cursor += timedelta(seconds=seconds)
 
             app_seconds = 0
+            from users.operations import current_settings
+
+            productive_apps = current_settings().productive_apps
             for app in sorted(data['apps'], key=lambda row: (row['name'], row['seconds'])):
-                store(app['name'], app['seconds'], category_for_application(app['name']))
+                store(app['name'], app['seconds'], category_for_application(app['name'], productive_apps))
                 app_seconds += app['seconds']
             # Preserve denominator time even when app resolution failed. Counts
             # and input contents are not stored; only duration and category are.
@@ -93,4 +116,4 @@ class ActivityBatchView(APIView):
             store('Unattributed activity', unknown, 'OTHER')
             remaining = max(0, (data['period_end'] - cursor).total_seconds())
             store('Idle', min(data['idle_seconds'], remaining), 'OTHER')
-        return Response({'created':created}, status=201 if created else 200)
+        return Response({'created': created}, status=201 if created else 200)

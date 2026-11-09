@@ -1,4 +1,11 @@
 # Worker Activity Monitor configuration
+camera_mode: presence          # Store only timestamp, person boolean and confidence
+presence_interval_seconds: 1
+presence_log_file: data/presence.csv
+presence_log_max_bytes: 5242880 # 5 MiB per CSV; rotate by size or local day
+presence_log_backups: 3        # At most three generated CSV backups
+presence_log_retention_days: 7
+presence_queue_file: data/.pending_presence_events.json
 
 max_camera_gap_seconds: 10
 camera_index: 0

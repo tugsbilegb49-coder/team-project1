@@ -1,5 +1,7 @@
-import { useRef, useState } from "react";
-import "./Tasks.css";
+import { SegmentedBar } from './Charts';
+import { useEffect, useRef, useState } from 'react';
+import TaskCollaboration from './TaskCollaboration';
+import './Tasks.css';
 
 function Tasks({
   tasks,
@@ -10,24 +12,35 @@ function Tasks({
   onQuality,
   canManage,
   busy,
+  user,
+  work,
+  onStart,
+  onTaskOnlyStart,
+  onAction,
+  onRefresh,
 }) {
   const activeMembers = members.filter((member) => member.is_active);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [deadline, setDeadline] = useState("");
-  const [assignedTo, setAssignedTo] = useState("");
-  const [filterMember, setFilterMember] = useState("Бүгд");
-  const [filterStatus, setFilterStatus] = useState("Бүгд");
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [deadline, setDeadline] = useState('');
+  const [assignedTo, setAssignedTo] = useState('');
+  const [filterMember, setFilterMember] = useState('Бүгд');
+  const [filterStatus, setFilterStatus] = useState('Бүгд');
+  useEffect(() => {
+    if (busy) return;
+    const timer = setInterval(onRefresh, 15000);
+    return () => clearInterval(timer);
+  }, [busy, onRefresh]);
   async function addTask(e) {
     e.preventDefault();
 
     if (!title.trim()) {
-      alert("Даалгаврын нэрээ оруулна уу.");
+      alert('Даалгаврын нэрээ оруулна уу.');
       return;
     }
 
     if (!activeMembers.some((member) => String(member.id) === assignedTo))
-      return alert("Идэвхтэй гишүүн сонгоно уу.");
+      return alert('Идэвхтэй гишүүн сонгоно уу.');
     const ok = await onCreate({
       title,
       description,
@@ -36,10 +49,10 @@ function Tasks({
     });
     if (!ok) return;
 
-    setTitle("");
-    setDescription("");
-    setDeadline("");
-    setAssignedTo("");
+    setTitle('');
+    setDescription('');
+    setDeadline('');
+    setAssignedTo('');
   }
 
   function changeStatus(id, newStatus) {
@@ -51,14 +64,22 @@ function Tasks({
   }
   const filteredTasks = tasks.filter(
     (task) =>
-      (filterMember === "Бүгд" || String(task.employee) === filterMember) &&
-      (filterStatus === "Бүгд" || task.status === filterStatus),
+      (filterMember === 'Бүгд' || String(task.employee) === filterMember) &&
+      (filterStatus === 'Бүгд' || task.status === filterStatus),
   );
   return (
     <div className="tasks-page">
       <header className="tasks-header">
         <h1>Миний даалгавар</h1>
         <p>Өөрийн ажлуудаа нэг дор удирдаарай.</p>
+        <button type="button" disabled={busy} onClick={onRefresh}>
+          Даалгавар шинэчлэх
+        </button>
+        <p className="muted">
+          Цаг бүртгэхдээ «Ажиллаж эхлэх» дарна. Нэг удаад нэг даалгаварт цаг бүртгэнэ. Вебээ
+          нээлттэй байлгана; холболт 90 секунд тасарвал цаг зогсоно. Жагсаалт 15 секунд тутам
+          шинэчлэгдэнэ.
+        </p>
       </header>
 
       {canManage && (
@@ -98,9 +119,7 @@ function Tasks({
               id="task-employee"
               required
               value={
-                activeMembers.some((member) => String(member.id) === assignedTo)
-                  ? assignedTo
-                  : ""
+                activeMembers.some((member) => String(member.id) === assignedTo) ? assignedTo : ''
               }
               onChange={(e) => setAssignedTo(e.target.value)}
             >
@@ -118,12 +137,10 @@ function Tasks({
         </form>
       )}
 
+      <TaskStatusChart tasks={tasks} />
       <section className="tasks-list">
         <label>Гишүүнээр шүүх</label>
-        <select
-          value={filterMember}
-          onChange={(e) => setFilterMember(e.target.value)}
-        >
+        <select value={filterMember} onChange={(e) => setFilterMember(e.target.value)}>
           <option value="Бүгд">Бүх гишүүд</option>
 
           {members.map((member) => (
@@ -134,10 +151,7 @@ function Tasks({
         </select>
 
         <label>Төлөвөөр шүүх</label>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-        >
+        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
           <option value="Бүгд">Бүх төлөв</option>
           <option value="Хүлээгдэж байна">Хүлээгдэж байна</option>
           <option value="Хийгдэж байна">Хийгдэж байна</option>
@@ -147,13 +161,11 @@ function Tasks({
         <h2>Даалгаврын жагсаалт ({filteredTasks.length})</h2>
 
         {filteredTasks.length === 0 ? (
-          <p className="empty-message">
-            Одоогоор даалгавар алга. Шинэ даалгавар нэмээрэй.
-          </p>
+          <p className="empty-message">Одоогоор даалгавар алга. Шинэ даалгавар нэмээрэй.</p>
         ) : (
           filteredTasks.map((task) => (
-            <article className="task-item" key={task.id}>
-              <div>
+            <article className="task-item task-card" key={task.id}>
+              <div className="task-card-content">
                 <h3>{task.title}</h3>
 
                 {task.description && <p>{task.description}</p>}
@@ -162,9 +174,9 @@ function Tasks({
 
                 {task.assignedTo && <p>Хариуцах гишүүн: {task.assignedTo}</p>}
 
-                {canManage && (
+                {(task.can_manage ?? canManage) && (
                   <QualityEditor
-                    key={`${task.id}:${task.quality_score ?? ""}`}
+                    key={`${task.id}:${task.quality_score ?? ''}`}
                     task={task}
                     onSave={onQuality}
                     disabled={busy}
@@ -173,7 +185,7 @@ function Tasks({
                 <label htmlFor={`task-status-${task.id}`}>Төлөв</label>
                 <select
                   id={`task-status-${task.id}`}
-                  disabled={!canManage || busy}
+                  disabled={!(task.can_manage ?? canManage) || busy}
                   value={task.status}
                   onChange={(e) => changeStatus(task.id, e.target.value)}
                 >
@@ -181,12 +193,21 @@ function Tasks({
                   <option value="Хийгдэж байна">Хийгдэж байна</option>
                   <option value="Дууссан">Дууссан</option>
                 </select>
+                <TaskCollaboration
+                  task={task}
+                  user={user}
+                  busy={busy}
+                  onAction={onAction}
+                  onStart={onStart}
+                  onTaskOnlyStart={onTaskOnlyStart}
+                  work={work}
+                />
               </div>
 
               <div className="task-actions">
                 <button
                   type="button"
-                  disabled={!canManage || busy}
+                  disabled={!(task.can_manage ?? canManage) || busy}
                   className="delete-button"
                   onClick={() => deleteTask(task.id)}
                 >
@@ -204,34 +225,29 @@ function Tasks({
 export default Tasks;
 
 function QualityEditor({ task, onSave, disabled }) {
-  const stored = task.quality_score == null ? "" : String(task.quality_score);
+  const stored = task.quality_score == null ? '' : String(task.quality_score);
   const inputRef = useRef(null);
   const [value, setValue] = useState(stored);
   const [saved, setSaved] = useState(stored);
-  const [error, setError] = useState("");
-  const changed =
-    value === "" || saved === ""
-      ? value !== saved
-      : Number(value) !== Number(saved);
+  const [error, setError] = useState('');
+  const changed = value === '' || saved === '' ? value !== saved : Number(value) !== Number(saved);
   function validate() {
     if (inputRef.current?.validity.badInput) {
-      setError("Тоон үнэлгээ оруулна уу.");
+      setError('Тоон үнэлгээ оруулна уу.');
       return false;
     }
     const number = Number(value);
     if (
-      value !== "" &&
+      value !== '' &&
       (!Number.isFinite(number) ||
         number < 0 ||
         number > 100 ||
         Math.abs(number * 100 - Math.round(number * 100)) > 1e-7)
     ) {
-      setError(
-        "0–100 хооронд, хамгийн ихдээ 2 орны нарийвчлалтай үнэлгээ оруулна уу.",
-      );
+      setError('0–100 хооронд, хамгийн ихдээ 2 орны нарийвчлалтай үнэлгээ оруулна уу.');
       return false;
     }
-    setError("");
+    setError('');
     return true;
   }
   return (
@@ -240,12 +256,11 @@ function QualityEditor({ task, onSave, disabled }) {
       onSubmit={async (event) => {
         event.preventDefault();
         if (disabled || !changed || !validate()) return;
-        const ok = await onSave(task.id, value === "" ? null : Number(value));
+        const ok = await onSave(task.id, value === '' ? null : Number(value));
         if (ok) {
           setSaved(value);
-          setError("");
-        } else
-          setError("Үнэлгээ хадгалагдсангүй. Алдааг засаж дахин оролдоно уу.");
+          setError('');
+        } else setError('Үнэлгээ хадгалагдсангүй. Алдааг засаж дахин оролдоно уу.');
       }}
       noValidate
     >
@@ -273,5 +288,43 @@ function QualityEditor({ task, onSave, disabled }) {
         </p>
       )}
     </form>
+  );
+}
+
+/** Хэдэн даалгавар хүлээгдэж, хийгдэж, дууссан, хоцорсон бэ. */
+function ulaanbaatarToday() {
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Ulaanbaatar' });
+}
+
+function TaskStatusChart({ tasks }) {
+  if (!tasks.length) return null;
+  const today = ulaanbaatarToday();
+  const late = (task) => task.status !== 'Дууссан' && task.due_date && task.due_date < today;
+  const count = (test) => tasks.filter(test).length;
+  return (
+    <section className="chart-card task-status-chart">
+      <SegmentedBar
+        title={`Даалгаврын төлөв · нийт ${tasks.length}`}
+        format={(value) => `${value} даалгавар`}
+        parts={[
+          { label: 'Хоцорсон', value: count(late), color: '--viz-critical' },
+          {
+            label: 'Хүлээгдэж байна',
+            value: count((task) => task.status === 'Хүлээгдэж байна' && !late(task)),
+            color: '--viz-idle',
+          },
+          {
+            label: 'Хийгдэж байна',
+            value: count((task) => task.status === 'Хийгдэж байна' && !late(task)),
+            color: '--viz-1',
+          },
+          {
+            label: 'Дууссан',
+            value: count((task) => task.status === 'Дууссан'),
+            color: '--viz-good',
+          },
+        ]}
+      />
+    </section>
   );
 }

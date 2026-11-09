@@ -1,4 +1,5 @@
 """Consistent SQLite and PostgreSQL backups; never print database credentials."""
+
 from datetime import datetime, timezone
 from contextlib import closing
 import os
@@ -19,7 +20,11 @@ def backup_path(output=None):
         path = Path(output).expanduser().resolve()
     else:
         suffix = '.sqlite3' if connections['default'].vendor == 'sqlite' else '.dump'
-        path = settings.BASE_DIR / 'backups' / f"database-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-{secrets.token_hex(4)}{suffix}"
+        path = (
+            settings.BASE_DIR
+            / 'backups'
+            / f'database-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-{secrets.token_hex(4)}{suffix}'
+        )
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -35,7 +40,13 @@ def pg_command(tool, *args):
         raise CommandError(f'{tool} is required for PostgreSQL backup/restore.')
     db = connections['default'].settings_dict
     env = os.environ.copy()
-    for field, key in [('PASSWORD','PGPASSWORD'),('HOST','PGHOST'),('PORT','PGPORT'),('USER','PGUSER'),('NAME','PGDATABASE')]:
+    for field, key in [
+        ('PASSWORD', 'PGPASSWORD'),
+        ('HOST', 'PGHOST'),
+        ('PORT', 'PGPORT'),
+        ('USER', 'PGUSER'),
+        ('NAME', 'PGDATABASE'),
+    ]:
         if db.get(field):
             env[key] = str(db[field])
     env.setdefault('PGCONNECT_TIMEOUT', '10')
@@ -44,7 +55,9 @@ def pg_command(tool, *args):
     except subprocess.TimeoutExpired as exc:
         raise CommandError(f'{tool} timed out.') from exc
     except subprocess.CalledProcessError as exc:
-        raise CommandError(f'{tool} failed (exit {exc.returncode}); database configuration and server version must match.') from exc
+        raise CommandError(
+            f'{tool} failed (exit {exc.returncode}); database configuration and server version must match.'
+        ) from exc
 
 
 def sqlite_source(path):
@@ -53,7 +66,7 @@ def sqlite_source(path):
         if source.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
             raise CommandError('SQLite backup failed integrity_check.')
         tables = {row[0] for row in source.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        if not {'django_migrations','users_user','workforce_task','activity_computeractivity'} <= tables:
+        if not {'django_migrations', 'users_user', 'workforce_task', 'activity_computeractivity'} <= tables:
             raise CommandError('This file is not a migrated WorkTrack backend database.')
         return source
     except Exception:
@@ -63,15 +76,17 @@ def sqlite_source(path):
 
 def copy_sqlite(source, target):
     deadline = time.monotonic() + 60
+
     def progress(status, remaining, total):
         if time.monotonic() > deadline:
             raise CommandError('SQLite backup timed out; stop active writers and retry.')
-    source.backup(target, pages=256, progress=progress, sleep=.1)
+
+    source.backup(target, pages=256, progress=progress, sleep=0.1)
 
 
 def create_backup(output=None):
     connection = connections['default']
-    if connection.vendor not in {'sqlite','postgresql'}:
+    if connection.vendor not in {'sqlite', 'postgresql'}:
         raise CommandError('Only SQLite and PostgreSQL backups are supported.')
     path = backup_path(output)
     try:
@@ -111,7 +126,7 @@ def verify_backup(path):
         except sqlite3.Error as exc:
             raise CommandError('Invalid SQLite backup.') from exc
     elif vendor == 'postgresql':
-        pg_command('pg_restore','--list',str(path))
+        pg_command('pg_restore', '--list', str(path))
     else:
         raise CommandError('Unsupported database engine.')
 
@@ -133,6 +148,15 @@ def restore_backup(path):
         finally:
             source.close()
     else:
-        pg_command('pg_restore','--clean','--if-exists','--single-transaction','--exit-on-error','--no-owner',
-                   '--dbname',str(connection.settings_dict['NAME']),str(path))
+        pg_command(
+            'pg_restore',
+            '--clean',
+            '--if-exists',
+            '--single-transaction',
+            '--exit-on-error',
+            '--no-owner',
+            '--dbname',
+            str(connection.settings_dict['NAME']),
+            str(path),
+        )
     return safety

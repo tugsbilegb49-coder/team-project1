@@ -1,0 +1,576 @@
+{
+  "performed_at": "2026-11-07T09:15:45.149480+08:00",
+  "source": {
+    "git_head": "ea5b730f0660e773e8e2820688961eb60294dc29",
+    "working_tree_dirty": true,
+    "source_sha256": "1cfb4a035c106d2dd93476764d020f6b7949f00da59bf2f800816613df42cdba"
+  },
+  "status": "passed",
+  "scope": "Disposable test databases, synthetic OS observations and synthetic AI data; no webcam capture.",
+  "stages": [
+    {
+      "name": "django-check",
+      "command": [
+        "/Users/burenbaatar/Desktop/back-end/.venv/bin/python",
+        "manage.py",
+        "check"
+      ],
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 0.297,
+      "tests_reported": null,
+      "tests_skipped": 0,
+      "log": ".runtime/qa/20261107T091545149480/django-check.log"
+    },
+    {
+      "name": "migration-check",
+      "command": [
+        "/Users/burenbaatar/Desktop/back-end/.venv/bin/python",
+        "manage.py",
+        "makemigrations",
+        "--check",
+        "--dry-run"
+      ],
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 0.293,
+      "tests_reported": null,
+      "tests_skipped": 0,
+      "log": ".runtime/qa/20261107T091545149480/migration-check.log"
+    },
+    {
+      "name": "python-camera-ai",
+      "command": [
+        "/Users/burenbaatar/Desktop/back-end/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 2.566,
+      "tests_reported": 81,
+      "tests_skipped": 0,
+      "log": ".runtime/qa/20261107T091545149480/python-camera-ai.log"
+    },
+    {
+      "name": "computer-agent",
+      "command": [
+        "/Users/burenbaatar/Desktop/back-end/.venv/bin/python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "agent",
+        "-p",
+        "test*.py"
+      ],
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 0.13,
+      "tests_reported": 28,
+      "tests_skipped": 0,
+      "log": ".runtime/qa/20261107T091545149480/computer-agent.log"
+    },
+    {
+      "name": "alternative-agent",
+      "command": [
+        "/Users/burenbaatar/Desktop/back-end/.venv/bin/python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "activity_agent/tests"
+      ],
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 3.779,
+      "tests_reported": 23,
+      "tests_skipped": 0,
+      "log": ".runtime/qa/20261107T091545149480/alternative-agent.log"
+    },
+    {
+      "name": "django-integration",
+      "command": [
+        "/Users/burenbaatar/Desktop/back-end/.venv/bin/python",
+        "manage.py",
+        "test",
+        "users",
+        "workforce",
+        "activity",
+        "scoring"
+      ],
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 9.008,
+      "tests_reported": 100,
+      "tests_skipped": 3,
+      "log": ".runtime/qa/20261107T091545149480/django-integration.log"
+    },
+    {
+      "name": "frontend-unit",
+      "command": [
+        "/usr/local/bin/npm",
+        "run",
+        "test"
+      ],
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 0.188,
+      "tests_reported": null,
+      "tests_skipped": 0,
+      "log": ".runtime/qa/20261107T091545149480/frontend-unit.log"
+    },
+    {
+      "name": "frontend-lint",
+      "command": [
+        "/usr/local/bin/npm",
+        "run",
+        "lint"
+      ],
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 0.183,
+      "tests_reported": null,
+      "tests_skipped": 0,
+      "log": ".runtime/qa/20261107T091545149480/frontend-lint.log"
+    },
+    {
+      "name": "frontend-build",
+      "command": [
+        "/usr/local/bin/npm",
+        "run",
+        "build"
+      ],
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 0.255,
+      "tests_reported": null,
+      "tests_skipped": 0,
+      "log": ".runtime/qa/20261107T091545149480/frontend-build.log"
+    },
+    {
+      "name": "frontend-browser",
+      "command": [
+        "/usr/local/bin/npm",
+        "run",
+        "test:e2e",
+        "--",
+        "e2e/frontend.spec.js"
+      ],
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 8.063,
+      "tests_reported": 17,
+      "tests_skipped": 0,
+      "log": ".runtime/qa/20261107T091545149480/frontend-browser.log"
+    },
+    {
+      "name": "browser-django",
+      "command": [
+        "/Users/burenbaatar/Desktop/back-end/.venv/bin/python",
+        "verify_frontend.py"
+      ],
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 6.284,
+      "tests_reported": 1,
+      "tests_skipped": 0,
+      "log": ".runtime/qa/20261107T091545149480/browser-django.log"
+    }
+  ],
+  "manual_remaining": [
+    "Independent real camera precision/recall validation",
+    "Human defense rehearsal",
+    "Team PR evidence links and remote CI run after code publication",
+    "Native macOS app GUI startup/Quit verification; run --native on macOS"
+  ],
+  "agent_correctness": {
+    "data_kind": "synthetic OS observations; actual sampler code",
+    "cases": [
+      {
+        "id": "switch",
+        "expected": [
+          [
+            "Code",
+            "WORK",
+            10
+          ],
+          [
+            "Safari",
+            "BROWSER",
+            10
+          ],
+          [
+            "Code",
+            "WORK",
+            10
+          ],
+          [
+            "Code",
+            "WORK",
+            4
+          ]
+        ],
+        "actual": [
+          [
+            "Code",
+            "WORK",
+            10.0
+          ],
+          [
+            "Safari",
+            "BROWSER",
+            10.0
+          ],
+          [
+            "Code",
+            "WORK",
+            10.0
+          ],
+          [
+            "Code",
+            "WORK",
+            4.0
+          ]
+        ],
+        "passed": true,
+        "events": [
+          {
+            "application": "Code",
+            "category": "WORK",
+            "started_at": "2026-11-06T00:00:00+00:00",
+            "duration_seconds": 10.0,
+            "device_id": "synthetic-device"
+          },
+          {
+            "application": "Safari",
+            "category": "BROWSER",
+            "started_at": "2026-11-06T00:00:10+00:00",
+            "duration_seconds": 10.0,
+            "device_id": "synthetic-device"
+          },
+          {
+            "application": "Code",
+            "category": "WORK",
+            "started_at": "2026-11-06T00:00:20+00:00",
+            "duration_seconds": 10.0,
+            "device_id": "synthetic-device"
+          },
+          {
+            "application": "Code",
+            "category": "WORK",
+            "started_at": "2026-11-06T00:00:30+00:00",
+            "duration_seconds": 4.0,
+            "device_id": "synthetic-device"
+          }
+        ]
+      },
+      {
+        "id": "stable",
+        "expected": [
+          [
+            "Code",
+            "WORK",
+            30
+          ],
+          [
+            "Code",
+            "WORK",
+            4
+          ]
+        ],
+        "actual": [
+          [
+            "Code",
+            "WORK",
+            30.0
+          ],
+          [
+            "Code",
+            "WORK",
+            4.0
+          ]
+        ],
+        "passed": true,
+        "events": [
+          {
+            "application": "Code",
+            "category": "WORK",
+            "started_at": "2026-11-06T00:00:00+00:00",
+            "duration_seconds": 30.0,
+            "device_id": "synthetic-device"
+          },
+          {
+            "application": "Code",
+            "category": "WORK",
+            "started_at": "2026-11-06T00:00:30+00:00",
+            "duration_seconds": 4.0,
+            "device_id": "synthetic-device"
+          }
+        ]
+      },
+      {
+        "id": "pause",
+        "expected": [
+          [
+            "Code",
+            "WORK",
+            4
+          ],
+          [
+            "Code",
+            "WORK",
+            4
+          ]
+        ],
+        "actual": [
+          [
+            "Code",
+            "WORK",
+            4.0
+          ],
+          [
+            "Code",
+            "WORK",
+            4.0
+          ]
+        ],
+        "passed": true,
+        "events": [
+          {
+            "application": "Code",
+            "category": "WORK",
+            "started_at": "2026-11-06T00:00:00+00:00",
+            "duration_seconds": 4.0,
+            "device_id": "synthetic-device"
+          },
+          {
+            "application": "Code",
+            "category": "WORK",
+            "started_at": "2026-11-06T00:00:10+00:00",
+            "duration_seconds": 4.0,
+            "device_id": "synthetic-device"
+          }
+        ]
+      },
+      {
+        "id": "sleep",
+        "expected": [
+          [
+            "Code",
+            "WORK",
+            4
+          ],
+          [
+            "Code",
+            "WORK",
+            4
+          ]
+        ],
+        "actual": [
+          [
+            "Code",
+            "WORK",
+            4.0
+          ],
+          [
+            "Code",
+            "WORK",
+            4.0
+          ]
+        ],
+        "passed": true,
+        "events": [
+          {
+            "application": "Code",
+            "category": "WORK",
+            "started_at": "2026-11-06T00:00:00+00:00",
+            "duration_seconds": 4.0,
+            "device_id": "synthetic-device"
+          },
+          {
+            "application": "Code",
+            "category": "WORK",
+            "started_at": "2026-11-06T01:00:05+00:00",
+            "duration_seconds": 4.0,
+            "device_id": "synthetic-device"
+          }
+        ]
+      },
+      {
+        "id": "idle",
+        "expected": [
+          [
+            "Code",
+            "WORK",
+            5
+          ],
+          [
+            "Idle",
+            "OTHER",
+            4
+          ]
+        ],
+        "actual": [
+          [
+            "Code",
+            "WORK",
+            5.0
+          ],
+          [
+            "Idle",
+            "OTHER",
+            4.0
+          ]
+        ],
+        "passed": true,
+        "events": [
+          {
+            "application": "Code",
+            "category": "WORK",
+            "started_at": "2026-11-06T00:00:00+00:00",
+            "duration_seconds": 5.0,
+            "device_id": "synthetic-device"
+          },
+          {
+            "application": "Idle",
+            "category": "OTHER",
+            "started_at": "2026-11-06T00:00:05+00:00",
+            "duration_seconds": 4.0,
+            "device_id": "synthetic-device"
+          }
+        ]
+      }
+    ],
+    "passed": true
+  },
+  "ai_experiment": {
+    "status": "experimental",
+    "data_kind": "synthetic",
+    "limitation": "Synthetic demonstration only; not evidence of real employee productivity.",
+    "seed": 42,
+    "sklearn_version": "1.9.1",
+    "model": {
+      "bootstrap": true,
+      "ccp_alpha": 0.0,
+      "class_weight": "balanced",
+      "criterion": "gini",
+      "max_depth": 6,
+      "max_features": "sqrt",
+      "max_leaf_nodes": null,
+      "max_samples": null,
+      "min_impurity_decrease": 0.0,
+      "min_samples_leaf": 3,
+      "min_samples_split": 2,
+      "min_weight_fraction_leaf": 0.0,
+      "monotonic_cst": null,
+      "n_estimators": 200,
+      "n_jobs": 1,
+      "oob_score": false,
+      "random_state": 42,
+      "verbose": 0,
+      "warm_start": false
+    },
+    "features": [
+      "active_ratio",
+      "work_app_ratio",
+      "presence_ratio",
+      "task_completion_ratio"
+    ],
+    "labels": [
+      "Low",
+      "Medium",
+      "High"
+    ],
+    "samples": 450,
+    "split": {
+      "method": "GroupShuffleSplit by participant",
+      "train_samples": 270,
+      "test_samples": 180,
+      "train_participants": 3,
+      "test_participants": 2,
+      "participant_overlap": 0
+    },
+    "accuracy": 0.7611111111111111,
+    "macro_f1": 0.7623821470872431,
+    "weighted_f1": 0.7625225029726747,
+    "baseline_accuracy": 0.3333333333333333,
+    "per_class": {
+      "Low": {
+        "precision": 0.8360655737704918,
+        "recall": 0.8095238095238095,
+        "f1-score": 0.8225806451612904,
+        "support": 63.0
+      },
+      "Medium": {
+        "precision": 0.6349206349206349,
+        "recall": 0.6666666666666666,
+        "f1-score": 0.6504065040650406,
+        "support": 60.0
+      },
+      "High": {
+        "precision": 0.8214285714285714,
+        "recall": 0.8070175438596491,
+        "f1-score": 0.8141592920353983,
+        "support": 57.0
+      }
+    },
+    "confusion_matrix": [
+      [
+        51,
+        12,
+        0
+      ],
+      [
+        10,
+        40,
+        10
+      ],
+      [
+        0,
+        11,
+        46
+      ]
+    ],
+    "feature_importance": {
+      "active_ratio": 0.152037904298923,
+      "work_app_ratio": 0.2947195006413856,
+      "presence_ratio": 0.3707619801165805,
+      "task_completion_ratio": 0.18248061494311102
+    }
+  },
+  "camera_metric_fixture": {
+    "data_kind": "synthetic evaluator fixture; not real camera accuracy",
+    "samples": 8,
+    "accuracy": 0.75,
+    "precision": 0.75,
+    "recall": 0.75,
+    "f1": 0.75,
+    "specificity": 0.75,
+    "coverage": {
+      "present": 4,
+      "absent": 4
+    },
+    "confusion_matrix": {
+      "TP": 3,
+      "FP": 1,
+      "TN": 3,
+      "FN": 1
+    }
+  },
+  "camera_live_smoke": {
+    "status": "observed",
+    "data_kind": "real camera; unlabeled",
+    "samples": 20,
+    "present_predictions": 19,
+    "absent_predictions": 1,
+    "first_sample": "2026-11-06T15:27:25.249527+08:00",
+    "last_sample": "2026-11-06T15:27:43.905766+08:00",
+    "images_or_video_recorded": false,
+    "accuracy": null,
+    "limitation": "No independent human labels; prediction counts are not precision/recall."
+  },
+  "release_readiness": "automated_checks_passed_manual_validation_pending",
+  "finished_at": "2026-11-07T09:16:17.256981+08:00"
+}

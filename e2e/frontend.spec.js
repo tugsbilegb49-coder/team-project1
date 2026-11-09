@@ -1,6 +1,6 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from '@playwright/test';
 
-const auth = { access: "browser-test-access", refresh: "browser-test-refresh" };
+const auth = { access: 'browser-test-access', refresh: 'browser-test-refresh' };
 function gate() {
   let release;
   const promise = new Promise((resolve) => {
@@ -13,26 +13,26 @@ async function mockApp(page) {
     members: [
       {
         id: 1,
-        username: "admin",
-        first_name: "Admin",
-        role: "ADMIN",
+        username: 'admin',
+        first_name: 'Admin',
+        role: 'ADMIN',
         is_admin: true,
         is_active: true,
         department: null,
       },
       {
         id: 2,
-        username: "worker",
-        first_name: "Worker",
-        role: "EMPLOYEE",
+        username: 'worker',
+        first_name: 'Worker',
+        role: 'EMPLOYEE',
         is_active: true,
         department: 1,
       },
       {
         id: 3,
-        username: "inactive",
-        first_name: "Inactive",
-        role: "EMPLOYEE",
+        username: 'inactive',
+        first_name: 'Inactive',
+        role: 'EMPLOYEE',
         is_active: false,
         department: 1,
       },
@@ -40,177 +40,1112 @@ async function mockApp(page) {
     tasks: [
       {
         id: 11,
-        title: "Existing task",
+        title: 'Existing task',
         employee: 2,
-        employee_name: "worker",
-        status: "TODO",
-        quality_score: "50.00",
+        employee_name: 'worker',
+        status: 'TODO',
+        quality_score: '50.00',
         due_date: null,
       },
     ],
-    departments: [{ id: 1, name: "Development" }],
+    departments: [{ id: 1, name: 'Development' }],
     posts: [],
+    desktopPosts: [],
     patches: [],
-    score: "42.00",
-    appName: "Visual Studio Code",
+    score: '42.00',
+    appName: 'Visual Studio Code',
+    presence: null,
+    notifications: [],
+    devices: [],
+    audit: [],
+    settings: {
+      productive_apps: ['Visual Studio Code'],
+      camera_threshold: 0.45,
+      presence_log_max_bytes: 5242880,
+      presence_log_backups: 3,
+      presence_log_retention_days: 7,
+      activity_retention_days: 90,
+      automatic_retention: false,
+      client_version: '',
+      client_download_url: '',
+      work_days: [0, 1, 2, 3, 4],
+      work_start: '09:00:00',
+      work_end: '18:00:00',
+      version: 1,
+    },
+    desktop: {
+      available: true,
+      linked: false,
+      reminders_enabled: true,
+      reminder: null,
+      another_account: false,
+      computer_running: false,
+      camera_running: false,
+      paused: true,
+      camera_ready: true,
+      errors: [],
+      launcher_usage: {
+        available: true,
+        running: true,
+        current_month: '2026-11',
+        as_of: Date.now() / 1000,
+        month_ends_at: Date.now() / 1000 + 86400,
+        recorded_since: '2026-10-01T00:00:00+08:00',
+        months: [
+          { month: '2026-11', seconds: 123 },
+          { month: '2026-10', seconds: 90000 },
+        ],
+      },
+    },
+    workSession: null,
+    server: {
+      backup: { status: null, problems: [], copy_dir: '', copy_dir_source: null },
+      share: null,
+    },
   };
+  await page.route('**/desktop/**', (route) => {
+    const action = new URL(route.request().url()).pathname.split('/')[2];
+    if (route.request().method() === 'POST') state.desktopPosts.push(action);
+    if (action === 'connect')
+      Object.assign(state.desktop, {
+        linked: true,
+        username: 'admin',
+        device_name: route.request().postDataJSON().device_name,
+      });
+    if (action === 'start') Object.assign(state.desktop, { computer_running: true, paused: false });
+    if (action === 'pause') state.desktop.paused = true;
+    if (action === 'resume') state.desktop.paused = false;
+    if (action === 'camera-on') state.desktop.camera_running = true;
+    if (action === 'camera-off') state.desktop.camera_running = false;
+    if (action === 'reminders-on' || action === 'reminders-off')
+      state.desktop.reminders_enabled = action === 'reminders-on';
+    if (action === 'remember-task') state.desktop.last_task = route.request().postDataJSON();
+    if (action === 'autostart-on' || action === 'autostart-off')
+      state.desktop.autostart_enabled = action === 'autostart-on';
+    if (action === 'stop')
+      Object.assign(state.desktop, {
+        computer_running: false,
+        camera_running: false,
+        paused: true,
+      });
+    return route.fulfill({ json: state.desktop });
+  });
   await page.addInitScript(
-    (tokens) =>
-      sessionStorage.setItem("worktrack-auth", JSON.stringify(tokens)),
+    (tokens) => sessionStorage.setItem('worktrack-auth', JSON.stringify(tokens)),
     auth,
   );
-  await page.route("**/api/**", async (route) => {
+  await page.route('**/api/**', async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
       method = request.method();
     const path = url.pathname;
-    const data = method === "GET" ? null : request.postDataJSON();
+    const data = method === 'GET' ? null : request.postDataJSON();
     const respond = (body, status = 200) =>
       route.fulfill({
         status,
-        contentType: "application/json",
+        contentType: 'application/json',
         body: JSON.stringify(body),
       });
-    if (path === "/api/auth/logout/") {
+    if (path === '/api/auth/logout/') {
       state.posts.push({ path, data });
       return route.fulfill({ status: 204 });
     }
-    if (path === "/api/auth/login/") return respond(auth);
-    if (path === "/api/auth/refresh/") return respond({ access: "new-access" });
-    if (path === "/api/users/me/") return respond(state.members[0]);
-    if (method === "GET" && path === "/api/users/")
+    if (path === '/api/tasks/work-session/')
+      return respond({ session: state.workSession, server_now: new Date().toISOString() });
+    if (path === '/api/reports/charts/')
+      return respond({
+        month: url.searchParams.get('month'),
+        employees: [
+          {
+            employee: 1,
+            name: 'Admin',
+            department: 'Хэлтэсгүй',
+            average_score: 81.5,
+            scored_days: 4,
+            work_seconds: 36000,
+          },
+          {
+            employee: 2,
+            name: 'Worker',
+            department: 'Development',
+            average_score: 64.2,
+            scored_days: 5,
+            work_seconds: 54000,
+          },
+          {
+            employee: 3,
+            name: 'Inactive',
+            department: 'Development',
+            average_score: null,
+            scored_days: 0,
+            work_seconds: 0,
+          },
+        ],
+        departments: [
+          { department: 'Development', people: 2, average_score: 64.2, work_seconds: 54000 },
+          { department: 'Хэлтэсгүй', people: 1, average_score: 81.5, work_seconds: 36000 },
+        ],
+        heatmap: Array.from({ length: 7 }, (_, day) =>
+          Array.from({ length: 24 }, (_, hour) =>
+            day < 5 && hour >= 9 && hour < 18 ? (hour === 10 ? 3000 : 1200) : 0,
+          ),
+        ),
+      });
+    if (path === '/api/reports/monthly/')
+      return respond({
+        month: url.searchParams.get('month'),
+        generated_at: new Date().toISOString(),
+        employees: [],
+      });
+    const taskAction = path.match(/^\/api\/tasks\/(\d+)\/([\w-]+)\/$/);
+    if (taskAction) {
+      const task = state.tasks.find((row) => row.id === Number(taskAction[1]));
+      const action = taskAction[2];
+      if (action === 'transfer-recipients')
+        return respond(
+          state.members
+            .filter((row) => row.is_active && row.id !== task.employee)
+            .map((row) => ({ id: row.id, username: row.username, name: row.first_name })),
+        );
+      if (action === 'work-start') {
+        state.workSession = {
+          id: 81,
+          task_id: task.id,
+          title: task.title,
+          seconds: 0,
+          running: true,
+          started_at: new Date().toISOString(),
+          lease_expires_at: new Date(Date.now() + 90000).toISOString(),
+        };
+        state.posts.push({ path, data });
+        return respond({ session: state.workSession, server_now: new Date().toISOString() }, 201);
+      }
+      if (action === 'work-stop') {
+        state.workSession = null;
+        state.posts.push({ path, data });
+        return respond({ session: null, server_now: new Date().toISOString() });
+      }
+      if (action === 'progress') {
+        const row = task.collaboration.contributions.find(
+          (row) => row.employee === state.members[0].id,
+        );
+        row.percent = data.percent;
+        task.collaboration.progress_percent = data.percent;
+        state.posts.push({ path, data });
+        return respond(task);
+      }
+      if (action === 'transfer-request') {
+        const recipient = state.members.find((row) => row.id === data.recipient);
+        task.collaboration.pending_transfer = {
+          id: 91,
+          from_employee: task.employee,
+          from_name: task.employee_name,
+          to_employee: recipient.id,
+          to_name: recipient.username,
+          requested_by: state.members[0].id,
+          status: 'PENDING',
+          note: data.note,
+        };
+        state.posts.push({ path, data });
+        return respond(task);
+      }
+      if (action === 'transfer-respond') {
+        const transfer = task.collaboration.pending_transfer;
+        if (data.decision === 'accept') {
+          task.employee = transfer.to_employee;
+          task.employee_name = transfer.to_name;
+          task.transfer_count = (task.transfer_count || 0) + 1;
+        }
+        task.collaboration.pending_transfer = null;
+        state.posts.push({ path, data });
+        return respond(task);
+      }
+    }
+    if (path === '/api/notifications/')
+      return respond({ items: state.notifications, count: state.notifications.length });
+    if (path === '/api/agent-status/')
+      return respond({
+        results: state.devices,
+        count: state.devices.length,
+        next: null,
+        previous: null,
+      });
+    if (path === '/api/audit/')
+      return respond({
+        results: state.audit,
+        count: state.audit.length,
+        next: null,
+        previous: null,
+      });
+    if (path === '/api/me/self-rating/') {
+      if (method === 'PUT') {
+        state.ratings = [...(state.ratings || []), data.label];
+        state.selfRating = data.label;
+      }
+      return respond({ date: '2026-11-06', label: state.selfRating || null });
+    }
+    if (path === '/api/server-status/') {
+      if (method === 'PATCH') {
+        state.patches.push({ path, data });
+        if (!data.backup_copy_dir.startsWith('/'))
+          return respond({ backup_copy_dir: ['Бүтэн замыг оруулна уу.'] }, 400);
+        state.server.backup.copy_dir = data.backup_copy_dir;
+        state.server.backup.copy_dir_source = 'settings';
+      }
+      return respond(state.server);
+    }
+    if (path === '/api/monitoring-settings/') {
+      if (method === 'PATCH') {
+        state.patches.push({ path, data });
+        Object.assign(state.settings, data, { version: state.settings.version + 1 });
+      }
+      return respond(state.settings);
+    }
+    if (path === '/api/reports/export/')
+      return route.fulfill({
+        status: 200,
+        contentType: 'text/csv',
+        body: 'date,username\n2026-11-05,worker\n',
+      });
+    if (path === '/api/auth/login/') {
+      state.logins = [...(state.logins || []), data.username];
+      return respond(auth);
+    }
+    if (path === '/api/health/')
+      return respond({
+        status: 'ok',
+        service: 'worktrack-api',
+        protocol: 1,
+        ...(state.demo ? { demo: state.demo } : {}),
+      });
+    if (path === '/api/me/today/')
+      return respond({
+        date: '2026-11-06',
+        tracked_seconds: 3660,
+        application_seconds: 3600,
+        idle_seconds: 60,
+        open_tasks: 1,
+        overdue_tasks: 0,
+        applications: [{ application: state.appName, seconds: 3660 }],
+        latest_application: { application: state.appName },
+        tasks: [],
+        split: { work: 2400, other: 1200, idle: 60 },
+        schedule: { days: [0, 1, 2, 3, 4], start: '09:00', end: '18:00' },
+        outside_schedule_seconds: state.outsideSchedule || 0,
+        timeline: [
+          { slot: 36, start: '09:00', work: 600, other: 200, idle: 0 },
+          { slot: 37, start: '09:15', work: 100, other: 700, idle: 60 },
+          { slot: 40, start: '10:00', work: 900, other: 0, idle: 0 },
+        ],
+      });
+    if (path === '/api/me/week/') {
+      state.weekRequests = [...(state.weekRequests || []), url.searchParams.get('start') || ''];
+      const start = url.searchParams.get('start') || '2026-11-02';
+      const days = Array.from({ length: 7 }, (_, index) => {
+        const date = new Date(Date.parse(start + 'T00:00:00Z') + index * 86400000);
+        return {
+          date: date.toISOString().slice(0, 10),
+          task_seconds: index === 2 ? 7200 : index === 3 ? 1800 : 0,
+          application_seconds: index === 2 ? 10800 : index === 3 ? 3600 : 0,
+          idle_seconds: index === 2 ? 600 : 0,
+        };
+      });
+      return respond({
+        start,
+        end: days[6].date,
+        days,
+        totals: { task_seconds: 9000, application_seconds: 14400, idle_seconds: 600 },
+        tasks: [
+          { id: 11, title: 'Weekly design', status: 'IN_PROGRESS', seconds: 7200 },
+          { id: 12, title: 'Weekly review', status: 'DONE', seconds: 1800 },
+        ],
+        completed_tasks: 1,
+      });
+    }
+    if (path === '/api/me/password/') {
+      state.posts.push({ path, data });
+      return respond({ detail: 'changed' });
+    }
+    if (path === '/api/auth/refresh/') return respond({ access: 'new-access' });
+    if (path === '/api/users/me/') return respond(state.members[0]);
+    if (method === 'GET' && path === '/api/users/')
       return respond({ results: state.members, next: null });
-    if (method === "GET" && path === "/api/departments/")
+    if (method === 'GET' && path === '/api/departments/')
       return respond({ results: state.departments, next: null });
-    if (method === "GET" && path === "/api/tasks/")
+    if (method === 'GET' && path === '/api/tasks/')
       return respond({ results: state.tasks, next: null });
-    if (method === "POST" && path === "/api/users/") {
+    if (method === 'POST' && /^\/api\/users\/\d+\/reset-code\/$/.test(path)) {
+      state.posts.push({ path, data });
+      const code = ['ABCD-EFGH-JKLM', 'NPQR-STUV-WXYZ'][state.posts.length % 2];
+      return respond({ code, expires_at: '2026-11-08T10:00:00+08:00' }, 201);
+    }
+    if (method === 'POST' && path === '/api/users/') {
       state.posts.push({ path, data });
       const member = { ...data, id: 20, is_active: true };
       state.members.push(member);
       return respond(member, 201);
     }
-    if (method === "POST" && path === "/api/departments/") {
+    if (method === 'POST' && path === '/api/departments/') {
       state.posts.push({ path, data });
       const row = { ...data, id: 2 };
       state.departments.push(row);
       return respond(row, 201);
     }
-    if (method === "PATCH" && path.startsWith("/api/tasks/")) {
+    if (method === 'PATCH' && path.startsWith('/api/tasks/')) {
       state.patches.push({ path, data });
       Object.assign(state.tasks[0], data);
       return respond(state.tasks[0]);
     }
-    if (path === "/api/scores/calculate/") {
-      state.score = "75.00";
+    if (method === 'PATCH' && /^\/api\/users\/\d+\/$/.test(path)) {
+      state.patches.push({ path, data });
+      const member = state.members.find((row) => row.id === Number(path.split('/')[3]));
+      return respond(member);
+    }
+    if (path === '/api/scores/calculate/') {
+      state.score = '75.00';
       return respond({}, 201);
     }
-    if (path === "/api/scores/dashboard/")
+    if (path === '/api/scores/dashboard/') {
+      state.dashboardRequests = (state.dashboardRequests || 0) + 1;
+      const used = state.appName
+        ? [{ application: state.appName, category: 'WORK', seconds: 600 }]
+        : [];
       return respond({
-        score: { score: state.score, category: "LOW" },
-        applications: [
-          { application: state.appName, category: "WORK", seconds: 600 },
-        ],
-        application_categories: [{ category: "WORK", seconds: 600 }],
+        score: { score: state.score, category: 'LOW' },
+        applications: used,
+        application_categories: used.map(({ category, seconds }) => ({ category, seconds })),
         camera: [],
+        presence: state.presence,
       });
+    }
     return respond({ detail: `Unexpected request: ${method} ${path}` }, 500);
   });
   return state;
 }
 
-test("saving an existing task preserves an unfinished creation draft", async ({
-  page,
-}) => {
-  const state = await mockApp(page),
-    pending = gate();
-  await page.route("**/api/tasks/11/", async (route) => {
-    await pending.promise;
-    await route.fallback();
-  });
-  await page.goto("/");
-  await page.getByRole("button", { name: "Даалгавар", exact: true }).click();
-  const title = page.getByLabel("Даалгаврын нэр", { exact: true });
-  await title.fill("Keep this draft");
-  await page.getByLabel("Төлөв", { exact: true }).selectOption("Хийгдэж байна");
-  await expect(title).toBeDisabled();
-  await expect(title).toHaveValue("Keep this draft");
-  pending.release();
-  await expect(title).toBeEnabled();
-  await expect(title).toHaveValue("Keep this draft");
-  expect(state.patches[0].data.status).toBe("IN_PROGRESS");
-});
-
-test("quality validation shows an error and requires an explicit successful save", async ({
+test('one start button asks for consent once, then work and the camera switch follow', async ({
   page,
 }) => {
   const state = await mockApp(page);
-  await page.goto("/");
-  await page.getByRole("button", { name: "Даалгавар", exact: true }).click();
-  const quality = page.getByLabel("Чанарын үнэлгээ (0–100)", { exact: true });
-  await quality.fill("150");
-  await quality.blur();
-  await expect(page.getByRole("alert")).toContainText("0–100");
-  await page.getByRole("button", { name: "Үнэлгээ хадгалах" }).click();
-  expect(state.patches).toHaveLength(0);
-  await quality.fill("75.50");
-  await page.getByRole("button", { name: "Үнэлгээ хадгалах" }).click();
-  await expect(quality).toHaveValue("75.5");
-  expect(state.patches[0].data.quality_score).toBe(75.5);
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Миний өнөөдөр', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '1 цаг 0 мин', exact: true })).toBeVisible();
+  const start = page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true });
+  await expect(page.getByRole('checkbox', { name: 'Камер ашиглах' })).toHaveCount(0);
+  await start.click();
+  const dialog = page.getByRole('dialog', { name: 'Энэ компьютер дээр ажлаа бүртгэх' });
+  await expect(dialog).toContainText('Бүртгэхгүй: бичсэн текст, вэб хаяг, дэлгэцийн зураг');
+  const accept = dialog.getByRole('button', { name: 'Зөвшөөрөөд эхлүүлэх' });
+  await expect(accept).toBeDisabled();
+  await dialog.getByLabel('Компьютерийн нэр').fill('My QA Mac');
+  await dialog.getByRole('checkbox', { name: 'Зөвшөөрч байна' }).check();
+  await accept.click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Түр зогсоох', exact: true })).toBeVisible();
+  expect(state.desktopPosts.slice(0, 2)).toEqual(['connect', 'start']);
+  expect(state.desktop.device_name).toBe('My QA Mac');
+  expect(state.desktop.camera_running).toBe(false); // Never turned on by itself.
+  const camera = page.getByRole('checkbox', { name: 'Камер ашиглах' });
+  await camera.click();
+  await expect(camera).toBeChecked();
+  await camera.click();
+  await expect(camera).not.toBeChecked();
+  await page.getByRole('button', { name: 'Түр зогсоох', exact: true }).click();
+  await expect(camera).toBeDisabled(); // Only while working.
+  await page.getByRole('button', { name: 'Ажил үргэлжлүүлэх', exact: true }).click();
+  await page.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Дараа' }).click(); // The day's rating can wait.
+  // The last choice stays, so the next start is one click without asking again.
+  await expect(start).toBeEnabled();
+  await expect(page.getByLabel('Хийх даалгавар', { exact: true })).toHaveValue('none');
+  expect(state.desktop.computer_running).toBe(false);
+  await start.click();
+  await expect(page.getByRole('button', { name: 'Түр зогсоох', exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
-test("inactive members cannot be selected for a new task", async ({ page }) => {
+test('self-service password requires matching confirmation and returns to login after save', async ({
+  page,
+}) => {
+  const state = await mockApp(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Миний бүртгэл', exact: true }).click();
+  await page.getByLabel('Одоогийн нууц үг', { exact: true }).fill('Old-password-948!');
+  await page.getByLabel('Шинэ нууц үг', { exact: true }).fill('New-password-579!');
+  await page.getByLabel('Шинэ нууц үг давтах', { exact: true }).fill('Different-password-579!');
+  await page.getByRole('button', { name: 'Нууц үг солих', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('ижил');
+  expect(state.posts.some((row) => row.path === '/api/me/password/')).toBe(false);
+  await page.getByLabel('Шинэ нууц үг давтах', { exact: true }).fill('New-password-579!');
+  await page.getByRole('button', { name: 'Нууц үг солих', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'WorkTrack — Нэвтрэх', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText('Нууц үг солигдлоо');
+});
+
+test('a forgotten password is reset on the login page with the admin one-time code', async ({
+  page,
+}) => {
+  const requests = [];
+  await page.route('**/api/auth/reset-password/', (route) => {
+    const data = route.request().postDataJSON();
+    requests.push(data);
+    if (data.code !== 'ABCD-EFGH-JKLM')
+      return route.fulfill({
+        status: 400,
+        json: { code: ['Код буруу эсвэл хугацаа нь дууссан байна. Админаас шинэ код аваарай.'] },
+      });
+    return route.fulfill({ json: { detail: 'Нууц үг шинэчлэгдлээ.' } });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Нууц үгээ мартсан уу?' }).click();
+  await expect(page.getByRole('heading', { name: 'Нууц үг шинэчлэх' })).toBeVisible();
+  await page.getByLabel('Хэрэглэгчийн нэр').fill('worker');
+  const code = page.getByLabel('Сэргээх код');
+  await code.fill('ABCD-0000-JKLM');
+  await page.getByLabel('Шинэ нууц үг', { exact: true }).fill('Fresh-worktrack-48!');
+  await page.getByLabel('Шинэ нууц үг давтах').fill('Fresh-worktrack-48!');
+  await page.getByRole('button', { name: 'Шинэ нууц үг хадгалах' }).click();
+  await expect(page.getByRole('alert')).toContainText('Код буруу');
+  await expect(code).toHaveAttribute('aria-invalid', 'true');
+  await code.fill('ABCD-EFGH-JKLM');
+  await page.getByRole('button', { name: 'Шинэ нууц үг хадгалах' }).click();
+  await expect(page.getByRole('heading', { name: 'WorkTrack — Нэвтрэх' })).toBeVisible();
+  await expect(page.getByRole('status')).toContainText('Нууц үг шинэчлэгдлээ');
+  await expect(page.getByLabel('Хэрэглэгчийн нэр')).toHaveValue('worker');
+  expect(requests).toHaveLength(2);
+  expect(requests[1]).toEqual({
+    username: 'worker',
+    code: 'ABCD-EFGH-JKLM',
+    new_password: 'Fresh-worktrack-48!',
+    confirm_password: 'Fresh-worktrack-48!',
+  });
+});
+
+test('admin gives an employee a one-time reset code', async ({ page }) => {
+  const state = await mockApp(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Багийн гишүүд', exact: true }).click();
+  const worker = page
+    .locator('article')
+    .filter({ has: page.getByRole('heading', { name: 'Worker', exact: true }) });
+  await worker.getByRole('button', { name: 'Сэргээх код үүсгэх' }).click();
+  await expect(worker.getByRole('status')).toContainText('NPQR-STUV-WXYZ');
+  page.once('dialog', (dialog) => dialog.accept());
+  await worker.getByRole('button', { name: 'Сэргээх код үүсгэх' }).click();
+  await expect(worker.getByRole('status')).toContainText('ABCD-EFGH-JKLM');
+  expect(state.posts.map((row) => row.path)).toEqual([
+    '/api/users/2/reset-code/',
+    '/api/users/2/reset-code/',
+  ]);
+});
+
+test('launcher monthly clock waits under details and survives navigation and reload', async ({
+  page,
+}) => {
+  const state = await mockApp(page);
+  state.desktop.launcher_usage.months[0].seconds = 3661;
+  await page.goto('/');
+  const summary = page.getByRole('region', { name: 'Өнөөдрийн цаг', exact: true });
+  await expect(summary.getByLabel('Өнөөдрийн компьютерийн цаг', { exact: true })).toContainText(
+    '1 цаг 0 мин',
+  );
+  const clock = page.getByLabel('WorkTrack сарын хугацаа', { exact: true });
+  await expect(clock).not.toBeVisible(); // Folded under «Дэлгэрэнгүй».
+  await page.getByText('Дэлгэрэнгүй', { exact: true }).click();
+  await expect(clock).toContainText('01:01:01');
+  await expect(clock).toContainText('WorkTrack хаалттай байсан хугацааг тооцохгүй');
+  await expect(page.getByText('Идэвхгүй 1 мин.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Багийн гишүүд', exact: true }).click();
+  await expect(clock).toHaveCount(0);
+  state.desktop.launcher_usage.months[0].seconds = 3670;
+  await page.reload();
+  await page.getByText('Дэлгэрэнгүй', { exact: true }).click();
+  await expect(clock).toContainText('01:01:10');
+  await expect(clock).toHaveCount(1);
+  await clock.getByLabel('Сар сонгох').selectOption('2026-10');
+  await expect(clock).toContainText('25:00:00');
+  await page.waitForTimeout(1100);
+  await expect(clock).toContainText('25:00:00');
+  await clock.getByLabel('Сар сонгох').selectOption('');
+  await expect(clock).toContainText('01:01:');
+});
+
+test('admin finds monthly employees under reports and can inspect another month on mobile', async ({
+  page,
+}) => {
   await mockApp(page);
-  await page.goto("/");
-  await page.getByRole("button", { name: "Даалгавар", exact: true }).click();
-  const assignee = page.getByLabel("Хариуцах гишүүн", { exact: true });
+  await page.route('**/api/reports/monthly/**', (route) => {
+    const month = new URL(route.request().url()).searchParams.get('month');
+    return route.fulfill({
+      json: {
+        month,
+        generated_at: new Date().toISOString(),
+        employees: [
+          {
+            employee: 2,
+            name: 'Worker',
+            username: 'worker',
+            department: 'Engineering',
+            is_active: true,
+            launcher_seconds: month === '2026-10' ? 7200 : 36000,
+            launcher_recorded_since: '2026-10-01T00:00:00Z',
+            launcher_last_upload: new Date().toISOString(),
+            application_seconds: 18000,
+            idle_seconds: 3600,
+            task_seconds: 7200,
+            completed_tasks: [{ id: 1, title: 'Monthly report integration' }],
+            transfers_sent: 1,
+            transfers_received: 2,
+            tasks: [
+              {
+                id: 1,
+                title: 'Monthly report integration',
+                seconds: 7200,
+                contribution_percent: '35.00',
+              },
+            ],
+            applications: [
+              { application: 'Visual Studio Code', seconds: 18000 },
+              { application: 'Idle', seconds: 3600 },
+            ],
+          },
+        ],
+      },
+    });
+  });
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto('/');
+  const report = page.getByRole('region', { name: 'Сарын ажилтны тайлан', exact: true });
+  // "Миний өнөөдөр" keeps the admin's own work controls first; the report lives under "Тайлан".
+  await expect(page.getByRole('heading', { name: 'Одоо хийх ажил', exact: true })).toBeVisible();
+  await expect(report).toHaveCount(0);
+  await page.getByRole('button', { name: 'Тайлан', exact: true }).click();
+  await expect(report).toContainText('Worker');
+  await expect(report).toContainText('10:00:00');
+  await report.getByText('Worker — ажлын дэлгэрэнгүй').click();
+  await expect(report).toContainText('35.00%');
+  await expect(report).toContainText('Visual Studio Code');
+  await report.getByLabel('Тайлангийн сар').fill('2026-10');
+  await expect(report.locator('dl')).toContainText('02:00:00');
+  await expect(report.locator('dl')).not.toContainText('10:00:00');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await page.screenshot({ path: '.runtime/qa/monthly-report-mobile.png', fullPage: true });
+});
+
+test('task owner records time and percent then requests a handoff without changing the owner', async ({
+  page,
+}) => {
+  const state = await mockApp(page);
+  Object.assign(state.desktop, { linked: true, username: 'admin', device_name: 'QA laptop' });
+  Object.assign(state.tasks[0], {
+    employee: 1,
+    employee_name: 'admin',
+    transfer_count: 0,
+    can_manage: true,
+    collaboration: {
+      contributions: [
+        { employee: 1, username: 'admin', percent: '0', seconds: 0, time_share_percent: 0 },
+      ],
+      total_seconds: 0,
+      progress_percent: '0',
+      transfers: [],
+      pending_transfer: null,
+    },
+  });
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Даалгавар', exact: true }).click();
+  const card = page.getByLabel('Existing task — оролцоо', { exact: true });
+  await card.getByRole('button', { name: 'Энэ ажлыг сонгох', exact: true }).click();
+  await expect(page.getByLabel('Хийх даалгавар', { exact: true })).toHaveValue('11');
+  await page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true }).click();
+  await expect(page.getByLabel('Одоогийн даалгаврын цаг', { exact: true })).toContainText(
+    'Бүртгэж байна',
+  );
+  expect(state.desktop.computer_running).toBe(true);
+  expect(state.desktop.camera_running).toBe(false);
+  await page.getByRole('button', { name: 'Миний бүртгэл', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Түр зогсоох', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Ажлын удирдлагад очих', exact: true }).click();
+  await page.getByRole('button', { name: 'Түр зогсоох', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Ажил үргэлжлүүлэх', exact: true })).toBeEnabled();
+  expect(state.workSession).toBeNull();
+  expect(state.desktop.paused).toBe(true);
+  await page.getByRole('button', { name: 'Ажил үргэлжлүүлэх', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Түр зогсоох', exact: true })).toBeVisible();
+  expect(state.workSession.task_id).toBe(11);
+  expect(state.desktop.paused).toBe(false);
+  await page.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Дараа' }).click();
+  await expect(page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true })).toBeEnabled();
+  expect(state.workSession).toBeNull();
+  expect(state.desktop.computer_running).toBe(false);
+  await page.getByRole('button', { name: 'Даалгавар', exact: true }).click();
+  await card.getByLabel('Миний хийсэн хувь', { exact: false }).fill('35');
+  await card.getByRole('button', { name: 'Хувь хадгалах', exact: true }).click();
+  await expect(card.getByRole('heading', { name: 'Оролцоо · нийт 35%' })).toBeVisible();
+  await card.getByRole('button', { name: 'Шилжүүлэх хүсэлт', exact: true }).click();
+  await card.getByLabel('Хүлээн авах гишүүн', { exact: true }).selectOption('2');
+  await card
+    .getByLabel('Шилжүүлэх тайлбар', { exact: true })
+    .fill('Үлдсэн хэсгийг үргэлжлүүлнэ үү.');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await page.screenshot({ path: '.runtime/qa/task-collaboration-mobile.png', fullPage: true });
+  await card.getByRole('button', { name: 'Хүсэлт илгээх', exact: true }).click();
+  await expect(card).toContainText('admin → worker');
+  await expect(card).toContainText('Шилжүүлсэн: 0 / 2');
+  expect(state.tasks[0].employee).toBe(1);
+  expect(state.posts.find((row) => row.path.endsWith('/progress/')).data).toEqual({
+    percent: '35',
+    expected_percent: '0',
+  });
+});
+
+test('only the recipient sees acceptance controls and exhausted handoffs cannot be requested', async ({
+  page,
+}) => {
+  const state = await mockApp(page);
+  Object.assign(state.members[0], { is_admin: false, role: 'EMPLOYEE', department: 1 });
+  Object.assign(state.tasks[0], {
+    can_manage: false,
+    transfer_count: 1,
+    collaboration: {
+      contributions: [],
+      total_seconds: 0,
+      progress_percent: 0,
+      transfers: [],
+      pending_transfer: {
+        id: 92,
+        from_employee: 2,
+        to_employee: 1,
+        from_name: 'worker',
+        to_name: 'admin',
+        requested_by: 2,
+        status: 'PENDING',
+        note: 'Үргэлжлүүлнэ үү.',
+      },
+    },
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Даалгавар', exact: true }).click();
+  const card = page.getByLabel('Existing task — оролцоо', { exact: true });
+  await expect(card.getByRole('button', { name: 'Энэ ажлыг сонгох', exact: true })).toHaveCount(0);
+  await expect(card.getByRole('button', { name: 'Хүсэлт цуцлах', exact: true })).toHaveCount(0);
+  await card.getByRole('button', { name: 'Хүлээн авах', exact: true }).click();
+  await expect(card).toContainText('Шилжүүлсэн: 2 / 2');
+  await expect(card.getByRole('button', { name: 'Шилжүүлэх хүсэлт', exact: true })).toHaveCount(0);
+  await expect(card.getByRole('button', { name: 'Энэ ажлыг сонгох', exact: true })).toBeVisible();
+});
+
+test('admin resets the selected member password with confirmation, errors and cancel handling', async ({
+  page,
+}) => {
+  const state = await mockApp(page);
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Багийн гишүүд', exact: true }).click();
+  const worker = page
+    .locator('article')
+    .filter({ has: page.getByRole('heading', { name: 'Worker', exact: true }) });
+  await expect(worker).toContainText('Нэвтрэх нэр: worker');
+  await expect(
+    page
+      .locator('article')
+      .filter({ has: page.getByRole('heading', { name: 'Admin', exact: true }) })
+      .getByRole('button', { name: 'Нууц үг шинэчлэх', exact: true }),
+  ).toHaveCount(0);
+  const toggle = worker.getByRole('button', { name: 'Нууц үг шинэчлэх', exact: true });
+  await toggle.click();
+  const form = page.getByRole('form', { name: 'Нууц үг шинэчлэх — worker', exact: true });
+  const password = form.getByLabel('Шинэ нууц үг', { exact: true });
+  const confirmation = form.getByLabel('Шинэ нууц үг давтах', { exact: true });
+  await expect(password).toBeFocused();
+  await expect(password).toHaveAttribute('type', 'password');
+  await password.fill('Reset-password-921!');
+  await confirmation.fill('Different-password-921!');
+  await form.getByRole('button', { name: 'Шинэ нууц үг хадгалах' }).click();
+  await expect(form.getByRole('alert')).toContainText('ижил');
+  expect(state.patches).toHaveLength(0);
+  await form.getByRole('button', { name: 'Болих', exact: true }).click();
+  await expect(form).toHaveCount(0);
+  await expect(toggle).toBeFocused();
+  await toggle.click();
+  await expect(password).toHaveValue('');
+  await expect(confirmation).toHaveValue('');
+  await password.fill('password');
+  await confirmation.fill('password');
+  await page.route(
+    '**/api/users/2/',
+    (route) => route.fulfill({ status: 400, json: { password: ['This password is too common.'] } }),
+    { times: 1 },
+  );
+  await form.getByRole('button', { name: 'Шинэ нууц үг хадгалах' }).click();
+  await expect(form.getByRole('alert')).toContainText('Энэ нууц үг хэт түгээмэл байна.');
+  await expect(form.getByRole('alert')).toBeInViewport();
+  await expect(page.getByRole('alert')).toHaveCount(1);
+  await expect(page.locator('main > [role="alert"]')).toHaveCount(0);
+  await expect(password).toHaveAttribute('aria-invalid', 'true');
+  await expect(password).toBeFocused();
+  await expect(form).toBeVisible();
+  await expect(worker.getByRole('status')).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await password.fill('Reset-password-921!');
+  await expect(form.getByRole('alert')).toHaveCount(0);
+  await confirmation.fill('Reset-password-921!');
+  await form.getByRole('button', { name: 'Шинэ нууц үг хадгалах' }).click();
+  await expect(worker.getByRole('status')).toContainText('Нууц үг шинэчлэгдлээ');
+  await expect(form).toHaveCount(0);
+  await expect(page.locator('.sidebar')).toBeVisible();
+  expect(state.patches).toEqual([
+    { path: '/api/users/2/', data: { password: 'Reset-password-921!' } },
+  ]);
+});
+
+for (const role of ['EMPLOYEE', 'MANAGER']) {
+  test(`${role} cannot see admin password reset controls`, async ({ page }) => {
+    const state = await mockApp(page);
+    Object.assign(state.members[0], { role, is_admin: false, department: 1 });
+    await page.goto('/');
+    if (role === 'EMPLOYEE') {
+      await expect(page.getByRole('button', { name: 'Багийн гишүүд', exact: true })).toHaveCount(0);
+      return;
+    }
+    await page.getByRole('button', { name: 'Багийн гишүүд', exact: true }).click();
+    await expect(page.getByText('Нэвтрэх нэр: worker', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Нууц үг шинэчлэх', exact: true })).toHaveCount(
+      0,
+    );
+  });
+}
+
+test('today controls fit a small screen and unavailable local service offers retry', async ({
+  page,
+}) => {
+  const state = await mockApp(page);
+  state.appName = 'LongApplicationName'.repeat(12);
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Миний өнөөдөр', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await page.route('**/desktop/**', (route) =>
+    route.fulfill({ status: 503, json: { detail: 'Unavailable' } }),
+  );
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Дахин холбогдох', exact: true })).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText(
+    process.platform === 'win32' ? 'Start WorkTrack.bat' : 'WorkTrack.app',
+  );
+});
+
+test('camera permission failures explain the Windows privacy setting', async ({ page }) => {
+  const state = await mockApp(page);
+  Object.assign(state.desktop, {
+    platform: 'Windows',
+    linked: true,
+    username: 'admin',
+    device_name: 'QA PC',
+    errors: ['camera'],
+    camera_error: 'permission',
+  });
+  await page.goto('/');
+  await expect(page.getByRole('alert')).toContainText(
+    'Windows Settings → Privacy & security → Camera',
+  );
+});
+
+test('camera permission failures explain the macOS setting', async ({ page }) => {
+  const state = await mockApp(page);
+  Object.assign(state.desktop, {
+    linked: true,
+    username: 'admin',
+    device_name: 'QA Mac',
+    errors: ['camera'],
+    camera_error: 'permission',
+  });
+  await page.goto('/');
+  await expect(page.getByRole('alert')).toContainText(
+    'System Settings → Privacy & Security → Camera → WorkTrack Camera',
+  );
+  // The switch only works while work is recording.
+  await expect(page.getByRole('checkbox', { name: 'Камер ашиглах' })).toBeDisabled();
+});
+
+test('failed app start stops the newly created task timer and leaves an actionable inline error', async ({
+  page,
+}) => {
+  const state = await mockApp(page);
+  Object.assign(state.desktop, { linked: true, username: 'admin', device_name: 'QA laptop' });
+  state.tasks[0].employee = 1;
+  await page.route('**/desktop/start/', (route) =>
+    route.fulfill({ status: 403, json: { detail: 'Зөвшөөрлөө дахин шалгана уу.' } }),
+  );
+  await page.goto('/');
+  await page.getByLabel('Хийх даалгавар', { exact: true }).selectOption('11');
+  await page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true }).click();
+  const panel = page.getByRole('region', { name: 'Энэ компьютерийн удирдлага', exact: true });
+  await expect(panel.getByRole('alert')).toContainText('даалгаврын цагийг зогсоолоо');
+  expect(state.workSession).toBeNull();
+  expect(state.desktop.computer_running).toBe(false);
+  expect(state.posts.map((row) => row.path)).toEqual([
+    '/api/tasks/11/work-start/',
+    '/api/tasks/11/work-stop/',
+  ]);
+  await expect(panel.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true })).toBeEnabled();
+});
+
+test('a rejected task cannot start application collection', async ({ page }) => {
+  const state = await mockApp(page);
+  Object.assign(state.desktop, { linked: true, username: 'admin', device_name: 'QA laptop' });
+  state.tasks[0].employee = 1;
+  await page.route('**/api/tasks/11/work-start/', (route) =>
+    route.fulfill({ status: 409, json: { detail: 'Даалгавар шилжсэн байна.' } }),
+  );
+  await page.goto('/');
+  await page.getByLabel('Хийх даалгавар', { exact: true }).selectOption('11');
+  await page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true }).click();
+  await expect(
+    page
+      .getByRole('region', { name: 'Энэ компьютерийн удирдлага', exact: true })
+      .getByRole('alert'),
+  ).toContainText('Даалгавар шилжсэн');
+  expect(state.desktopPosts).not.toContain('start');
+  expect(state.workSession).toBeNull();
+});
+
+test('partial stop reports the failure and retry stops both streams', async ({ page }) => {
+  const state = await mockApp(page);
+  Object.assign(state.desktop, { linked: true, username: 'admin', device_name: 'QA laptop' });
+  state.tasks[0].employee = 1;
+  await page.goto('/');
+  await page.getByLabel('Хийх даалгавар', { exact: true }).selectOption('11');
+  await page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Түр зогсоох', exact: true })).toBeVisible();
+  await page.route('**/desktop/stop/', (route) =>
+    route.fulfill({ status: 503, json: { detail: 'Offline' } }),
+  );
+  await page.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
+  const panel = page.getByRole('region', { name: 'Энэ компьютерийн удирдлага', exact: true });
+  await expect(panel.getByRole('alert')).toContainText(
+    'Аппын бүртгэл зогссоныг баталгаажуулж чадсангүй',
+  );
+  expect(state.workSession).toBeNull();
+  expect(state.desktop.computer_running).toBe(true);
+  await page.unroute('**/desktop/stop/');
+  await page.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
+  // Alert нь дахин оролдох үед шууд арилдаг тул stop дууссаныг амжилтын мессежээр хүлээнэ.
+  await expect(panel.getByRole('status')).toContainText('аппын бүртгэлийг зогсоолоо');
+  await expect(panel.getByRole('alert')).toHaveCount(0);
+  expect(state.desktop.computer_running).toBe(false);
+});
+
+test('agent status, notifications and audit history are connected', async ({ page }) => {
+  const errors = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
+  const state = await mockApp(page);
+  state.notifications = [{ id: 'offline-1', kind: 'agent_offline', message: 'QA Laptop' }];
+  state.devices = [
+    {
+      id: 'device-1',
+      name: 'QA Laptop',
+      employee_name: 'worker',
+      platform: 'macOS',
+      enabled: true,
+      agents: [
+        {
+          kind: 'computer',
+          state: 'offline',
+          queue_count: 7,
+          seen_at: '2026-11-05T02:00:00Z',
+          last_upload_at: null,
+          error_code: 'network',
+          agent_version: '0.3.0',
+          settings_version: 2,
+        },
+      ],
+    },
+  ];
+  state.audit = [
+    {
+      id: 1,
+      actor_label: 'admin',
+      resource: 'task',
+      object_id: '11',
+      action: 'update',
+      created_at: '2026-11-05T02:00:00Z',
+      changes: { quality_score: { before: '50.00', after: '80.00' } },
+    },
+  ];
+  await page.goto('/');
+  await page.getByText('Мэдэгдэл (1)', { exact: true }).click();
+  await expect(page.getByText('Төхөөрөмж холболтгүй: QA Laptop')).toBeVisible();
+  await page.getByRole('button', { name: 'Харах', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Төхөөрөмжийн төлөв', exact: true }),
+  ).toBeVisible();
+  const device = page.getByLabel('QA Laptop computer', { exact: true });
+  await expect(device).toContainText('Холболтгүй');
+  await expect(device).toContainText('7');
+  await page.getByRole('button', { name: 'Өөрчлөлтийн түүх', exact: true }).click();
+  await expect(page.getByText('Чанарын үнэлгээ: "50.00" → "80.00"')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('admin settings save with a version and export downloads the chosen date range', async ({
+  page,
+}) => {
+  const state = await mockApp(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Тохиргоо', exact: true }).click();
+  await page.getByLabel('Камерын итгэлцлийн босго', { exact: true }).fill('0.65');
+  await page.getByRole('button', { name: 'Тохиргоо хадгалах', exact: true }).click();
+  await expect(page.getByText('Хадгаллаа.', { exact: false })).toBeVisible();
+  const saved = state.patches.find((row) => row.path === '/api/monitoring-settings/').data;
+  expect(saved.expected_version).toBe(1);
+  expect(saved.camera_threshold).toBe(0.65);
+  expect(saved.automatic_retention).toBe(false);
+  await page.getByLabel('Хувилбар (жишээ нь 1.1.0)', { exact: true }).fill('1.1.0');
+  await page.getByRole('button', { name: 'Тохиргоо хадгалах', exact: true }).click();
+  expect(state.patches).toHaveLength(1); // The browser asks for the download link first.
+  await page.getByLabel('Татах холбоос', { exact: true }).fill('https://example.mn/WorkTrack.zip');
+  await page.getByRole('button', { name: 'Тохиргоо хадгалах', exact: true }).click();
+  await expect.poll(() => state.patches.length).toBe(2);
+  expect(state.patches[1].data).toMatchObject({
+    client_version: '1.1.0',
+    client_download_url: 'https://example.mn/WorkTrack.zip',
+  });
+  await page.getByRole('button', { name: 'Тайлан', exact: true }).click();
+  await page.getByLabel('Эхлэх өдөр', { exact: true }).fill('2026-11-01');
+  await page.getByLabel('Дуусах өдөр', { exact: true }).fill('2026-11-05');
+  const downloading = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Тайлан татах', exact: true }).click();
+  const download = await downloading;
+  expect(download.suggestedFilename()).toBe('worktrack-2026-11-01-2026-11-05.csv');
+});
+
+test('camera presence observations appear without being shown as worked minutes', async ({
+  page,
+}) => {
+  const state = await mockApp(page);
+  state.presence = {
+    samples: 5,
+    present_samples: 3,
+    absent_samples: 2,
+    latest_present: false,
+    latest_confidence: 0,
+    present_percent: 60,
+  };
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Тайлан', exact: true }).click();
+  const presence = page.getByLabel('Камерын илрүүлэлт', { exact: true });
+  await expect(presence).toBeVisible();
+  await expect(presence).toContainText('3 / 5');
+  await expect(presence).toContainText('Хүн илрээгүй');
+  await expect(presence).toContainText('0.0%');
+  await expect(presence).toContainText('ажилласан минутыг илэрхийлэхгүй');
+  state.presence = {
+    samples: 1,
+    present_samples: 1,
+    absent_samples: 0,
+    latest_present: true,
+    latest_confidence: 0.81,
+    present_percent: 100,
+  };
+  await page.reload();
+  await page.getByRole('button', { name: 'Тайлан', exact: true }).click();
+  await expect(presence).toContainText('1 / 1');
+  await expect(presence).toContainText('81.0%');
+});
+
+test('saving an existing task preserves an unfinished creation draft', async ({ page }) => {
+  const state = await mockApp(page),
+    pending = gate();
+  await page.route('**/api/tasks/11/', async (route) => {
+    await pending.promise;
+    await route.fallback();
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Даалгавар', exact: true }).click();
+  const title = page.getByLabel('Даалгаврын нэр', { exact: true });
+  await title.fill('Keep this draft');
+  await page.getByLabel('Төлөв', { exact: true }).selectOption('Хийгдэж байна');
+  await expect(title).toBeDisabled();
+  await expect(title).toHaveValue('Keep this draft');
+  pending.release();
+  await expect(title).toBeEnabled();
+  await expect(title).toHaveValue('Keep this draft');
+  expect(state.patches[0].data.status).toBe('IN_PROGRESS');
+});
+
+test('quality validation shows an error and requires an explicit successful save', async ({
+  page,
+}) => {
+  const state = await mockApp(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Даалгавар', exact: true }).click();
+  const quality = page.getByLabel('Чанарын үнэлгээ (0–100)', { exact: true });
+  await quality.fill('150');
+  await quality.blur();
+  await expect(page.getByRole('alert')).toContainText('0–100');
+  await page.getByRole('button', { name: 'Үнэлгээ хадгалах' }).click();
+  expect(state.patches).toHaveLength(0);
+  await quality.fill('75.50');
+  await page.getByRole('button', { name: 'Үнэлгээ хадгалах' }).click();
+  await expect(quality).toHaveValue('75.5');
+  expect(state.patches[0].data.quality_score).toBe(75.5);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('inactive members cannot be selected for a new task', async ({ page }) => {
+  await mockApp(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Даалгавар', exact: true }).click();
+  const assignee = page.getByLabel('Хариуцах гишүүн', { exact: true });
   await expect(assignee.locator('option[value="2"]')).toHaveCount(1);
   await expect(assignee.locator('option[value="3"]')).toHaveCount(0);
 });
 
-test("manager creation requires and submits a department", async ({ page }) => {
+test('manager creation requires and submits a department', async ({ page }) => {
   const state = await mockApp(page);
-  await page.goto("/");
-  await page
-    .getByRole("button", { name: "Багийн гишүүд", exact: true })
-    .click();
-  await page
-    .getByLabel("Хэрэглэгчийн нэр", { exact: true })
-    .fill("new-manager");
-  await page.getByLabel("Нэр", { exact: true }).fill("Manager");
-  await page
-    .getByLabel("Анхны нууц үг", { exact: true })
-    .fill("Some-long-manager-password-2026");
-  await page.getByLabel("Эрх", { exact: true }).selectOption("MANAGER");
-  await page.getByRole("button", { name: "Гишүүн нэмэх", exact: true }).click();
-  expect(state.posts.filter((row) => row.path === "/api/users/")).toHaveLength(
-    0,
-  );
-  await page.getByLabel("Хэлтэс (заавал)", { exact: true }).selectOption("1");
-  await page.getByRole("button", { name: "Гишүүн нэмэх", exact: true }).click();
-  await expect(
-    page.getByLabel("Хэрэглэгчийн нэр", { exact: true }),
-  ).toHaveValue("");
-  const saved = state.posts.find((row) => row.path === "/api/users/").data;
-  expect(saved.role).toBe("MANAGER");
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Багийн гишүүд', exact: true }).click();
+  await page.getByLabel('Хэрэглэгчийн нэр', { exact: true }).fill('new-manager');
+  await page.getByLabel('Нэр', { exact: true }).fill('Manager');
+  await page.getByLabel('Анхны нууц үг', { exact: true }).fill('Some-long-manager-password-2026');
+  await page.getByLabel('Эрх', { exact: true }).selectOption('MANAGER');
+  await page.getByRole('button', { name: 'Гишүүн нэмэх', exact: true }).click();
+  expect(state.posts.filter((row) => row.path === '/api/users/')).toHaveLength(0);
+  await page.getByLabel('Хэлтэс (заавал)', { exact: true }).selectOption('1');
+  await page.getByRole('button', { name: 'Гишүүн нэмэх', exact: true }).click();
+  await expect(page.getByLabel('Хэрэглэгчийн нэр', { exact: true })).toHaveValue('');
+  const saved = state.posts.find((row) => row.path === '/api/users/').data;
+  expect(saved.role).toBe('MANAGER');
   expect(saved.department).toBe(1);
 });
 
-test("report selection hides old data immediately and ignores a late response", async ({
+test('report selection hides old data immediately and ignores a late response', async ({
   page,
 }) => {
   await mockApp(page);
   const delayed = gate();
-  await page.route("**/api/scores/dashboard/**", async (route) => {
-    if (
-      new URL(route.request().url()).searchParams.get("employee_id") === "2"
-    ) {
+  await page.route('**/api/scores/dashboard/**', async (route) => {
+    if (new URL(route.request().url()).searchParams.get('employee_id') === '2') {
       await delayed.promise;
       await route
         .fulfill({
           json: {
-            score: { score: "12.00", category: "LOW" },
+            score: { score: '12.00', category: 'LOW' },
             applications: [],
             camera: [],
           },
@@ -218,133 +1153,533 @@ test("report selection hides old data immediately and ignores a late response", 
         .catch(() => {});
     } else await route.fallback();
   });
-  await page.goto("/");
-  await expect(page.locator(".activity-score-card h3")).toHaveText("42.00");
-  await page.getByLabel("Тайлангийн ажилтан").selectOption("2");
-  await expect(page.locator(".activity-score-card")).toHaveCount(0);
-  await expect(page.getByRole("status")).toContainText("Тайлан уншиж");
-  await page.getByLabel("Тайлангийн ажилтан").selectOption("3");
-  await expect(page.locator(".activity-score-card h3")).toHaveText("42.00");
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Тайлан', exact: true }).click();
+  await expect(page.locator('.activity-score-card h3')).toHaveText('42.00');
+  await page.getByLabel('Тайлангийн ажилтан').selectOption('2');
+  await expect(page.locator('.activity-score-card')).toHaveCount(0);
+  await expect(page.getByRole('status')).toContainText('Тайлан уншиж');
+  await page.getByLabel('Тайлангийн ажилтан').selectOption('3');
+  await expect(page.locator('.activity-score-card h3')).toHaveText('42.00');
   delayed.release();
-  await expect(page.locator(".activity-score-card h3")).toHaveText("42.00");
+  await expect(page.locator('.activity-score-card h3')).toHaveText('42.00');
 });
 
-test("logout revokes the server session and a late report cannot restore the UI", async ({
+test('logout revokes the server session and a late report cannot restore the UI', async ({
   page,
 }) => {
   const state = await mockApp(page),
     delayed = gate();
-  await page.route("**/api/scores/dashboard/**", async (route) => {
+  await page.route('**/api/scores/dashboard/**', async (route) => {
     await delayed.promise;
     await route.fallback().catch(() => {});
   });
-  await page.goto("/");
-  await page.getByRole("button", { name: "Гарах", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "WorkTrack — Нэвтрэх" }),
-  ).toBeVisible();
-  expect(
-    state.posts.find((row) => row.path === "/api/auth/logout/").data.refresh,
-  ).toBe(auth.refresh);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Гарах', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'WorkTrack — Нэвтрэх' })).toBeVisible();
+  expect(state.posts.find((row) => row.path === '/api/auth/logout/').data.refresh).toBe(
+    auth.refresh,
+  );
   delayed.release();
-  await expect(page.locator(".sidebar")).toHaveCount(0);
-  expect(
-    await page.evaluate(() => sessionStorage.getItem("worktrack-auth")),
-  ).toBeNull();
+  await expect(page.locator('.sidebar')).toHaveCount(0);
+  expect(await page.evaluate(() => sessionStorage.getItem('worktrack-auth'))).toBeNull();
 });
 
-test("startup backend outage preserves login and supports retry", async ({
-  page,
-}) => {
+test('startup backend outage preserves login and supports retry', async ({ page }) => {
   await mockApp(page);
   let unavailable = true;
-  await page.route("**/api/users/me/", (route) =>
+  await page.route('**/api/users/me/', (route) =>
     unavailable
-      ? route.fulfill({ status: 503, json: { detail: "Temporarily offline" } })
+      ? route.fulfill({ status: 503, json: { detail: 'Temporarily offline' } })
       : route.fallback(),
   );
-  await page.goto("/");
-  await expect(
-    page.getByRole("button", { name: "Дахин холбогдох" }),
-  ).toBeVisible();
-  expect(
-    await page.evaluate(() => sessionStorage.getItem("worktrack-auth")),
-  ).not.toBeNull();
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Дахин холбогдох' })).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem('worktrack-auth'))).not.toBeNull();
   unavailable = false;
-  await page.getByRole("button", { name: "Дахин холбогдох" }).click();
-  await expect(page.locator(".sidebar")).toBeVisible();
+  await page.getByRole('button', { name: 'Дахин холбогдох' }).click();
+  await expect(page.locator('.sidebar')).toBeVisible();
 });
 
-test("failed server logout keeps the current session for retry", async ({
-  page,
-}) => {
+test('failed server logout keeps the current session for retry', async ({ page }) => {
   await mockApp(page);
   let unavailable = true;
-  await page.route("**/api/auth/logout/", (route) =>
+  await page.route('**/api/auth/logout/', (route) =>
     unavailable
-      ? route.fulfill({ status: 503, json: { detail: "Logout unavailable" } })
+      ? route.fulfill({ status: 503, json: { detail: 'Logout unavailable' } })
       : route.fallback(),
   );
-  await page.goto("/");
-  await page.getByRole("button", { name: "Гарах", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("Logout unavailable");
-  await expect(page.locator(".sidebar")).toBeVisible();
-  expect(
-    await page.evaluate(() => sessionStorage.getItem("worktrack-auth")),
-  ).not.toBeNull();
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Гарах', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Logout unavailable');
+  await expect(page.locator('.sidebar')).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem('worktrack-auth'))).not.toBeNull();
   unavailable = false;
-  await page.getByRole("button", { name: "Гарах", exact: true }).click();
-  await expect(page.locator(".sidebar")).toHaveCount(0);
+  await page.getByRole('button', { name: 'Гарах', exact: true }).click();
+  await expect(page.locator('.sidebar')).toHaveCount(0);
 });
 
-test("invalid refresh returns the user to login instead of leaving a stale dashboard", async ({
+test('invalid refresh returns the user to login instead of leaving a stale dashboard', async ({
   page,
 }) => {
   await mockApp(page);
-  await page.route("**/api/users/me/", (route) =>
-    route.fulfill({ status: 401, json: { detail: "Expired" } }),
+  await page.route('**/api/users/me/', (route) =>
+    route.fulfill({ status: 401, json: { detail: 'Expired' } }),
   );
-  await page.route("**/api/auth/refresh/", (route) =>
-    route.fulfill({ status: 401, json: { detail: "Expired refresh" } }),
+  await page.route('**/api/auth/refresh/', (route) =>
+    route.fulfill({ status: 401, json: { detail: 'Expired refresh' } }),
   );
-  await page.goto("/");
-  await expect(
-    page.getByRole("heading", { name: "WorkTrack — Нэвтрэх" }),
-  ).toBeVisible();
-  await expect(page.getByRole("alert")).toContainText(
-    "Нэвтрэх хугацаа дууссан",
-  );
-  expect(
-    await page.evaluate(() => sessionStorage.getItem("worktrack-auth")),
-  ).toBeNull();
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'WorkTrack — Нэвтрэх' })).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText('Нэвтрэх хугацаа дууссан');
+  expect(await page.evaluate(() => sessionStorage.getItem('worktrack-auth'))).toBeNull();
 });
 
-test("activity charts fit a 320px viewport with long application names", async ({
-  page,
-}) => {
+test('activity charts fit a 320px viewport with long application names', async ({ page }) => {
   const state = await mockApp(page);
-  state.appName = "VeryLongApplicationName".repeat(8);
+  state.appName = 'VeryLongApplicationName'.repeat(8);
   await page.setViewportSize({ width: 320, height: 800 });
-  await page.goto("/");
-  await expect(page.locator(".activity-score-card")).toBeVisible();
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth,
-    ),
-  ).toBe(true);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Тайлан', exact: true }).click();
+  await expect(page.locator('.activity-score-card')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
 });
 
-test("an incomplete numeric quality value cannot clear a saved grade", async ({
+test('an incomplete numeric quality value cannot clear a saved grade', async ({ page }) => {
+  const state = await mockApp(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Даалгавар', exact: true }).click();
+  const quality = page.getByLabel('Чанарын үнэлгээ (0–100)', { exact: true });
+  await quality.fill('');
+  await quality.press('e');
+  await quality.blur();
+  await expect(page.getByRole('alert')).toContainText('Тоон үнэлгээ');
+  await page.getByRole('button', { name: 'Үнэлгээ хадгалах' }).click();
+  expect(state.patches).toHaveLength(0);
+});
+
+test('first run creates the administrator in the browser and signs straight in', async ({
+  page,
+}) => {
+  await mockApp(page);
+  await page.addInitScript(() => sessionStorage.removeItem('worktrack-auth'));
+  const created = [];
+  await page.route('**/api/setup/', (route) => {
+    if (route.request().method() !== 'POST')
+      return route.fulfill({ json: { needs_admin: true, setup_available: true } });
+    const body = route.request().postDataJSON();
+    created.push(body);
+    if (body.password === 'password')
+      return route.fulfill({
+        status: 400,
+        json: { password: ['This password is too common.'] },
+      });
+    return route.fulfill({
+      status: 201,
+      json: { detail: 'Админ үүслээ.', username: body.username },
+    });
+  });
+  await page.goto('/#setup=one-time-token_123');
+  await expect(page.getByRole('heading', { name: 'WorkTrack — Анхны тохиргоо' })).toBeVisible();
+  await page.getByLabel('Админы нэвтрэх нэр', { exact: true }).fill('admin');
+  await page.getByLabel('Нууц үг', { exact: true }).fill('password');
+  await page.getByLabel('Нууц үг давтах', { exact: true }).fill('password');
+  await page.getByRole('button', { name: 'Админ үүсгээд нэвтрэх', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('хэт түгээмэл');
+  await page.getByLabel('Нууц үг', { exact: true }).fill('Ulaanbaatar-2026!');
+  await page.getByLabel('Нууц үг давтах', { exact: true }).fill('Ulaanbaatar-2026!');
+  await page.getByRole('button', { name: 'Админ үүсгээд нэвтрэх', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Миний өнөөдөр', exact: true })).toBeVisible();
+  expect(created.at(-1)).toMatchObject({ token: 'one-time-token_123', username: 'admin' });
+  expect(new URL(page.url()).hash).toBe(''); // The secret does not stay in the address bar.
+});
+
+test('login page explains how to create the first administrator', async ({ page }) => {
+  await mockApp(page);
+  await page.addInitScript(() => sessionStorage.removeItem('worktrack-auth'));
+  await page.route('**/api/setup/', (route) =>
+    route.fulfill({ json: { needs_admin: true, setup_available: false } }),
+  );
+  await page.goto('/');
+  await expect(page.getByText('Админ хараахан үүсээгүй байна.')).toBeVisible();
+});
+
+test('my week shows time per day and per task and moves between weeks', async ({ page }) => {
+  const state = await mockApp(page);
+  await page.goto('/');
+  const week = page.getByRole('region', { name: 'Миний 7 хоног', exact: true });
+  await expect(week).toContainText('11/02 – 11/08');
+  await expect(week).toContainText('Даалгаварт 2 цаг 30 мин');
+  await expect(
+    week.getByLabel('Даваа 11/02: даалгаварт 0 сек, компьютер дээр 0 сек'),
+  ).toContainText('Бүртгэлгүй');
+  await expect(
+    week.getByLabel('Лхагва 11/04: даалгаварт 2 цаг 0 мин, компьютер дээр 3 цаг 0 мин'),
+  ).toBeVisible();
+  await expect(week).toContainText('Weekly design');
+  await expect(week.getByRole('button', { name: 'Дараах ›' })).toBeDisabled();
+  await week.getByRole('button', { name: '‹ Өмнөх' }).click();
+  await expect(week).toContainText('10/26 – 11/01');
+  await week.getByRole('button', { name: 'Дараах ›' }).click();
+  await expect(week).toContainText('11/02 – 11/08');
+  expect(state.weekRequests).toEqual(expect.arrayContaining(['', '2026-10-26']));
+});
+
+test('a reminder shows on the page and reminders can be turned off', async ({ page }) => {
+  const state = await mockApp(page);
+  Object.assign(state.desktop, {
+    linked: true,
+    username: 'admin',
+    device_name: 'QA laptop',
+    reminder: 'Ажил эхлүүлэхээ мартсан уу? WorkTrack дээр «Ажил эхлүүлэх» дарна уу.',
+  });
+  await page.goto('/');
+  const panel = page.getByRole('region', { name: 'Энэ компьютерийн удирдлага', exact: true });
+  await expect(panel.getByRole('status')).toContainText('Ажил эхлүүлэхээ мартсан уу?');
+  await panel.getByText('Бусад тохиргоо').click();
+  const reminders = panel.getByRole('checkbox', { name: 'Ажил эхлүүлэхээ мартвал сануулах' });
+  await expect(reminders).toBeChecked();
+  await reminders.click();
+  await expect(reminders).not.toBeChecked();
+  expect(state.desktop.reminders_enabled).toBe(false);
+});
+
+test('starting at sign-in is explained before linking and can be switched off', async ({
   page,
 }) => {
   const state = await mockApp(page);
-  await page.goto("/");
-  await page.getByRole("button", { name: "Даалгавар", exact: true }).click();
-  const quality = page.getByLabel("Чанарын үнэлгээ (0–100)", { exact: true });
-  await quality.fill("");
-  await quality.press("e");
-  await quality.blur();
-  await expect(page.getByRole("alert")).toContainText("Тоон үнэлгээ");
-  await page.getByRole("button", { name: "Үнэлгээ хадгалах" }).click();
-  expect(state.patches).toHaveLength(0);
+  Object.assign(state.desktop, {
+    autostart_supported: true,
+    autostart_enabled: false,
+    autostart_on_connect: true,
+  });
+  await page.goto('/');
+  const panel = page.getByRole('region', { name: 'Энэ компьютерийн удирдлага', exact: true });
+  await panel.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('Компьютер асахад WorkTrack далд асна')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Болих' }).click();
+  await panel.getByText('Бусад тохиргоо').click();
+  const toggle = panel.getByRole('checkbox', {
+    name: 'Компьютер асахад WorkTrack-ийг автоматаар асаах',
+  });
+  // The box follows the computer's answer, so it changes after the click is saved.
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
+  expect(state.desktopPosts).toEqual(['autostart-on', 'autostart-off']);
+});
+
+test('an older employee app links to the new version', async ({ page }) => {
+  const state = await mockApp(page);
+  Object.assign(state.desktop, {
+    linked: true,
+    username: 'admin',
+    device_name: 'QA laptop',
+    version: '1.0.0',
+    update: { version: '1.1.0', download_url: 'https://example.mn/WorkTrack.zip' },
+  });
+  await page.goto('/');
+  const panel = page.getByRole('region', { name: 'Энэ компьютерийн удирдлага', exact: true });
+  await expect(panel.getByText('шинэ хувилбар 1.1.0 гарлаа')).toBeVisible();
+  await expect(panel.getByRole('link', { name: 'Татаж авах' })).toHaveAttribute(
+    'href',
+    'https://example.mn/WorkTrack.zip',
+  );
+  state.desktop.update = { version: '9.9.9', download_url: 'javascript:alert(1)' };
+  await page.reload();
+  await expect(panel.getByRole('button', { name: 'Ажил эхлүүлэх' })).toBeVisible();
+  await expect(panel.getByRole('link', { name: 'Татаж авах' })).toHaveCount(0);
+});
+
+test('admin sees how employees connect, the last backup and sets a second backup folder', async ({
+  page,
+}) => {
+  const state = await mockApp(page);
+  state.server.share = {
+    addresses: ['https://192.168.1.20:8443', 'https://10.0.0.5:8443'],
+    code: 'AB12-CD34-EF56',
+  };
+  state.server.backup.status = {
+    last_success_at: '2026-11-07T09:00:00+08:00',
+    last_copy_at: null,
+    error: 'Хоёр дахь хуулбарын хавтас олдсонгүй: /Volumes/USB.',
+  };
+  state.notifications = [
+    { id: 'server-backup_failed', kind: 'backup_failed', message: 'Хавтас олдсонгүй' },
+  ];
+  await page.goto('/');
+  await page.getByText('Мэдэгдэл (1)', { exact: true }).click();
+  await expect(page.getByText('Backup амжилтгүй: Хавтас олдсонгүй')).toBeVisible();
+  await page.getByRole('button', { name: 'Харах', exact: true }).click();
+  const server = page.getByRole('region', { name: 'Сервер ба backup' });
+  await expect(server.getByText('https://192.168.1.20:8443')).toBeVisible();
+  await expect(server.getByText('AB12-CD34-EF56')).toBeVisible();
+  await expect(server.getByRole('alert')).toContainText('хавтас олдсонгүй');
+  await expect(server.getByText('Одоогоор backup зөвхөн серверийн компьютер дээр')).toBeVisible();
+  const folder = server.getByLabel('Хоёр дахь хуулбарын хавтас (серверийн компьютер дээр)');
+  await folder.fill('usb');
+  await server.getByRole('button', { name: 'Хавтас хадгалах' }).click();
+  await expect(server.getByText('Бүтэн замыг оруулна уу.')).toBeVisible();
+  await folder.fill('/Volumes/USB/WorkTrack');
+  await server.getByRole('button', { name: 'Хавтас хадгалах' }).click();
+  await expect(server.getByText('Хадгаллаа.', { exact: false })).toBeVisible();
+  await expect(folder).toHaveValue('/Volumes/USB/WorkTrack');
+  await expect(server.getByText('Одоогоор backup зөвхөн серверийн компьютер дээр')).toHaveCount(0);
+});
+
+test('the next day starts with one click on the task used last time', async ({ page }) => {
+  const state = await mockApp(page);
+  state.tasks[0].employee = 1; // A task of the signed-in person.
+  Object.assign(state.desktop, { linked: true, username: 'admin', device_name: 'QA laptop' });
+  await page.goto('/');
+  const panel = page.getByRole('region', { name: 'Энэ компьютерийн удирдлага', exact: true });
+  const start = panel.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true });
+  const task = panel.getByLabel('Хийх даалгавар', { exact: true });
+  await expect(start).toBeEnabled(); // Ready at once; without a choice it records computer time only.
+  await task.selectOption('11');
+  await start.click();
+  await expect(panel.getByRole('button', { name: 'Түр зогсоох', exact: true })).toBeVisible();
+  // Saved right after the start; slower machines may need a moment.
+  await expect.poll(() => state.desktop.last_task).toEqual({ task: '11', title: 'Existing task' });
+  await panel.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
+  await expect(start).toBeEnabled();
+  expect(state.desktop.computer_running).toBe(false);
+  await page.reload(); // Next morning: the page remembers nothing, the computer does.
+  await expect(task).toHaveValue('11');
+  await start.click();
+  await expect(panel.getByRole('button', { name: 'Түр зогсоох', exact: true })).toBeVisible();
+  expect(state.workSession.task_id).toBe(11);
+  expect(state.desktopPosts.filter((action) => action === 'start')).toHaveLength(2);
+});
+
+test('the day overview explains an empty day, speaks Mongolian and refreshes today', async ({
+  page,
+}) => {
+  const state = await mockApp(page);
+  state.appName = null; // Nothing recorded yet today.
+  await page.clock.install();
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Тайлан', exact: true }).click();
+  const apps = page
+    .locator('.activity-detail-card')
+    .filter({ has: page.getByRole('heading', { name: 'Аппын хэрэглээ', exact: true }) });
+  await expect(apps).toContainText('компьютерээс аппын хэрэглээ ирээгүй байна');
+  await expect(apps).toContainText('Төхөөрөмж холбогдоогүй, ажил эхлүүлээгүй');
+  await expect(page.getByText('Бага', { exact: true })).toBeVisible(); // Score level, not LOW.
+  await expect(page.getByText('Application activity')).toHaveCount(0);
+  state.appName = 'Visual Studio Code'; // The agent sends its first minutes.
+  const before = state.dashboardRequests;
+  await page.clock.fastForward(31000);
+  await expect.poll(() => state.dashboardRequests).toBeGreaterThan(before);
+  await expect(apps).toContainText('Visual Studio Code');
+  await expect(page.getByText('Ажлын програм', { exact: true })).toBeVisible();
+  state.appName = null;
+  await page.getByLabel('Тайлангийн огноо').fill('2026-10-01');
+  await expect(apps).toContainText('Тэр өдөр ажил эхлүүлээгүй');
+  await apps.getByRole('button', { name: 'Төхөөрөмжийн төлөв харах' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Төхөөрөмжийн төлөв', exact: true }),
+  ).toBeVisible();
+});
+
+test('each role sees only its own menu', async ({ page }) => {
+  const state = await mockApp(page);
+  const menu = () =>
+    page
+      .locator('.sidebar nav button')
+      .evaluateAll((items) => items.map((item) => item.textContent));
+  await page.goto('/');
+  await expect
+    .poll(menu)
+    .toEqual([
+      'Миний өнөөдөр',
+      'Даалгавар',
+      'Багийн гишүүд',
+      'Тайлан',
+      'Төхөөрөмжийн төлөв',
+      'Өөрчлөлтийн түүх',
+      'Тохиргоо',
+      'Миний бүртгэл',
+    ]);
+  Object.assign(state.members[0], { role: 'MANAGER', is_admin: false, department: 1 });
+  await page.reload();
+  await expect
+    .poll(menu)
+    .toEqual(['Миний өнөөдөр', 'Даалгавар', 'Багийн гишүүд', 'Тайлан', 'Миний бүртгэл']);
+  Object.assign(state.members[0], { role: 'EMPLOYEE', is_admin: false, department: 1 });
+  await page.reload();
+  await expect.poll(menu).toEqual(['Миний өнөөдөр', 'Даалгавар', 'Миний бүртгэл']);
+});
+
+test('finishing the day asks once how productive it was', async ({ page }) => {
+  const state = await mockApp(page);
+  Object.assign(state.desktop, { linked: true, username: 'admin', device_name: 'QA laptop' });
+  await page.goto('/');
+  const panel = page.getByRole('region', { name: 'Энэ компьютерийн удирдлага', exact: true });
+  // Worked today but not rated yet: the page offers the question without a pop-up.
+  await expect(panel.getByText('Өнөөдөр хэр бүтээмжтэй байсан бэ?')).toBeVisible();
+  await panel.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true }).click();
+  await panel.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Өнөөдөр хэр бүтээмжтэй байсан бэ?' });
+  await expect(dialog).toContainText('Албан ёсны оноонд нөлөөлөхгүй');
+  await dialog.getByRole('button', { name: 'Дунд' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(panel.getByText('Өнөөдрийн үнэлгээ:')).toContainText('Дунд');
+  expect(state.ratings).toEqual(['MEDIUM']);
+  await panel.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true }).click();
+  await panel.getByRole('button', { name: 'Ажил дуусгах', exact: true }).click();
+  await expect(panel.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true })).toBeEnabled();
+  await expect(page.getByRole('dialog')).toHaveCount(0); // Answered already: not asked again.
+  await panel.getByRole('button', { name: 'Өөрчлөх' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Өндөр' }).click();
+  await expect(panel.getByText('Өнөөдрийн үнэлгээ:')).toContainText('Өндөр');
+  expect(state.ratings).toEqual(['MEDIUM', 'HIGH']);
+});
+
+test('charts show the day, the score, the month and the tasks, each with a table view', async ({
+  page,
+}) => {
+  const state = await mockApp(page);
+  await page.route('**/api/scores/dashboard/**', (route) =>
+    route.fulfill({
+      json: {
+        score: {
+          score: '71.80',
+          category: 'MEDIUM',
+          task_completion: '75.00',
+          quality: '82.00',
+          deadline_completion: '70.00',
+          work_process: '38.00',
+        },
+        applications: [],
+        application_categories: [],
+        camera: [],
+        presence: null,
+        score_trend: [
+          {
+            date: '2026-11-04',
+            score: 60,
+            task_completion: 50,
+            quality: 80,
+            deadline_completion: 50,
+            work_process: 40,
+          },
+          {
+            date: '2026-11-05',
+            score: 71.8,
+            task_completion: 75,
+            quality: 82,
+            deadline_completion: 70,
+            work_process: 38,
+          },
+        ],
+        presence_by_hour: [{ hour: 9, present: 3000, absent: 600 }],
+      },
+    }),
+  );
+  await page.goto('/');
+  // Миний өнөөдөр: where the time went, and when.
+  await expect(
+    page.getByRole('img', { name: /Өнөөдөр компьютер дээрх цаг: Ажлын програм 40 мин \(66%\)/ }),
+  ).toBeVisible();
+  const slot = page.getByLabel('09:00–09:15: Ажлын програм 10 мин, Бусад програм 3 мин');
+  await slot.focus();
+  await expect(page.locator('.viz-tip')).toContainText('Ихэнхдээ: Ажлын програм');
+  // Тайлан: the four parts of the score, the weakest flagged, the 30-day line and the camera.
+  await page.getByRole('button', { name: 'Тайлан', exact: true }).click();
+  const breakdown = page.locator('.score-breakdown');
+  await expect(breakdown).toContainText('Нийт: 30.0 + 24.6 + 14.0 + 3.8 = 71.8');
+  await expect(breakdown.locator('.score-part').filter({ hasText: 'хамгийн сул' })).toContainText(
+    'Ажлын програмын хувь',
+  );
+  await page.getByRole('img', { name: 'Сүүлийн 30 хоногийн оноо' }).focus();
+  await expect(page.locator('.viz-line-frame .viz-tip')).toContainText('71.8 оноо');
+  await expect(page.getByLabel('9:00 — хүн байсан 50 мин, байгаагүй 10 мин')).toBeVisible();
+  // The month: people and departments ranked, and the busy hours.
+  const month = page.getByRole('region', { name: 'Сарын харьцуулалт' });
+  await expect(month.locator('.viz-ranked-name').first()).toHaveText('Admin');
+  await expect(month).toContainText('Оноогүй: Inactive');
+  await expect(month.getByLabel('Мя 10:00 — 50 мин')).toBeVisible();
+  await month.getByText('Хүснэгтээр харах').first().click();
+  await expect(month.locator('table').first()).toContainText('64.2');
+  // Даалгавар: one bar for how many wait, run, are done or late.
+  state.tasks.push({
+    id: 12,
+    title: 'Late one',
+    employee: 2,
+    status: 'TODO',
+    due_date: '2020-01-01',
+  });
+  await page.getByRole('button', { name: 'Даалгавар', exact: true }).click();
+  await page.getByRole('button', { name: 'Шинэчлэх' }).first().click();
+  await expect(
+    page.getByRole('img', { name: /Даалгаврын төлөв · нийт 2: Хоцорсон 1 даалгавар \(50%\)/ }),
+  ).toBeVisible();
+});
+
+test('employees do not see the team comparison', async ({ page }) => {
+  const state = await mockApp(page);
+  Object.assign(state.members[0], { role: 'EMPLOYEE', is_admin: false, department: 1 });
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Тайлан', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Сарын харьцуулалт' })).toHaveCount(0);
+});
+
+test('demo mode signs in with one click and switches between admin and employee', async ({
+  page,
+}) => {
+  const state = await mockApp(page);
+  state.demo = {
+    password: 'demo1234',
+    accounts: [
+      { username: 'demo-admin', label: 'Админ', name: 'Болд' },
+      { username: 'demo-manager', label: 'Менежер', name: 'Ганаа' },
+      { username: 'bat', label: 'Ажилтан', name: 'Бат' },
+    ],
+  };
+  await page.addInitScript(() => sessionStorage.removeItem('worktrack-auth'));
+  await page.goto('/');
+  const demo = page.getByRole('region', { name: 'Демо горим' });
+  await demo.getByRole('button', { name: 'Ажилтан — Бат' }).click();
+  await expect(page.locator('.sidebar')).toBeVisible();
+  expect(state.logins).toEqual(['bat']);
+  const banner = page.getByRole('region', { name: 'Демо горим' });
+  await expect(banner).toContainText('жишээ өгөгдөл');
+  await banner.getByRole('button', { name: 'Админ' }).click();
+  await expect.poll(() => state.logins).toEqual(['bat', 'demo-admin']);
+  expect(state.posts.some((row) => row.path === '/api/auth/logout/')).toBe(true);
+});
+
+test('a real server shows no demo shortcuts', async ({ page }) => {
+  await mockApp(page);
+  await page.addInitScript(() => sessionStorage.removeItem('worktrack-auth'));
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'WorkTrack — Нэвтрэх' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Демо горим' })).toHaveCount(0);
+});
+
+test('the working schedule is set in settings and shown on the day', async ({ page }) => {
+  const state = await mockApp(page);
+  state.outsideSchedule = 5400;
+  await page.goto('/');
+  await expect(page.getByLabel('Ажлын хуваарь 09:00–18:00')).toBeVisible();
+  await expect(
+    page.getByText('Үүнээс ажлын хуваарийн (09:00–18:00) гадна: 1 цаг 30 мин'),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Тохиргоо', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Бямба' }).check();
+  await page.getByLabel('Эхлэх цаг').fill('14:00');
+  await page.getByLabel('Дуусах цаг').fill('20:00');
+  await page.getByRole('button', { name: 'Тохиргоо хадгалах', exact: true }).click();
+  await expect(page.getByText('Хадгаллаа.', { exact: false })).toBeVisible();
+  const saved = state.patches.find((row) => row.path === '/api/monitoring-settings/').data;
+  expect([saved.work_days, saved.work_start, saved.work_end]).toEqual([
+    [0, 1, 2, 3, 4, 5],
+    '14:00',
+    '20:00',
+  ]);
 });

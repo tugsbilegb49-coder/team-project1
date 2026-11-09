@@ -1,0 +1,2 @@
+# Optional experiment dependency; independent of the production scoring formula.
+scikit-learn>=1.6,<2

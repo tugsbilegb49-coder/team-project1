@@ -1,13 +1,61 @@
 from rest_framework import serializers
 from django.db import transaction
-from .validation import interval, lock_employee, reject_overlap
+from .validation import interval, lock_employee, reject_overlap, is_archived
 
-from .models import ActivityEvent, ComputerActivity, WebsiteActivity
+from .models import ActivityEvent, ComputerActivity, CameraPresence, WebsiteActivity
+
+
+class CameraPresenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CameraPresence
+        fields = ['id', 'employee', 'device', 'timestamp', 'present', 'confidence']
+        read_only_fields = fields
+
+
+class CameraPresenceIngestSerializer(serializers.Serializer):
+    timestamp = serializers.DateTimeField()
+    present = serializers.BooleanField()
+    confidence = serializers.FloatField(min_value=0, max_value=1)
+    device_id = serializers.UUIDField(required=False, allow_null=True)
+
+    def to_internal_value(self, data):
+        from collections.abc import Mapping
+
+        if not isinstance(data, Mapping):
+            raise serializers.ValidationError({'non_field_errors': ['Expected a JSON object.']})
+        extra = set(data) - set(self.fields)
+        if extra:
+            raise serializers.ValidationError(
+                {'non_field_errors': ['Only timestamp, present, confidence and device_id are accepted.']}
+            )
+        if not isinstance(data.get('present'), bool):
+            raise serializers.ValidationError({'present': 'Use a JSON boolean.'})
+        if isinstance(data.get('confidence'), bool):
+            raise serializers.ValidationError({'confidence': 'Use a finite number.'})
+        return super().to_internal_value(data)
+
+    def validate_confidence(self, value):
+        import math
+
+        if not math.isfinite(value):
+            raise serializers.ValidationError('Use a finite confidence between 0 and 1.')
+        return value
+
+    def validate_timestamp(self, value):
+        from django.utils import timezone
+
+        if value > timezone.now():
+            raise serializers.ValidationError('Presence cannot be in the future.')
+        return value
 
 
 class SegmentValidationMixin:
     def validate(self, attrs):
-        fields = ('started_at', 'duration_seconds') if self.Meta.model is ComputerActivity else ('timestamp', 'duration_seconds')
+        fields = (
+            ('started_at', 'duration_seconds')
+            if self.Meta.model in (ComputerActivity, WebsiteActivity)
+            else ('timestamp', 'duration_seconds')
+        )
         data = {name: attrs.get(name, getattr(self.instance, name, None)) for name in fields}
         if all(value is not None for value in data.values()):
             interval(self.Meta.model, data)
@@ -17,6 +65,8 @@ class SegmentValidationMixin:
     def create(self, validated_data):
         employee = validated_data['employee']
         lock_employee(employee)
+        if self.Meta.model is ComputerActivity and is_archived(employee, validated_data):
+            raise serializers.ValidationError('This segment has already been included in an archived monthly total.')
         reject_overlap(self.Meta.model, employee, validated_data)
         return super().create(validated_data)
 
@@ -29,20 +79,28 @@ class SegmentValidationMixin:
             raise serializers.ValidationError({'employee': 'Activity ownership cannot be changed.'})
         data = {field.name: getattr(instance, field.name) for field in instance._meta.fields}
         data.update(validated_data)
+        if self.Meta.model is ComputerActivity and is_archived(employee, data):
+            raise serializers.ValidationError('This segment has already been included in an archived monthly total.')
         reject_overlap(self.Meta.model, employee, data, exclude_pk=instance.pk)
         return super().update(instance, validated_data)
 
 
 class ActivityEventSerializer(SegmentValidationMixin, serializers.ModelSerializer):
-    employee_name = serializers.CharField(source="employee.username", read_only=True)
+    employee_name = serializers.CharField(source='employee.username', read_only=True)
 
     class Meta:
         model = ActivityEvent
         fields = [
-            "id", "employee", "employee_name", "timestamp", "state",
-            "duration_seconds", "source_person_id", "imported_at",
+            'id',
+            'employee',
+            'employee_name',
+            'timestamp',
+            'state',
+            'duration_seconds',
+            'source_person_id',
+            'imported_at',
         ]
-        read_only_fields = ["id", "imported_at"]
+        read_only_fields = ['id', 'imported_at']
 
 
 class ActivityEventIngestSerializer(SegmentValidationMixin, serializers.ModelSerializer):
@@ -50,21 +108,27 @@ class ActivityEventIngestSerializer(SegmentValidationMixin, serializers.ModelSer
 
     class Meta:
         model = ActivityEvent
-        fields = ["timestamp", "state", "duration_seconds", "device_id"]
+        fields = ['timestamp', 'state', 'duration_seconds', 'device_id']
 
     device_id = serializers.UUIDField(required=False, allow_null=True, write_only=True)
 
 
 class ComputerActivitySerializer(SegmentValidationMixin, serializers.ModelSerializer):
-    employee_name = serializers.CharField(source="employee.username", read_only=True)
+    employee_name = serializers.CharField(source='employee.username', read_only=True)
 
     class Meta:
         model = ComputerActivity
         fields = [
-            "id", "employee", "employee_name", "started_at", "duration_seconds",
-            "application", "category", "imported_at",
+            'id',
+            'employee',
+            'employee_name',
+            'started_at',
+            'duration_seconds',
+            'application',
+            'category',
+            'imported_at',
         ]
-        read_only_fields = ["id", "imported_at"]
+        read_only_fields = ['id', 'imported_at']
 
 
 class ComputerActivityIngestSerializer(SegmentValidationMixin, serializers.ModelSerializer):
@@ -72,58 +136,39 @@ class ComputerActivityIngestSerializer(SegmentValidationMixin, serializers.Model
 
     class Meta:
         model = ComputerActivity
-        fields = ["started_at", "duration_seconds", "application", "category", "device_id"]
+        fields = ['started_at', 'duration_seconds', 'application', 'category', 'device_id']
 
     device_id = serializers.UUIDField(required=False, allow_null=True, write_only=True)
 
+
 class WebsiteActivitySerializer(serializers.ModelSerializer):
-    employee_name = serializers.CharField(
-        source="employee.username",
-        read_only=True,
-    )
+    employee_name = serializers.CharField(source='employee.username', read_only=True)
 
     class Meta:
         model = WebsiteActivity
-        fields = [
-            "id",
-            "employee",
-            "employee_name",
-            "started_at",
-            "duration_seconds",
-            "domain",
-            "imported_at",
-        ]
-        read_only_fields = ["id", "imported_at"]
+        fields = ['id', 'employee', 'employee_name', 'domain', 'started_at', 'duration_seconds', 'imported_at']
+        read_only_fields = fields
 
 
-class WebsiteActivityIngestSerializer(serializers.ModelSerializer):
-    device_id = serializers.UUIDField(
-        required=False,
-        allow_null=True,
-        write_only=True,
-    )
+class WebsiteActivityIngestSerializer(SegmentValidationMixin, serializers.ModelSerializer):
+    """Accept a hostname only; full URLs and page contents are outside the contract."""
+
+    device_id = serializers.UUIDField(required=False, allow_null=True, write_only=True)
 
     class Meta:
         model = WebsiteActivity
-        fields = [
-            "started_at",
-            "duration_seconds",
-            "domain",
-            "device_id",
-        ]
+        fields = ['domain', 'started_at', 'duration_seconds', 'device_id']
 
     def validate_domain(self, value):
-        from django.core.validators import validate_domain_name
-        from rest_framework.exceptions import ValidationError
-
-        domain = value.strip().lower().rstrip(".")
-
-        if any(char in domain for char in "/?#@:\\") or " " in domain:
-            raise ValidationError("Only a website domain is allowed.")
-
-        validate_domain_name(domain)
+        try:
+            domain = value.strip().rstrip('.').encode('idna').decode('ascii').lower()
+        except UnicodeError as exc:
+            raise serializers.ValidationError('Use a valid domain name.') from exc
+        labels = domain.split('.')
+        if (
+            not domain or len(domain) > 253 or any(not label or len(label) > 63 for label in labels)
+            or any(not label[0].isalnum() or not label[-1].isalnum()
+                   or any(not (char.isalnum() or char == '-') for char in label) for label in labels)
+        ):
+            raise serializers.ValidationError('Use a hostname only; paths and URLs are not accepted.')
         return domain
-
-    def validate(self, attrs):
-        interval(WebsiteActivity, attrs)
-        return attrs

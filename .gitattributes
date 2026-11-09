@@ -1,0 +1,10 @@
+# Same line endings on every OS, so Prettier/ruff, hashes and shell scripts behave alike.
+* text=auto eol=lf
+# cmd.exe needs CRLF in batch files.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+# Byte-exact fixtures and binaries.
+*.csv -text
+*.sqlite3 binary
+*.pt binary
+*.png binary

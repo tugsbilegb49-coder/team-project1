@@ -1,0 +1,81 @@
+name: Windows
+# Proves the project installs, passes its tests and starts/stops cleanly on Windows.
+# Every check runs even after an earlier one fails, and .github/ci_step.py publishes each
+# failure as an annotation, so one run shows everything that is broken.
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      DJANGO_CACHE_BACKEND: locmem
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements-qa.txt
+            requirements-ai.txt
+            backend/requirements.txt
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install Python packages
+        run: python -m pip install -r requirements-qa.txt
+      - name: Install Node packages
+        run: npm ci
+      - name: Django check
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Django check" python manage.py check
+      - name: Migrations are complete
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Migrations are complete" python manage.py makemigrations --check --dry-run
+      - name: Django tests
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Django tests" python manage.py test users workforce activity scoring
+      - name: Python tests
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Python tests" python -m pytest -q
+      - name: Agent tests (includes Windows API calls)
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Agent tests (includes Windows API calls)" python -m unittest discover -s agent -p "test*.py" -v
+      - name: Alternative agent tests
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Alternative agent tests" python -m unittest discover -s activity_agent/tests
+      - name: Frontend unit tests
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Frontend unit tests" npm test
+      - name: Frontend lint
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Frontend lint" npm run lint
+      - name: Frontend build
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Frontend build" npm run build
+      - name: Install browser
+        if: ${{ !cancelled() }}
+        run: npx playwright install chromium
+      - name: Frontend browser tests
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Frontend browser tests" npx playwright test e2e/frontend.spec.js
+      - name: Real browser with Django
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Real browser with Django" python verify_frontend.py
+      - name: Office server (HTTPS + code), agent start/stop and Ctrl+Break shutdown
+        if: ${{ !cancelled() }}
+        run: python .github/ci_step.py "Office server launcher" python verify_launcher.py --agent --share
+      - name: Start WorkTrack.bat runs (finds Python/Node, passes arguments)
+        if: ${{ !cancelled() }}
+        timeout-minutes: 3
+        run: python .github/ci_step.py "Start WorkTrack.bat" cmd /c "Start WorkTrack.bat" --help

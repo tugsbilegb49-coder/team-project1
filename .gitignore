@@ -24,6 +24,7 @@ dist-ssr
 *.sw?
 __pycache__/
 *.pyc
+.pytest_cache/
 venv/
 .venv/
 env/
@@ -32,6 +33,7 @@ env/
 
 # runtime artifacts
 data/*.csv
+data/*.csv.[0-9]*
 *.pt
 backend/db.sqlite3
 backend/.env
@@ -65,8 +67,23 @@ activity_agent/data/
 
 # Local launcher logs and lock
 .runtime/
+WorkTrack.app/
 
 # Database backups contain private account/activity data
 backups/
 *.dump
 deploy/production.env
+
+# Shared login locks/temporary files and rejected-event quarantine
+agent/.agent_tokens.*
+agent/.pending_events*.json
+data/.pending_camera_events*.json
+data/.pending_presence_events*.json
+data/.pending_multi_control*.json
+*.mp4
+*.avi
+*.mov
+
+# Installer builds (python packaging/build_client.py)
+packaging/out/
+packaging/build/

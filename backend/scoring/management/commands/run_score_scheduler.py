@@ -1,4 +1,5 @@
 """Refresh recent daily scores while the local launcher or Docker is running."""
+
 import argparse
 from datetime import timedelta
 import time
@@ -41,7 +42,9 @@ class Command(BaseCommand):
         return failures
 
     def handle(self, *args, **options):
-        self.stdout.write(f"Score scheduler: today + yesterday, interval {options['interval']}s, timezone {timezone.get_current_timezone_name()}.")
+        self.stdout.write(
+            f'Score scheduler: today + yesterday, interval {options["interval"]}s, timezone {timezone.get_current_timezone_name()}.'
+        )
         try:
             while True:
                 failures = self.refresh()

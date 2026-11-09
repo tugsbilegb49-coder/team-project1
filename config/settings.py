@@ -1,4 +1,5 @@
 """Compatibility entry point: all commands use the canonical backend settings."""
+
 import sys
 from pathlib import Path
 

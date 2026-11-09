@@ -1,0 +1,7 @@
+[
+  {"id":"switch","seconds":35,"apps":[[0,"Code"],[10,"Safari"],[20,"Code"]],"expected":[["Code","WORK",10],["Safari","BROWSER",10],["Code","WORK",10],["Code","WORK",4]]},
+  {"id":"stable","seconds":35,"apps":[[0,"Code"]],"expected":[["Code","WORK",30],["Code","WORK",4]]},
+  {"id":"pause","seconds":15,"apps":[[0,"Code"]],"pause":[5,10],"expected":[["Code","WORK",4],["Code","WORK",4]]},
+  {"id":"sleep","seconds":10,"apps":[[0,"Code"]],"sleep_at":5,"sleep_seconds":3600,"expected":[["Code","WORK",4],["Code","WORK",4]]},
+  {"id":"idle","seconds":10,"apps":[[0,"Code"]],"idle_at":5,"expected":[["Code","WORK",5],["Idle","OTHER",4]]}
+]

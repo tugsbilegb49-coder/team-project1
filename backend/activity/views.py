@@ -1,45 +1,93 @@
 from django.conf import settings
+from datetime import timedelta
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import ActivityEvent, ComputerActivity, WebsiteActivity
-from .validation import save_segment, save_website_segment
+from .models import ActivityEvent, ComputerActivity, CameraPresence, WebsiteActivity
+from .validation import interval, save_segment
 from .serializers import (
     ActivityEventIngestSerializer,
     ActivityEventSerializer,
     ComputerActivityIngestSerializer,
     ComputerActivitySerializer,
-    WebsiteActivityIngestSerializer,
+    CameraPresenceSerializer,
+    CameraPresenceIngestSerializer,
     WebsiteActivitySerializer,
-
+    WebsiteActivityIngestSerializer,
 )
 from users.permissions import IsSystemAdmin
 from users.models import ConsentRecord, Device
 
 
 def _resolve_device(request, validated_data):
-    device_id = validated_data.pop("device_id", None)
+    device_id = validated_data.pop('device_id', None)
     if not device_id:
         return None
     try:
         device = Device.objects.get(pk=device_id, employee=request.user, enabled=True)
     except Device.DoesNotExist as exc:
         from rest_framework.exceptions import PermissionDenied
-        raise PermissionDenied("This device is not enrolled for the current user.") from exc
+
+        raise PermissionDenied('This device is not enrolled for the current user.') from exc
     device.last_seen_at = timezone.now()
-    device.save(update_fields=["last_seen_at"])
+    device.save(update_fields=['last_seen_at'])
     return device
 
 
 def _require_consent(request):
-    if not getattr(settings, "REQUIRE_MONITORING_CONSENT", False):
+    if not getattr(settings, 'REQUIRE_MONITORING_CONSENT', False):
         return
     if not ConsentRecord.objects.filter(employee=request.user, granted=True, revoked_at__isnull=True).exists():
         from rest_framework.exceptions import PermissionDenied
-        raise PermissionDenied("Active monitoring consent is required before data can be uploaded.")
+
+        raise PermissionDenied('Active monitoring consent is required before data can be uploaded.')
+
+
+class CameraPresenceViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = CameraPresenceSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        rows = CameraPresence.objects.select_related('employee', 'employee__department')
+        if user.is_admin_role:
+            return rows
+        if user.is_manager and user.department_id:
+            return rows.filter(employee__department_id=user.department_id)
+        return rows.filter(employee=user)
+
+    @action(detail=False, methods=['post'])
+    def ingest(self, request):
+        from django.db import transaction
+        from rest_framework.exceptions import ValidationError
+        from .validation import lock_employee
+
+        # Camera presence always requires consent, including local development.
+        serializer = CameraPresenceIngestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+        device = _resolve_device(request, data)
+        with transaction.atomic():
+            lock_employee(request.user)
+            if not ConsentRecord.objects.filter(employee=request.user, granted=True, revoked_at__isnull=True).exists():
+                from rest_framework.exceptions import PermissionDenied
+
+                raise PermissionDenied('Active monitoring consent is required for camera presence.')
+            event, created = CameraPresence.objects.get_or_create(
+                employee=request.user,
+                timestamp=data['timestamp'],
+                defaults={'present': data['present'], 'confidence': data['confidence'], 'device': device},
+            )
+            if not created and (
+                event.present != data['present']
+                or event.confidence != data['confidence']
+                or event.device_id != (device.pk if device else None)
+            ):
+                raise ValidationError('This timestamp already contains a different presence result.')
+        return Response(self.get_serializer(event).data, status=201 if created else 200)
 
 
 class ActivityEventViewSet(viewsets.ModelViewSet):
@@ -48,7 +96,7 @@ class ActivityEventViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        queryset = ActivityEvent.objects.select_related("employee", "employee__department")
+        queryset = ActivityEvent.objects.select_related('employee', 'employee__department')
         if user.is_admin_role:
             return queryset
         if user.is_manager and user.department_id:
@@ -56,11 +104,11 @@ class ActivityEventViewSet(viewsets.ModelViewSet):
         return queryset.filter(employee=user)
 
     def get_permissions(self):
-        if self.action in {"create", "update", "partial_update", "destroy"}:
+        if self.action in {'create', 'update', 'partial_update', 'destroy'}:
             return [IsSystemAdmin()]
         return [IsAuthenticated()]
 
-    @action(detail=False, methods=["post"])
+    @action(detail=False, methods=['post'])
     def ingest(self, request):
         """Accept a camera segment for the authenticated user's own account."""
         _require_consent(request)
@@ -68,7 +116,7 @@ class ActivityEventViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         data = dict(serializer.validated_data)
         device = _resolve_device(request, data)
-        activity, created = save_segment(ActivityEvent, request.user, {"source_person_id": "", **data}, device)
+        activity, created = save_segment(ActivityEvent, request.user, {'source_person_id': '', **data}, device)
         return Response(
             ActivityEventSerializer(activity).data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
@@ -81,7 +129,7 @@ class ComputerActivityViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        queryset = ComputerActivity.objects.select_related("employee", "employee__department")
+        queryset = ComputerActivity.objects.select_related('employee', 'employee__department')
         if user.is_admin_role:
             return queryset
         if user.is_manager and user.department_id:
@@ -89,11 +137,11 @@ class ComputerActivityViewSet(viewsets.ModelViewSet):
         return queryset.filter(employee=user)
 
     def get_permissions(self):
-        if self.action in {"create", "update", "partial_update", "destroy"}:
+        if self.action in {'create', 'update', 'partial_update', 'destroy'}:
             return [IsSystemAdmin()]
         return [IsAuthenticated()]
 
-    @action(detail=False, methods=["post"])
+    @action(detail=False, methods=['post'])
     def ingest(self, request):
         """Accept one segment from the authenticated user's own desktop agent."""
         _require_consent(request)
@@ -106,39 +154,41 @@ class ComputerActivityViewSet(viewsets.ModelViewSet):
             ComputerActivitySerializer(activity).data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
+
+
 class WebsiteActivityViewSet(viewsets.ModelViewSet):
     serializer_class = WebsiteActivitySerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
-        queryset = WebsiteActivity.objects.select_related(
-            "employee", "employee__department"
-        )
+        rows = WebsiteActivity.objects.select_related('employee', 'employee__department')
         if user.is_admin_role:
-            return queryset
+            return rows
         if user.is_manager and user.department_id:
-            return queryset.filter(employee__department_id=user.department_id)
-        return queryset.filter(employee=user)
+            return rows.filter(employee__department_id=user.department_id)
+        return rows.filter(employee=user)
 
     def get_permissions(self):
-        if self.action in {"create", "update", "partial_update", "destroy"}:
+        if self.action in {'create', 'update', 'partial_update', 'destroy'}:
             return [IsSystemAdmin()]
         return [IsAuthenticated()]
 
-    @action(detail=False, methods=["post"])
+    @action(detail=False, methods=['post'])
     def ingest(self, request):
-        """Accept domain-only website usage for the authenticated user."""
         _require_consent(request)
         serializer = WebsiteActivityIngestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = dict(serializer.validated_data)
         device = _resolve_device(request, data)
-        activity, created = save_website_segment(
-            request.user, data, device
-        )
+        from users.operations import current_settings
+        retention_days = current_settings().activity_retention_days
+        _, end = interval(WebsiteActivity, data)
+        if end < timezone.now() - timedelta(days=retention_days):
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'started_at': 'Activity is outside the configured retention window.'})
+        activity, created = save_segment(WebsiteActivity, request.user, data, device)
         return Response(
             WebsiteActivitySerializer(activity).data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
-

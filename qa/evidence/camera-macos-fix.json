@@ -1,0 +1,33 @@
+{
+  "performed_at": "2026-11-07T09:39:18.702434+08:00",
+  "source": {
+    "working_tree_dirty": true,
+    "source_sha256": "d5c55f122702c83a65e4f57169a94cdae5e2245a14236f7bfdce57c22d804072",
+    "base_commit": "e0e566fae6ef67df4000dda9c6282281f6880292"
+  },
+  "cause": "Camera worker Python.app lacked NSCameraUsageDescription; macOS TCC terminated it.",
+  "native_bundle": "mn.worktrack.camera",
+  "system_python_modified": false,
+  "hardware_probe": {
+    "capture_seconds_requested": 5,
+    "frames_read": 143,
+    "total_seconds_including_open": 6.86,
+    "images_saved": 0,
+    "videos_saved": 0,
+    "camera_released": true,
+    "exit_code": 0
+  },
+  "launchservices_venv_smoke": "passed; no capture",
+  "native_worker_cancellation": "passed; no capture",
+  "python_tests": {
+    "passed": 93,
+    "subtests_passed": 3
+  },
+  "targeted_browser_tests": {
+    "passed": 2
+  },
+  "frontend_lint": "passed",
+  "limitation": "Hardware probe ran the native host directly; the browser-launched WorkTrack Camera app can require the user to grant its own macOS permission.",
+  "automated_rechecked_at": "2026-11-07T09:44:58.929742+08:00",
+  "cancellation_regressions": "passed: permit revoked before signals; PID refreshed during grace; late host and capture fail closed"
+}

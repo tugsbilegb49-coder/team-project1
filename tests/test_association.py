@@ -4,7 +4,8 @@ Unit tests for src/association.py — pure geometry, no camera/model needed.
 
 import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.association import assign_objects_to_people, crop_box
 import numpy as np
@@ -12,8 +13,8 @@ import numpy as np
 
 def test_assigns_laptop_to_nearest_person():
     person_boxes = {
-        1: (0, 0, 100, 200),      # person A, left side
-        2: (400, 0, 500, 200),    # person B, right side
+        1: (0, 0, 100, 200),  # person A, left side
+        2: (400, 0, 500, 200),  # person B, right side
     }
     laptop_boxes = [(10, 150, 90, 190)]  # close to person A
 
@@ -41,8 +42,8 @@ def test_multiple_objects_split_correctly():
         2: (500, 0, 600, 100),
     }
     phone_boxes = [
-        (20, 20, 40, 40),     # near person 1
-        (520, 20, 540, 40),   # near person 2
+        (20, 20, 40, 40),  # near person 1
+        (520, 20, 540, 40),  # near person 2
     ]
     result = assign_objects_to_people(person_boxes, phone_boxes)
     assert result[1] == [(20, 20, 40, 40)]

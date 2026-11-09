@@ -4,26 +4,31 @@ Unit tests for src/activity_tracker.py — no camera or model required.
 
 import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.activity_tracker import (
-    classify, ActivityTracker,
-    STATE_PHONE, STATE_WORKING, STATE_IDLE, STATE_AWAY,
+    classify,
+    ActivityTracker,
+    STATE_PHONE,
+    STATE_WORKING,
+    STATE_IDLE,
+    STATE_AWAY,
 )
 
 
 def test_classify_phone_takes_priority():
-    labels = {"person", "laptop", "cell phone"}
+    labels = {'person', 'laptop', 'cell phone'}
     assert classify(labels) == STATE_PHONE
 
 
 def test_classify_working():
-    labels = {"person", "laptop"}
+    labels = {'person', 'laptop'}
     assert classify(labels) == STATE_WORKING
 
 
 def test_classify_idle():
-    labels = {"person"}
+    labels = {'person'}
     assert classify(labels) == STATE_IDLE
 
 
@@ -33,13 +38,13 @@ def test_classify_away():
 
 
 def test_classify_gaze_override_ignores_phone_on_desk():
-    labels = {"person", "laptop", "cell phone"}
+    labels = {'person', 'laptop', 'cell phone'}
     # phone is visible but the person is NOT looking down at it -> treat as WORKING
     assert classify(labels, looking_at_phone=False) == STATE_WORKING
 
 
 def test_classify_gaze_override_confirms_phone_use():
-    labels = {"person", "laptop", "cell phone"}
+    labels = {'person', 'laptop', 'cell phone'}
     assert classify(labels, looking_at_phone=True) == STATE_PHONE
 
 
@@ -61,10 +66,10 @@ def test_tracker_accumulates_time():
     tracker.update(STATE_WORKING)  # was AWAY for 5s
 
     fake_time[0] = 15.0
-    tracker.update(STATE_PHONE)    # was WORKING for 10s
+    tracker.update(STATE_PHONE)  # was WORKING for 10s
 
     fake_time[0] = 20.0
-    tracker.finalize()             # was PHONE for 5s
+    tracker.finalize()  # was PHONE for 5s
 
     assert transitions == [
         (STATE_AWAY, 5.0),
@@ -87,38 +92,46 @@ def test_tracker_no_transition_when_state_unchanged():
 
 
 def test_camera_sleep_preserves_observed_time_and_skips_gap():
-    clock=[0.0]
-    rows=[]
-    tracker=ActivityTracker(initial_state=STATE_WORKING,clock=lambda:clock[0],max_gap_seconds=10,
-        on_segment=lambda state,duration,end:rows.append((state,duration,end)))
-    clock[0]=5
+    clock = [0.0]
+    rows = []
+    tracker = ActivityTracker(
+        initial_state=STATE_WORKING,
+        clock=lambda: clock[0],
+        max_gap_seconds=10,
+        on_segment=lambda state, duration, end: rows.append((state, duration, end)),
+    )
+    clock[0] = 5
     tracker.update(STATE_WORKING)
-    clock[0]=100
+    clock[0] = 100
     tracker.update(STATE_WORKING)
-    clock[0]=105
+    clock[0] = 105
     tracker.finalize()
     tracker.finalize()
-    assert rows==[(STATE_WORKING,5,5),(STATE_WORKING,5,105)]
-    assert tracker.summary()[STATE_WORKING]==10
+    assert rows == [(STATE_WORKING, 5, 5), (STATE_WORKING, 5, 105)]
+    assert tracker.summary()[STATE_WORKING] == 10
 
 
 def test_camera_shutdown_after_sleep_never_counts_unobserved_time():
-    clock=[0.0]
-    tracker=ActivityTracker(initial_state=STATE_WORKING,clock=lambda:clock[0],max_gap_seconds=10)
-    clock[0]=5
+    clock = [0.0]
+    tracker = ActivityTracker(initial_state=STATE_WORKING, clock=lambda: clock[0], max_gap_seconds=10)
+    clock[0] = 5
     tracker.update(STATE_WORKING)
-    clock[0]=100
+    clock[0] = 100
     tracker.finalize()
-    assert tracker.summary()[STATE_WORKING]==5
+    assert tracker.summary()[STATE_WORKING] == 5
 
 
 def test_camera_multiple_backward_clock_changes_do_not_lower_recorded_watermark():
-    clock=[0.0]
-    rows=[]
-    tracker=ActivityTracker(initial_state=STATE_WORKING,clock=lambda:clock[0],max_gap_seconds=10,
-        on_segment=lambda state,duration,end:rows.append((duration,end)))
-    for value in (5,10,1,2,.5,3,11):
-        clock[0]=value
+    clock = [0.0]
+    rows = []
+    tracker = ActivityTracker(
+        initial_state=STATE_WORKING,
+        clock=lambda: clock[0],
+        max_gap_seconds=10,
+        on_segment=lambda state, duration, end: rows.append((duration, end)),
+    )
+    for value in (5, 10, 1, 2, 0.5, 3, 11):
+        clock[0] = value
         tracker.update(STATE_WORKING)
     tracker.finalize()
-    assert rows==[(10,10),(1,11)]
+    assert rows == [(10, 10), (1, 11)]
