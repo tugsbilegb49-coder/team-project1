@@ -64,6 +64,22 @@ class LinkInput(StrictSerializer):
     policy_version = serializers.ChoiceField(choices=['2026-11'])
 
 
+# A linked computer works for weeks without anyone typing a password. With the 1-day web session
+# lifetime every computer asked for «Дахин холбох» a day after linking. Disconnecting, a password
+# change and a reset code still revoke it at once.
+DEVICE_LOGIN_LIFETIME = timedelta(days=30)
+
+
+def device_refresh_token(user):
+    refresh = RefreshToken.for_user(user)
+    refresh.set_exp(lifetime=DEVICE_LOGIN_LIFETIME)
+    # for_user() already recorded the 1-day expiry; keep the record true so revocation still finds it.
+    OutstandingToken.objects.filter(jti=refresh['jti']).update(
+        token=str(refresh), expires_at=datetime.fromtimestamp(refresh['exp'], tz=timezone.get_current_timezone())
+    )
+    return refresh
+
+
 class DesktopLinkView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -90,7 +106,7 @@ class DesktopLinkView(APIView):
             name=data['name'],
             defaults={'platform': data['platform'], 'enabled': True, 'last_seen_at': timezone.now()},
         )
-        refresh = RefreshToken.for_user(request.user)
+        refresh = device_refresh_token(request.user)
         audit_event(request.user, 'device', device.pk, 'link', {}, request.user)
         response = Response(
             {

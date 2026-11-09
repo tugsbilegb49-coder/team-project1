@@ -3,6 +3,7 @@ from django.core.cache import cache
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
+from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
 from rest_framework_simplejwt.tokens import RefreshToken
 from activity.models import ComputerActivity
 from workforce.models import Task
@@ -63,6 +64,16 @@ class SelfServiceTests(TestCase):
         self.assertNotEqual(result.data['refresh'], str(self.refresh))
         self.assertEqual(Device.objects.get().employee, self.user)
         self.assertEqual(ConsentRecord.objects.get().employee, self.user)
+        # The computer keeps its login for weeks, not just the web session's one day.
+        device_refresh = RefreshToken(result.data['refresh'])
+        self.assertGreaterEqual(device_refresh['exp'] - device_refresh['iat'], 29 * 24 * 3600)
+        self.assertEqual(
+            OutstandingToken.objects.get(jti=device_refresh['jti']).expires_at.timestamp(), device_refresh['exp']
+        )
+        later = timezone.now() + timedelta(days=3)
+        refreshed = self.client.post('/api/auth/refresh/', {'refresh': result.data['refresh']}, format='json')
+        self.assertEqual(refreshed.status_code, 200)
+        self.assertGreater(device_refresh['exp'], later.timestamp())
         agent = APIClient()
         agent.credentials(HTTP_AUTHORIZATION='Bearer ' + result.data['access'])
         self.client.post('/api/auth/logout/', {'refresh': str(self.refresh)}, format='json')
