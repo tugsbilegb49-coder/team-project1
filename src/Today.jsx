@@ -376,7 +376,7 @@ function BrowserTrackingHelp() {
       <div className="more-settings-body">
         <ol>
           <li>
-            <code>edge://extensions</code> нээгээд Developer mode-ийг асаана.
+            Chrome-д <code>chrome://extensions</code>, Edge-д <code>edge://extensions</code> нээгээд Developer mode-ийг асаана.
           </li>
           <li>
             Load unpacked дарж төслийн <code>browser_extension</code> хавтсыг сонгоно.

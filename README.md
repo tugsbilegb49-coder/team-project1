@@ -218,8 +218,9 @@ localStorage-д хадгалагдахгүй. Login session нь tab-ийн sess
 
 Chrome эсвэл Edge дээр `browser_extension/` хавтсыг **Load unpacked**-аар ачаална
 (`chrome://extensions` эсвэл `edge://extensions`, Developer mode асаана). Extension-ийн
-Options хэсэгт backend хаяг, ажилтны account-аар нэвтрэхэд тухайн backend-ийн холболтын
-эрх хүсэж, monitoring consent идэвхтэй эсэхийг шалгана. Consent олгоогүй/цуцалсан бол
+Options хэсэгт ажилтны account-аар нэвтэрнэ. Бүртгэл эхлүүлэхийн өмнө тухайн ажилтан өөрөө
+вэбсайтын домэйн ба ашигласан хугацаа бүртгүүлэх зөвшөөрлөө өгнө; админ, менежерийн үүсгэсэн
+бүх идэвхтэй account extension-ийг ашиглаж болно. Тодорхой зөвшөөрөл байхгүй/цуцалсан бол
 бүртгэл хийхгүй.
 
 Extension зөвхөн фокус авсан browser цонхны идэвхтэй tab-ын **домэйн** болон түүнд

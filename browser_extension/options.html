@@ -7,23 +7,35 @@
     <style>
       body { max-width: 560px; margin: 40px auto; padding: 0 20px; font: 16px/1.5 system-ui, sans-serif; color: #243b35; }
       label { display: block; margin-top: 16px; font-weight: 600; }
-      input { box-sizing: border-box; width: 100%; padding: 10px; margin-top: 5px; }
+      input:not([type="checkbox"]) { box-sizing: border-box; width: 100%; padding: 10px; margin-top: 5px; }
       button { margin-top: 18px; padding: 10px 16px; border: 0; border-radius: 8px; background: #20b99a; color: white; font-weight: 600; cursor: pointer; }
+      button:disabled { opacity: .55; cursor: not-allowed; }
       #logout { background: #c83f4f; margin-left: 8px; }
       #status { min-height: 24px; }
       .note { background: #e8f6ef; border-radius: 8px; padding: 12px; }
+      .consent-label { display: flex; align-items: flex-start; gap: 10px; }
+      .consent-label input { flex: 0 0 auto; margin: 6px 0 0; }
     </style>
   </head>
   <body>
     <h1>WorkTrack — вэбсайт ашиглалт</h1>
-    <p class="note">Зөвхөн идэвхтэй browser tab-ын домэйн болон хугацааг бүртгэнэ. URL зам, хайлтын үг, хуудасны агуулгыг цуглуулахгүй. 15 секундээс удаан idle үед хугацаа тоолохоо зогсооно. Мониторингийн зөвшөөрөл идэвхтэй байх шаардлагатай.</p>
+    <p class="note">Chrome-ийн идэвхтэй tab-ын домэйн болон ашигласан хугацааг л бүртгэнэ. URL зам, хайлтын үг, хуудасны агуулга авахгүй. 15 секундээс удаан идэвхгүй үед хугацаа тоолохоо зогсооно.</p>
     <label for="api">Backend API хаяг</label>
     <input id="api" type="url" value="http://127.0.0.1:8000" autocomplete="url" />
     <label for="username">Хэрэглэгчийн нэр</label>
     <input id="username" autocomplete="username" />
     <label for="password">Нууц үг</label>
     <input id="password" type="password" autocomplete="current-password" />
-    <button id="login">Зөвшөөрөл шалгаж нэвтрэх</button>
+    <button id="login">Нэвтрэх</button>
+    <section id="consent-panel" hidden>
+      <h2>Вэбсайт бүртгэлийн зөвшөөрөл</h2>
+      <p>Нэвтэрсэн account дээр Chrome-ийн идэвхтэй tab-ын домэйн болон ашигласан хугацааг хадгална. URL зам, хайлтын үг, хуудасны агуулга, бичсэн текст, дэлгэцийн зураг авахгүй. Бүртгэлийг account-ийн эрх бүхий менежер, админ тайлангаас харж болно.</p>
+      <label class="consent-label">
+        <input id="consent" type="checkbox" />
+        Би дээрх вэбсайт ашиглалтын мэдээллийг бүртгүүлэхийг зөвшөөрч байна.
+      </label>
+      <button id="grant" disabled>Зөвшөөрч бүртгэл эхлүүлэх</button>
+    </section>
     <button id="logout" hidden>Гарах</button>
     <p id="status" role="status"></p>
     <script src="options.js"></script>
