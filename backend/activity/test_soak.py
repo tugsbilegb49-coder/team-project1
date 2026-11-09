@@ -2,7 +2,10 @@
 import json
 import os
 from pathlib import Path
-import resource
+try:
+    import resource
+except ImportError:  # Windows does not expose the POSIX resource module.
+    resource = None
 from tempfile import TemporaryDirectory
 import time
 from unittest import skipUnless
@@ -17,7 +20,7 @@ from users.models import User
 from .models import ComputerActivity
 
 
-@skipUnless(os.environ.get('WORKTRACK_SOAK_SECONDS'),'Run via verify_soak.py')
+@skipUnless(resource is not None and os.environ.get('WORKTRACK_SOAK_SECONDS'),'Run via verify_soak.py on a POSIX host')
 @override_settings(REQUIRE_MONITORING_CONSENT=False)
 class MultiDeviceSoakTests(LiveServerTestCase):
     def test_multi_device_http_lifecycle(self):

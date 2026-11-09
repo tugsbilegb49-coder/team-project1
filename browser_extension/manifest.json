@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "WorkTrack Website Time",
+  "version": "1.0.0",
+  "description": "Records only the domain and active time of the focused browser tab after monitoring consent.",
+  "permissions": ["alarms", "idle", "storage", "tabs"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_page": "options.html"
+}

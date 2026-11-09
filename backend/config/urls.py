@@ -6,7 +6,7 @@ from users.auth import LoginView, LogoutView
 from users.health import HealthView
 
 from activity.batch import ActivityBatchView
-from users.views import ConsentRecordViewSet, DeviceViewSet, UserViewSet
+from users.views import AuditLogViewSet, ConsentRecordViewSet, DeviceViewSet, UserViewSet
 from workforce.views import DepartmentViewSet, TaskViewSet
 from activity.views import (
     ActivityEventViewSet,
@@ -19,6 +19,7 @@ from scoring.views import ProductivityScoreViewSet
 router = DefaultRouter()
 router.register("users", UserViewSet, basename="user")
 router.register("consents", ConsentRecordViewSet, basename="consent")
+router.register("audit-logs", AuditLogViewSet, basename="audit-log")
 router.register("devices", DeviceViewSet, basename="device")
 router.register("departments", DepartmentViewSet, basename="department")
 router.register("tasks", TaskViewSet, basename="task")

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, list, login, logout, hasAuth, onAuthCleared } from "./api";
 import Tasks from "./Tasks";
 import Members from "./Members";
+import AuditLogs from "./AuditLogs";
 import "./App.css";
 const statuses = {
   TODO: "Хүлээгдэж байна",
@@ -18,6 +19,29 @@ function localToday() {
   const value = (key) => parts.find((part) => part.type === key).value;
   return `${value("year")}-${value("month")}-${value("day")}`;
 }
+function dateRange(date, period) {
+  const end = new Date(`${date}T12:00:00`);
+  const start = new Date(end);
+  if (period === "week") start.setDate(start.getDate() - 6);
+  if (period === "month") start.setDate(1);
+  const iso = (value) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+  return { start: iso(start), end: iso(end) };
+}
+function downloadReportCSV(report, range) {
+  const rows = [["Төрөл", "Нэр", "Ангилал", "Минут"]];
+  (report.applications || []).forEach((row) => rows.push(["Апп", row.application, row.category, (row.seconds / 60).toFixed(1)]));
+  (report.websites || []).forEach((row) => rows.push(["Вэбсайт", row.domain, "", (row.seconds / 60).toFixed(1)]));
+  (report.camera || []).forEach((row) => rows.push(["Камер", row.state, "", (row.seconds / 60).toFixed(1)]));
+  (report.employees || []).forEach((row) => rows.push(["Ажилтан", row.username, row["department__name"] || "", ""]));
+  if (report.score) rows.push(["Дундаж оноо", report.score.category, `${report.score.sample_days || 0} өдөр`, report.score.score]);
+  const csv = "\uFEFF" + rows.map((row) => row.map((cell) => `"${String(cell ?? "").replaceAll('"', '""')}"`).join(",")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `worktrack-${range.start}-${range.end}.csv`;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 function App() {
   const [user, setUser] = useState(null),
     [page, setPage] = useState("dashboard");
@@ -27,6 +51,11 @@ function App() {
   const [reportState, setReport] = useState(null),
     [employee, setEmployee] = useState("");
   const [date, setDate] = useState(localToday);
+  const [period, setPeriod] = useState("day");
+  const [departmentSummary, setDepartmentSummary] = useState(false);
+  const [reportDepartment, setReportDepartment] = useState("all");
+  const [consent, setConsent] = useState(null);
+  const [consentAcknowledged, setConsentAcknowledged] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false),
     [ready, setReady] = useState(() => !hasAuth()),
@@ -37,7 +66,8 @@ function App() {
     reportRequest = useRef(0);
   const today = localToday();
   const validDate = /^\d{4}-\d{2}-\d{2}$/.test(date);
-  const reportKey = `${user?.id}:${employee}:${date}`;
+  const range = dateRange(date, period);
+  const reportKey = `${user?.id}:${employee}:${range.start}:${range.end}:${departmentSummary}:${reportDepartment}`;
   const currentReport =
     reportState?.key === reportKey && reportState.revision === revision
       ? reportState
@@ -63,6 +93,9 @@ function App() {
     setDepartments([]);
     setReport(null);
     setEmployee("");
+    setConsent(null);
+    setDepartmentSummary(false);
+    setReportDepartment("all");
     setPage("dashboard");
     setError(
       reason === "expired" ? "Нэвтрэх хугацаа дууссан. Дахин нэвтэрнэ үү." : "",
@@ -99,6 +132,7 @@ function App() {
     setEmployee((current) =>
       users.some((row) => String(row.id) === current) ? current : String(me.id),
     );
+    setReportDepartment((current) => current === "all" && me.role === "MANAGER" ? String(me.department || "") : current);
     setRevision((value) => value + 1);
     return true;
   }
@@ -148,11 +182,22 @@ function App() {
     };
   }, []);
   useEffect(() => {
+    if (!user?.id) return;
+    let active = true;
+    api("/api/consents/status/")
+      .then((data) => { if (active) setConsent(data); })
+      .catch((failure) => { if (active) setConsent({ error: failure.message }); });
+    return () => { active = false; };
+  }, [user?.id]);
+  useEffect(() => {
     if (!user?.id || !employee || !validDate) return;
     const controller = new AbortController();
     const request = ++reportRequest.current,
       expected = session.current;
-    api(`/api/scores/dashboard/?employee_id=${employee}&date=${date}`, {
+    const params = new URLSearchParams({ start_date: range.start, end_date: range.end });
+    if (departmentSummary) params.set("department_id", reportDepartment);
+    else params.set("employee_id", employee);
+    api(`/api/scores/summary/?${params}`, {
       signal: controller.signal,
     })
       .then((data) => {
@@ -179,7 +224,7 @@ function App() {
           setReport({ key: reportKey, revision, error: failure.message });
       });
     return () => controller.abort();
-  }, [user?.id, employee, date, validDate, reportKey, revision]);
+  }, [user?.id, employee, date, period, departmentSummary, reportDepartment, range.start, range.end, validDate, reportKey, revision]);
   async function signIn(event) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -203,6 +248,17 @@ function App() {
         );
         return true;
       }
+    });
+  }
+  async function changeConsent(grant) {
+    await run(async () => {
+      await api(`/api/consents/${grant ? "grant" : "revoke"}/`, {
+        method: "POST",
+        body: grant ? JSON.stringify({ policy_version: "worktrack-monitoring-2026-11-v1" }) : "{}",
+      });
+      setConsent(await api("/api/consents/status/"));
+      setConsentAcknowledged(false);
+      return true;
     });
   }
   if (!ready) return <main className="main">Уншиж байна…</main>;
@@ -255,6 +311,7 @@ function App() {
             ["tasks", "Даалгавар"],
             ["members", "Багийн гишүүд"],
             ["reports", "Тайлан"],
+            ...(user.is_admin ? [["audit", "Өөрчлөлтийн түүх"]] : []),
           ].map(([key, label]) => (
             <button
               type="button"
@@ -282,7 +339,9 @@ function App() {
         )}
         {error && <p role="alert">{error}</p>}
         {busy && <p>Хадгалж байна…</p>}
-        {page === "tasks" ? (
+        {page === "audit" ? (
+          <AuditLogs />
+        ) : page === "tasks" ? (
           <Tasks
             tasks={tasks}
             members={members}
@@ -317,6 +376,48 @@ function App() {
                 Шинэчлэх
               </button>
             </header>
+            {page === "dashboard" && (
+              <section className="consent-panel" aria-labelledby="consent-heading">
+                <h2 id="consent-heading">Хяналтын мэдээлэл ба зөвшөөрөл</h2>
+                <p>
+                  Зөвшөөрсөн үед WorkTrack аппын нэр, ашигласан хугацаа, камерын боловсруулсан төлөв,
+                  browser-ийн идэвхтэй tab-ын домэйн ба хугацааг бүртгэнэ. Нууц үг, товчлуурын агуулга,
+                  URL-ийн зам, хуудасны текст, screenshot цуглуулахгүй. Эрхтэй админ болон танай хэлтсийн
+                  менежер тайланг харж болно. Database activity болон түүнээс тооцсон онооны хадгалалтын
+                  хугацаа {consent?.retention_days || 90} хоног.
+                  {consent?.retention_automatic === false
+                    ? " Автомат цэвэрлэгээ унтраалттай; админ cleanup командыг ажиллуулна."
+                    : " Өдрийн backup баталгаажсаны дараа хуучин өгөгдөл автоматаар цэвэрлэгдэнэ."}
+                  Өдрийн локал backup-аас энэ мэдээлэл {consent?.backup_retention_days || 7} хүртэл өдөр нэмж үлдэж болно;
+                  гадаад backup хуулбарыг админ удирдана.
+                </p>
+                <p role="status">
+                  {consent?.error ? `Төлөв уншиж чадсангүй: ${consent.error}` :
+                    consent?.active ? `Зөвшөөрөл идэвхтэй (${consent.latest?.policy_version || ""}).` :
+                      "Зөвшөөрөл идэвхгүй. Activity бүртгэхгүй."}
+                </p>
+                {consent?.active ? (
+                  <button className="delete-button" disabled={busy} onClick={() => changeConsent(false)}>
+                    Зөвшөөрөл цуцлах
+                  </button>
+                ) : (
+                  <>
+                    <label className="consent-acknowledgement">
+                      <input
+                        type="checkbox"
+                        checked={consentAcknowledged}
+                        onChange={(event) => setConsentAcknowledged(event.target.checked)}
+                        disabled={busy}
+                      />
+                      Дээрх мэдээллийг уншиж, monitoring-д зөвшөөрч байна.
+                    </label>
+                    <button disabled={busy || !consentAcknowledged} onClick={() => changeConsent(true)}>
+                      Зөвшөөрөл өгөх
+                    </button>
+                  </>
+                )}
+              </section>
+            )}
             <section className="stats">
               <div className="stat-card">
                 <p>Нийт даалгавар</p>
@@ -334,13 +435,21 @@ function App() {
               </div>
             </section>
             <section className="task-section">
-              <h2>Өдрийн activity ба бүтээмж</h2>
+              <h2>{departmentSummary ? "Багийн нэгтгэсэн тайлан" : "Activity ба бүтээмжийн тайлан"}</h2>
 
               <div className="activity-controls">
+                <label>
+                  Хугацаа
+                  <select value={period} disabled={busy} onChange={(event) => setPeriod(event.target.value)}>
+                    <option value="day">Өдөр</option>
+                    <option value="week">7 хоног</option>
+                    <option value="month">Энэ сарын эхнээс</option>
+                  </select>
+                </label>
                 <select
                   value={employee}
                   aria-label="Тайлангийн ажилтан"
-                  disabled={busy}
+                  disabled={busy || departmentSummary}
                   onChange={(e) => setEmployee(e.target.value)}
                 >
                   {members.map((m) => (
@@ -352,14 +461,29 @@ function App() {
 
                 <input
                   type="date"
-                  aria-label="Тайлангийн огноо"
+                  aria-label="Тайлангийн дуусах огноо"
                   disabled={busy}
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
                   required
                 />
 
-                <button
+                {canManage && (
+                  <label className="summary-toggle">
+                    <input type="checkbox" checked={departmentSummary} disabled={busy}
+                      onChange={(event) => setDepartmentSummary(event.target.checked)} />
+                    Хэлтсээр нэгтгэх
+                  </label>
+                )}
+                {departmentSummary && user.is_admin && (
+                  <select aria-label="Тайлангийн хэлтэс" value={reportDepartment} disabled={busy}
+                    onChange={(event) => setReportDepartment(event.target.value)}>
+                    <option value="all">Бүх ажилтан</option>
+                    {departments.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
+                  </select>
+                )}
+
+                {period === "day" && !departmentSummary && <button
                   disabled={busy || !employee || !validDate || date > today}
                   onClick={() =>
                     run(async () => {
@@ -375,18 +499,23 @@ function App() {
                   }
                 >
                   Оноо тооцох / шинэчлэх
+                </button>}
+                <button type="button" disabled={!report} onClick={() => downloadReportCSV(report, range)}>
+                  CSV татах
                 </button>
               </div>
 
+              <p className="report-range">{range.start} — {range.end}</p>
+
               {reportError && <p role="alert">{reportError}</p>}
-              {validDate && employee && !report && !reportError && (
+              {validDate && (employee || departmentSummary) && !report && !reportError && (
                 <p role="status">Тайлан уншиж байна…</p>
               )}
               {!validDate && <p>Тайлангийн огноо сонгоно уу.</p>}
               {report && (
   <div className="activity-dashboard">
     <div className="activity-score-card">
-      <p>Өдрийн бүтээмжийн оноо</p>
+      <p>Хугацааны дундаж бүтээмжийн оноо</p>
       <h3>{report.score ? report.score.score : "—"}</h3>
       <span>
         {report.score ? report.score.category : "Тооцоолоогүй"}
@@ -408,7 +537,7 @@ function App() {
     </div>
 
     <div className="activity-detail-card">
-      <h3>Application activity</h3>
+      <h3>Апп ашигласан хугацаа</h3>
       {report.applications?.length ? (
         <div className="activity-chart">
           {report.applications.map((row) => {
@@ -447,7 +576,7 @@ function App() {
     </div>
 
     <div className="activity-detail-card">
-      <h3>Website activity</h3>
+      <h3>Вэбсайт ашигласан хугацаа</h3>
       {report.websites?.length ? (
         <div className="activity-chart">
           {report.websites.map((row) => {
@@ -478,7 +607,7 @@ function App() {
           })}
         </div>
       ) : (
-        <p>Website мэдээлэл одоогоор бүртгэгдээгүй.</p>
+        <p>Мэдээлэл бүртгэгдээгүй байна. Chrome/Edge дээр WorkTrack Website Time extension суулгаж, ажилтны account-аар нэвтэрнэ үү.</p>
       )}
     </div>
 

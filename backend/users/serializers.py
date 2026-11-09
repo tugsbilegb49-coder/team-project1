@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import ConsentRecord, Device
+from .models import AuditLog, ConsentRecord, Device
 
 
 User = get_user_model()
@@ -11,6 +11,17 @@ class UserSerializer(serializers.ModelSerializer):
     is_admin = serializers.BooleanField(source="is_admin_role", read_only=True)
     password = serializers.CharField(write_only=True, required=False, min_length=8)
     department_name = serializers.CharField(source="department.name", read_only=True)
+
+    def validate_email(self, value):
+        email = (value or "").strip().casefold()
+        if not email:
+            return ""
+        duplicates = User.objects.filter(email__iexact=email)
+        if self.instance is not None:
+            duplicates = duplicates.exclude(pk=self.instance.pk)
+        if duplicates.exists():
+            raise serializers.ValidationError("This email is already used by another account.")
+        return email
 
     class Meta:
         model = User
@@ -67,4 +78,13 @@ class DeviceSerializer(serializers.ModelSerializer):
         model = Device
         fields = ["id", "employee", "employee_name", "name", "platform", "enabled", "created_at", "last_seen_at"]
         read_only_fields = ["id", "employee", "employee_name", "created_at", "last_seen_at"]
+
+
+class AuditLogSerializer(serializers.ModelSerializer):
+    actor_name = serializers.CharField(source="actor_label", read_only=True)
+
+    class Meta:
+        model = AuditLog
+        fields = ["id", "actor_name", "target_label", "entity_type", "entity_id", "action", "changes", "created_at"]
+        read_only_fields = fields
 

@@ -24,6 +24,9 @@ x-app: &app
     TRUSTED_PROXY_NETWORKS: 172.30.0.2/32
     DJANGO_CACHE_BACKEND: database
     REQUIRE_MONITORING_CONSENT: "true"
+    ACTIVITY_RETENTION_DAYS: ${ACTIVITY_RETENTION_DAYS:-90}
+    ACTIVITY_RETENTION_AUTO: ${ACTIVITY_RETENTION_AUTO:-true}
+    BACKUP_KEEP: ${BACKUP_KEEP:-7}
   networks: [internal]
   volumes:
     - backups:/app/backups

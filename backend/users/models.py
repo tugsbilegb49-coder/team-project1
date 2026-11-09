@@ -74,3 +74,29 @@ class Device(models.Model):
     def __str__(self) -> str:
         return f"{self.employee} - {self.name}"
 
+
+class AuditLog(models.Model):
+    """Append-only record of administrative account and department changes."""
+
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+        blank=True, related_name="audit_actions",
+    )
+    actor_label = models.CharField(max_length=160)
+    target_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+        blank=True, related_name="audit_records",
+    )
+    target_label = models.CharField(max_length=200)
+    entity_type = models.CharField(max_length=32)
+    entity_id = models.CharField(max_length=64)
+    action = models.CharField(max_length=16)
+    changes = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+
+    def __str__(self) -> str:
+        return f"{self.actor_label}: {self.action} {self.entity_type} {self.target_label}"
+

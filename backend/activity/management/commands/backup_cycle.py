@@ -7,6 +7,7 @@ import re
 import secrets
 import shutil
 from django.conf import settings
+from django.core.management import call_command
 from django.db import connections
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
@@ -27,7 +28,7 @@ class Command(BaseCommand):
     help='Create at most one generated backup per local day; keep 7 by default. Optional existing second-copy directory.'
 
     def add_arguments(self, parser):
-        parser.add_argument('--keep',type=int,default=os.environ.get('BACKUP_KEEP','7'))
+        parser.add_argument('--keep',type=int,default=settings.BACKUP_KEEP)
         parser.add_argument('--copy-dir',default=os.environ.get('BACKUP_COPY_DIR'))
 
     def handle(self,*args,**options):
@@ -68,6 +69,10 @@ class Command(BaseCommand):
                 finally:
                     temporary.unlink(missing_ok=True)
             self.stdout.write(f'Verified second copy: {destination}')
+        if settings.ACTIVITY_RETENTION_AUTO:
+            self.stdout.write(f'Applying {settings.ACTIVITY_RETENTION_DAYS}-day activity retention after verified backup.')
+            call_command('cleanup_activity', days=settings.ACTIVITY_RETENTION_DAYS, apply=True,
+                         stdout=self.stdout, stderr=self.stderr)
         for old in files[keep:]:
             old.unlink()
         self.stdout.write(f'Local generated backups retained: {min(len(files),keep)}. Custom files and external copies are not pruned.')

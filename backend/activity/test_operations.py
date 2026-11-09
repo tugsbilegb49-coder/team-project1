@@ -48,7 +48,7 @@ class BackupCycleTests(SimpleTestCase):
                 moment=timezone.now().timestamp()-number*86400
                 os.utime(path,(moment,moment))
             custom=backups/'my-manual-backup.sqlite3';custom.write_text('keep')
-            with override_settings(BASE_DIR=root),patch('activity.management.commands.backup_cycle.verify_backup'),patch('activity.management.commands.backup_cycle.create_backup') as create:
+            with override_settings(BASE_DIR=root,ACTIVITY_RETENTION_AUTO=False),patch('activity.management.commands.backup_cycle.verify_backup'),patch('activity.management.commands.backup_cycle.create_backup') as create:
                 call_command('backup_cycle',keep=2,copy_dir=copy,stdout=StringIO())
             create.assert_not_called()
             self.assertTrue(custom.exists())
@@ -56,7 +56,8 @@ class BackupCycleTests(SimpleTestCase):
             copied=list(Path(copy).iterdir())
             self.assertEqual(len(copied),1)
             self.assertEqual(copied[0].read_bytes(),b'backup-0')
-            self.assertEqual(copied[0].stat().st_mode & 0o777,0o600)
+            if os.name != 'nt':
+                self.assertEqual(copied[0].stat().st_mode & 0o777,0o600)
 
     def test_unmounted_copy_destination_does_not_prune_local_history(self):
         with TemporaryDirectory() as directory:

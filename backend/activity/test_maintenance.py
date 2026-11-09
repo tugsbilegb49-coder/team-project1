@@ -2,6 +2,7 @@ from contextlib import closing
 from datetime import timedelta
 from io import StringIO
 from pathlib import Path
+import os
 import sqlite3
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, patch
@@ -38,7 +39,8 @@ class SQLiteBackupTests(SimpleTestCase):
 
     def test_backup_restores_rows_and_preserves_pre_restore_database(self):
         backup=create_backup(self.root/'copy.sqlite3')
-        self.assertEqual(backup.stat().st_mode & 0o777,0o600)
+        if os.name != 'nt':
+            self.assertEqual(backup.stat().st_mode & 0o777,0o600)
         with closing(sqlite3.connect(self.live)) as db:
             db.execute("UPDATE users_user SET name='changed'")
             db.commit()
@@ -80,7 +82,7 @@ class SQLiteBackupTests(SimpleTestCase):
 
 
 class ActivityRetentionTests(TestCase):
-    def test_preview_then_apply_preserves_recent_crossing_intervals_and_scores(self):
+    def test_preview_then_apply_preserves_recent_crossing_intervals_and_expires_old_scores(self):
         user=User.objects.create_user('retention-worker')
         now=timezone.now()
         cutoff=now-timedelta(days=90)
@@ -97,7 +99,7 @@ class ActivityRetentionTests(TestCase):
         self.assertFalse(ComputerActivity.objects.filter(pk=old.pk).exists())
         self.assertFalse(ActivityEvent.objects.filter(pk=camera.pk).exists())
         self.assertEqual(set(ComputerActivity.objects.values_list('pk',flat=True)),{crossing.pk,recent.pk})
-        self.assertTrue(ProductivityScore.objects.filter(pk=score.pk).exists())
+        self.assertFalse(ProductivityScore.objects.filter(pk=score.pk).exists())
         self.assertTrue(User.objects.filter(pk=user.pk).exists())
 
     def test_retention_must_be_positive(self):

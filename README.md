@@ -134,6 +134,27 @@ Wall clock болон monotonic clock зөрөх, цаг ухрах үед мө�
 ингэснээр давхардсан мөр үүсгэхгүй. Компьютерийн цаг серверээс ихээр түрүүлсэн бол
 серверийн future-time validation хүсэлтийг буцааж болох тул OS цагийг зөв тохируулна.
 
+## Browser website usage (Chrome / Edge)
+
+Activity тайлангийн график нь app болон website ашигласан хугацааг тус тусад нь
+харуулна. Website-ийн домэйн цуглуулахын тулд ажилтан бүр Chrome эсвэл Edge дээр
+`browser_extension/` хавтсыг extension болгон суулгана:
+
+1. `chrome://extensions` нээж Developer mode-ийг асаана.
+2. **Load unpacked** сонгоод төслийн `browser_extension/` хавтсыг заана.
+3. WorkTrack Website Time extension-ийн Options хэсэгт backend API хаягаа оруулж,
+   ажилтны account-аар нэвтэрнэ. Нэвтрэхэд monitoring consent идэвхтэй байх ёстой.
+
+Extension зөвхөн browser цонх фокустай, ажилтан сүүлийн 15 секундэд идэвхтэй үед
+идэвхтэй tab-ын hostname, эхэлсэн цаг, үргэлжилсэн хугацааг хадгална. URL-ийн зам,
+query, хуудасны агуулга, browsing history-г илгээхгүй. Extension upload бүрийн өмнө
+consent төлөвийг шалгана; consent байхгүй эсвэл цуцлагдсан бол session, queue-г
+цэвэрлээд бүртгэлийг зогсооно. Backend API consent-ийг default-оор заавал шалгана
+(`REQUIRE_MONITORING_CONSENT=true`). Desktop agent consent-ийг 30 секунд тутам шалгаж,
+цуцлагдсаныг мэдвэл local collection-оо pause хийнэ. Дахин зөвшөөрсний дараа
+`python agent/main.py --resume` ажиллуулна. Гишүүн болон огноог Тайлан дээр
+сонгоход app болон website-ийн хугацааны график шинэчлэгдэнэ.
+
 Single-person camera uploader ч segment-ээ өдөр болон 3600 секундээр хуваана.
 Camera timestamp нь дууссан цаг тул яг 00:00-д дууссан хэсэг өмнөх өдөрт тоологдоно.
 Backend camera тайланд өмнө нь хадгалсан өдөр дамнасан мөрийн хугацааг мөн хоёр
@@ -323,10 +344,15 @@ python manage.py backup_database                     # Эхлээд backup ав�
 python manage.py cleanup_activity --days 90 --apply  # Жинхэнэ устгал
 ```
 
-Default хадгалалт 90 хоног, minimum 1 хоног. Camera-ийн дууссан timestamp,
+Default хадгалалт 90 хоног (`ACTIVITY_RETENTION_DAYS`), minimum 1 хоног. Баталгаатай
+өдрийн backup-ийн дараа `ACTIVITY_RETENTION_AUTO=true` үед хуучин camera, computer,
+website activity болон тухайн өдрийн оноонууд автоматаар цэвэрлэгдэнэ. Camera-ийн дууссан timestamp,
 computer interval-ийн дууссан цагаар cutoff-оос бүхэлдээ өмнөх мөрийг сонгоно.
-Cutoff дамнасан segment-ийг хадгална. User, task, consent, device болон хадгалсан
-score-уудыг устгахгүй. Cleanup автомат биш, `--apply` байхгүй үед юу ч устгахгүй.
+Cutoff дамнасан segment-ийг хадгална. User, task, consent, device болон audit
+бүртгэлийг үлдээнэ. Автомат цэвэрлэгээг унтраах бол `ACTIVITY_RETENTION_AUTO=false`
+болгоно; гараар ажиллуулах үед `--apply` байхгүй бол юу ч устгахгүй. Local daily backup-аас
+`BACKUP_KEEP` (default 7) ширхэг snapshot хадгална; тэдгээрт хуучин мөр нэмэлт хугацаанд
+байж болно. Optional external backup хуулбаруудыг автоматаар устгахгүй.
 SQLite файл logical delete хийсний дараа шууд жижигрэх албагүй.
 
 Цэвэрлэсэн хуучин өдрийн score-ийг дараа нь дахин тооцвол activity өгөгдөл нь
@@ -507,6 +533,8 @@ refresh token 1 өдөр хүчинтэй. Agent-ууд refresh token ашигл
 | `/api/v1/activity` | POST | Өөр agent-ийн v1.0 batch; төгсгөлийн `/` байхгүй |
 | `/api/scores/calculate/` | POST | Employee/date оноо тооцох буюу шинэчлэх |
 | `/api/scores/dashboard/?employee_id=2&date=2026-11-05` | GET | Өдрийн score, application, camera summary |
+| `/api/scores/summary/?start_date=2026-11-01&end_date=2026-11-07&department_id=2` | GET | 31 хүртэл хоногийн нэгтгэл; ажилтан эсвэл эрхтэй хэлтэс сонгоно |
+| `/api/audit-logs/` | GET | Admin-д ажилтан, хэлтэс, consent-ийн өөрчлөлтийн түүх |
 | `/api/scores/` | GET | Харах эрхтэй онооны түүх |
 
 List хариу нь `count`, `next`, `previous`, `results` бүтэцтэй; нэг хуудсанд 50 мөр.
@@ -541,7 +569,7 @@ Category: `WORK`, `COMMUNICATION`, `BROWSER`, `OTHER`. Camera segment:
 
 Camera state: `WORKING`, `PHONE`, `IDLE`, `AWAY`. Хоёр ingest endpoint-д enrollment
 хариуны `device_id`-г нэмэх боломжтой; device нь нэвтэрсэн хэрэглэгчийнх байна.
-`REQUIRE_MONITORING_CONSENT=true` үед өмнө нь consent grant хийсэн байх ёстой:
+`REQUIRE_MONITORING_CONSENT=true` (default) үед өмнө нь consent grant хийсэн байх ёстой:
 
 ```json
 {"policy_version":"2026-11"}

@@ -323,6 +323,20 @@ class ApiClient:
         except (URLError, TimeoutError) as exc:
             raise AgentError(f"Could not reach Django API at {self.api_url}: {exc}") from exc
 
+    def _get_json(self, route: str, access_token: str) -> dict[str, Any]:
+        request = Request(f"{self.api_url}{route}", headers={"Authorization": f"Bearer {access_token}"})
+        try:
+            with urlopen(request, timeout=5) as response:
+                try:
+                    return json.loads(response.read().decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    raise AgentError("Consent status response was not valid JSON.") from exc
+        except HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            raise ApiError(exc.code, f"API request failed ({exc.code}): {body}") from exc
+        except (URLError, TimeoutError) as exc:
+            raise AgentError(f"Could not reach Django API at {self.api_url}: {exc}") from exc
+
     def _read_tokens(self) -> dict[str, str]:
         if not self.token_path.is_file():
             raise AgentError("No desktop-agent login found. Run: python3 agent/main.py --login")
@@ -369,6 +383,17 @@ class ApiClient:
                 raise
             tokens = self._refresh_access_token(tokens)
             return self._post_json(route, payload, tokens["access"])
+
+    def consent_active(self) -> bool:
+        tokens = self._read_tokens()
+        try:
+            status = self._get_json("/api/consents/status/", tokens["access"])
+        except ApiError as exc:
+            if exc.status != 401:
+                raise
+            tokens = self._refresh_access_token(tokens)
+            status = self._get_json("/api/consents/status/", tokens["access"])
+        return bool(status.get("active"))
 
     def enroll_device(self, name: str, platform_name: str) -> dict[str, Any]:
         return self._authenticated_post("/api/devices/enroll/", {"name": name, "platform": platform_name})
@@ -457,6 +482,13 @@ def _now():
 
 
 def run_agent(config: dict[str, Any], client: ApiClient) -> None:
+    if hasattr(client, "consent_active"):
+        try:
+            if not client.consent_active():
+                set_paused(True)
+        except (AgentError, OSError) as exc:
+            set_paused(True)
+            print(f"Consent status unavailable; collection starts paused: {exc}", file=sys.stderr)
     current_application = None
     segment_started_at = None
     last_observed_at = None
@@ -464,6 +496,24 @@ def run_agent(config: dict[str, Any], client: ApiClient) -> None:
     recorded_until = None
     uploader = PendingUploader(client, max_events=config.get("max_queue_events", 10000), max_bytes=config.get("max_queue_bytes", 10 * 1024 * 1024))
     uploader.start()
+    consent_stop = threading.Event()
+
+    def monitor_consent():
+        while not consent_stop.wait(30):
+            try:
+                if not client.consent_active():
+                    set_paused(True)
+                    print("Monitoring consent was revoked; local collection paused.", file=sys.stderr)
+                    return
+            except (AgentError, OSError) as exc:
+                set_paused(True)
+                print(f"Consent status unavailable; local collection paused: {exc}", file=sys.stderr)
+                return
+
+    consent_thread = None
+    if hasattr(client, "consent_active"):
+        consent_thread = threading.Thread(target=monitor_consent, name="consent-monitor", daemon=True)
+        consent_thread.start()
     last_upload = time.monotonic()
     poll_interval = config.get("poll_interval_seconds", 1)
     max_gap = config.get("max_sample_gap_seconds", 10)
@@ -534,6 +584,9 @@ def run_agent(config: dict[str, Any], client: ApiClient) -> None:
         if last_observed_at is not None and not is_paused():
             close_segment(last_observed_at)
     finally:
+        consent_stop.set()
+        if consent_thread is not None:
+            consent_thread.join(timeout=1)
         uploader.stop()
         print("Desktop agent stopped. Unsent segments are retained locally.")
 

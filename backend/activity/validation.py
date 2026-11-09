@@ -59,7 +59,7 @@ def reject_overlap(model, employee, data, exclude_pk=None):
             old_start, old_end = timestamp - timedelta(seconds=duration), timestamp
         # Camera duration is rounded to 0.1s by the uploader, while its end
         # timestamp keeps microseconds. Do not reject normal rounding jitter.
-        tolerance = 0 if model in (ComputerActivity, WebsiteActivity) else 0.1
+        tolerance = 0.05 if model in (ComputerActivity, WebsiteActivity) else 0.1
         overlap = (min(old_end, end) - max(old_start, start)).total_seconds()
         if overlap > tolerance:
             raise ValidationError({'duration_seconds': 'This employee already has overlapping activity in this stream.'})

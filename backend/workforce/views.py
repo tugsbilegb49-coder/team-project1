@@ -1,9 +1,11 @@
 from django.utils import timezone
+from django.db import transaction
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
 from users.models import Department
 from users.permissions import IsAdminOrManager, IsSystemAdmin
+from users.audit import write_audit
 from .models import Task
 from .serializers import DepartmentSerializer, TaskSerializer
 
@@ -24,6 +26,27 @@ class DepartmentViewSet(viewsets.ModelViewSet):
         if self.action in {"create", "update", "partial_update", "destroy"}:
             return [IsSystemAdmin()]
         return [IsAuthenticated()]
+
+    def perform_create(self, serializer):
+        with transaction.atomic():
+            department = serializer.save()
+            write_audit(self.request, entity_type="department", instance=department,
+                         action="create", fields=("name", "description"))
+
+    def perform_update(self, serializer):
+        department = serializer.instance
+        fields = ("name", "description")
+        before = {field: getattr(department, field) for field in fields}
+        with transaction.atomic():
+            department = serializer.save()
+            write_audit(self.request, entity_type="department", instance=department,
+                         action="update", before=before, fields=fields)
+
+    def perform_destroy(self, instance):
+        with transaction.atomic():
+            write_audit(self.request, entity_type="department", instance=instance,
+                         action="delete", fields=("name", "description"))
+            instance.delete()
 
 
 class TaskViewSet(viewsets.ModelViewSet):

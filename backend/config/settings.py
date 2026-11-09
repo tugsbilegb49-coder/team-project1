@@ -121,8 +121,17 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-# Enable this in a real deployment only after publishing a consent policy.
-REQUIRE_MONITORING_CONSENT = os.environ.get("REQUIRE_MONITORING_CONSENT", "false").lower() == "true"
+# Monitoring collection requires a recorded, active consent by default.
+REQUIRE_MONITORING_CONSENT = os.environ.get("REQUIRE_MONITORING_CONSENT", "true").lower() == "true"
+ACTIVITY_RETENTION_DAYS = int(os.environ.get("ACTIVITY_RETENTION_DAYS", "90"))
+ACTIVITY_RETENTION_AUTO = os.environ.get("ACTIVITY_RETENTION_AUTO", "true").lower() == "true"
+BACKUP_KEEP = int(os.environ.get("BACKUP_KEEP", "7"))
+if ACTIVITY_RETENTION_DAYS < 1:
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured("ACTIVITY_RETENTION_DAYS must be at least 1.")
+if BACKUP_KEEP < 1:
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured("BACKUP_KEEP must be at least 1.")
 CORS_ALLOWED_ORIGINS = [origin for origin in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",") if origin]
 CSRF_TRUSTED_ORIGINS = [origin for origin in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",") if origin]
 SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "false").lower() == "true"
