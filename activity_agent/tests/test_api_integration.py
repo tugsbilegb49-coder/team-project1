@@ -12,9 +12,9 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from contract import build_batch
+from agent_core.contract import build_batch
 from mock_server import make_server
-from sender import BatchSender
+from agent_core.sender import BatchSender
 
 TOKEN = 'test-token'
 STATS = {'active_seconds': 50, 'idle_seconds': 10, 'keyboard_events': 5, 'mouse_events': 2, 'apps': {'code.exe': 50}}

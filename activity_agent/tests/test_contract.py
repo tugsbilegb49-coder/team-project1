@@ -4,8 +4,8 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from contract import build_batch, validate_batch
-from summary import summarize
+from agent_core.contract import build_batch, validate_batch
+from agent_core.summary import summarize
 
 STATS = {
     'active_seconds': 40.4,

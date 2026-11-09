@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'agent'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'agent'))
 from token_store import read_tokens, save_tokens, StaleTokenError
 from identity import queue_identity
 import urllib.error

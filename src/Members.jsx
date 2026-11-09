@@ -171,21 +171,43 @@ export default function Members({ user, members, departments, busy, mutate }) {
             <section className="department-edit-list" aria-label="Хэлтэс засах">
               <h2>Хэлтсийн жагсаалт</h2>
               {departments.map((row) => (
-                <form className="department-edit-row" key={row.id}
+                <form
+                  className="department-edit-row"
+                  key={row.id}
                   onSubmit={async (event) => {
                     event.preventDefault();
                     const name = new FormData(event.currentTarget).get('name').trim();
                     if (name) await mutate(`/api/departments/${row.id}/`, 'PATCH', { name });
-                  }}>
+                  }}
+                >
                   <fieldset disabled={busy}>
-                    <label htmlFor={`department-edit-${row.id}`}>Хэлтсийн нэр</label>
-                    <input id={`department-edit-${row.id}`} name="name" defaultValue={row.name} required maxLength={120} />
+                    <label htmlFor={`department-edit-${row.id}`}>«{row.name}» хэлтсийн нэр</label>
+                    <input
+                      id={`department-edit-${row.id}`}
+                      name="name"
+                      defaultValue={row.name}
+                      required
+                      maxLength={120}
+                    />
                   </fieldset>
-                  <button type="submit" disabled={busy}>Нэр хадгалах</button>
-                  <button type="button" className="delete-button" disabled={busy} onClick={() => {
-                    if (window.confirm(`"${row.name}" хэлтсийг устгах уу? Ажилтнууд хэлтэсгүй болно.`))
-                      mutate(`/api/departments/${row.id}/`, 'DELETE');
-                  }}>Хэлтэс устгах</button>
+                  <button type="submit" disabled={busy}>
+                    Нэр хадгалах
+                  </button>
+                  <button
+                    type="button"
+                    className="delete-button"
+                    disabled={busy}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `"${row.name}" хэлтсийг устгах уу? Ажилтнууд хэлтэсгүй болно.`,
+                        )
+                      )
+                        mutate(`/api/departments/${row.id}/`, 'DELETE');
+                    }}
+                  >
+                    Хэлтэс устгах
+                  </button>
                 </form>
               ))}
             </section>
@@ -307,41 +329,88 @@ export default function Members({ user, members, departments, busy, mutate }) {
               </>
             )}
             {user.is_admin && member.id !== user.id && (
-              <button type="button" disabled={busy} onClick={() => setEditingId(editingId === member.id ? null : member.id)}>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setEditingId(editingId === member.id ? null : member.id)}
+              >
                 {editingId === member.id ? 'Засвар хаах' : 'Мэдээлэл засах'}
               </button>
             )}
           </div>
           {user.is_admin && member.id !== user.id && (
             <div className="member-actions">
-              {member.is_active && <button disabled={busy} onClick={() => mutate(`/api/users/${member.id}/`, 'PATCH', { is_active: false })}>
-                Идэвхгүй болгох
-              </button>}
-              <button className="delete-button" disabled={busy} onClick={() => {
-                const confirmed = window.confirm(`"${member.name}" хэрэглэгч болон түүнд холбогдсон бүртгэлүүдийг бүрмөсөн устгах уу?`);
-                if (confirmed) mutate(`/api/users/${member.id}/`, 'DELETE');
-              }}>Бүрмөсөн устгах</button>
+              {member.is_active && (
+                <button
+                  disabled={busy}
+                  onClick={() => mutate(`/api/users/${member.id}/`, 'PATCH', { is_active: false })}
+                >
+                  Идэвхгүй болгох
+                </button>
+              )}
+              <button
+                className="delete-button"
+                disabled={busy}
+                onClick={() => {
+                  const confirmed = window.confirm(
+                    `"${member.name}" хэрэглэгч болон түүнд холбогдсон бүртгэлүүдийг бүрмөсөн устгах уу?`,
+                  );
+                  if (confirmed) mutate(`/api/users/${member.id}/`, 'DELETE');
+                }}
+              >
+                Бүрмөсөн устгах
+              </button>
             </div>
           )}
           {user.is_admin && editingId === member.id && (
-            <form className="member-edit-form" onSubmit={async (event) => {
-              event.preventDefault();
-              const data = Object.fromEntries(new FormData(event.currentTarget));
-              data.department = data.department ? Number(data.department) : null;
-              data.is_active = data.is_active === 'on';
-              if (await mutate(`/api/users/${member.id}/`, 'PATCH', data)) setEditingId(null);
-            }}>
-              <label>Нэр<input name="first_name" defaultValue={member.first_name} required /></label>
-              <label>Овог<input name="last_name" defaultValue={member.last_name} /></label>
-              <label>Имэйл<input name="email" type="email" defaultValue={member.email} /></label>
-              <label>Эрх<select name="role" defaultValue={member.role}>
-                <option value="EMPLOYEE">Ажилтан</option><option value="MANAGER">Менежер</option><option value="ADMIN">Админ</option>
-              </select></label>
-              <label>Хэлтэс<select name="department" defaultValue={member.department ?? ''}>
-                <option value="">Хэлтэсгүй</option>{departments.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
-              </select></label>
-              <label className="member-active-toggle"><input type="checkbox" name="is_active" defaultChecked={member.is_active} /> Идэвхтэй</label>
-              <button type="submit" disabled={busy}>Өөрчлөлт хадгалах</button>
+            <form
+              className="member-edit-form"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                const data = Object.fromEntries(new FormData(event.currentTarget));
+                data.department = data.department ? Number(data.department) : null;
+                data.is_active = data.is_active === 'on';
+                if (await mutate(`/api/users/${member.id}/`, 'PATCH', data)) setEditingId(null);
+              }}
+            >
+              <label>
+                Нэр
+                <input name="first_name" defaultValue={member.first_name} required />
+              </label>
+              <label>
+                Овог
+                <input name="last_name" defaultValue={member.last_name} />
+              </label>
+              <label>
+                Имэйл
+                <input name="email" type="email" defaultValue={member.email} />
+              </label>
+              <label>
+                Эрх
+                <select name="role" defaultValue={member.role}>
+                  <option value="EMPLOYEE">Ажилтан</option>
+                  <option value="MANAGER">Менежер</option>
+                  <option value="ADMIN">Админ</option>
+                </select>
+              </label>
+              <label>
+                Хэлтэс
+                <select name="department" defaultValue={member.department ?? ''}>
+                  <option value="">Хэлтэсгүй</option>
+                  {departments.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="member-active-toggle">
+                <input type="checkbox" name="is_active" defaultChecked={member.is_active} />{' '}
+                Идэвхтэй
+              </label>
+              <button type="submit" disabled={busy}>
+                Өөрчлөлт хадгалах
+              </button>
             </form>
           )}
         </article>

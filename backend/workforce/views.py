@@ -43,7 +43,7 @@ class DepartmentViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         department = serializer.instance
-        fields = ("name", "description")
+        fields = ('name', 'description')
         before = snapshot(department, fields)
         with transaction.atomic():
             department = serializer.save()

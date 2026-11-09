@@ -313,7 +313,9 @@ function TaskOnlyControls({ user, tasks, work, busy, refresh }) {
   return (
     <div className="task-only-status">
       <h3>Даалгаврын цаг</h3>
-      <p className="muted">WorkTrack төхөөрөмжийн холболтгүй үед даалгаврын цагийг хөтчөөс бүртгэнэ.</p>
+      <p className="muted">
+        WorkTrack төхөөрөмжийн холболтгүй үед даалгаврын цагийг хөтчөөс бүртгэнэ.
+      </p>
       {session ? (
         <>
           <p>
@@ -376,17 +378,20 @@ function BrowserTrackingHelp() {
       <div className="more-settings-body">
         <ol>
           <li>
-            Chrome-д <code>chrome://extensions</code>, Edge-д <code>edge://extensions</code> нээгээд Developer mode-ийг асаана.
+            Chrome-д <code>chrome://extensions</code>, Edge-д <code>edge://extensions</code> нээгээд
+            Developer mode-ийг асаана.
           </li>
           <li>
             Load unpacked дарж төслийн <code>browser_extension</code> хавтсыг сонгоно.
           </li>
           <li>
-            WorkTrack Website Time → Options хэсэгт ажилтны эрхээр нэвтэрч, мониторингийн зөвшөөрөл өгнө.
+            WorkTrack Website Time → Options хэсэгт ажилтны эрхээр нэвтэрч, мониторингийн зөвшөөрөл
+            өгнө.
           </li>
         </ol>
         <p className="muted">
-          Extension нь зөвхөн идэвхтэй tab-ын домэйн ба хугацааг бүртгэнэ. URL зам болон хуудасны агуулгыг хадгалахгүй.
+          Extension нь зөвхөн идэвхтэй tab-ын домэйн ба хугацааг бүртгэнэ. URL зам болон хуудасны
+          агуулгыг хадгалахгүй.
         </p>
       </div>
     </details>
@@ -559,7 +564,9 @@ export function DesktopPanel({ user, tasks, work, workday, busy, workedToday, re
         await refresh();
         setFinishError('');
       } catch (failure) {
-        setFinishError(`Даалгаврын төлөв хадгалагдсан. Жагсаалтыг шинэчилж чадсангүй: ${failure.message}`);
+        setFinishError(
+          `Даалгаврын төлөв хадгалагдсан. Жагсаалтыг шинэчилж чадсангүй: ${failure.message}`,
+        );
       }
     }
     if (finished && rating.loaded && !rating.label) setRatingOpen(true);

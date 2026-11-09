@@ -18,8 +18,8 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from contract import parse_iso, validate_batch
-from summary import summarize
+from agent_core.contract import parse_iso, validate_batch
+from agent_core.summary import summarize
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS activity_batches (

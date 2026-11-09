@@ -375,20 +375,71 @@
   color: #31564a;
 }
 
-.consent-panel h2 { margin: 0 0 10px; font-size: 19px; }
-.consent-panel p { line-height: 1.55; }
-.consent-acknowledgement, .summary-toggle { display: flex; align-items: center; gap: 8px; }
-.consent-acknowledgement input, .summary-toggle input { width: auto; }
-.report-range { color: #647b71; font-size: 14px; }
-.audit-table-wrap { overflow-x: auto; }
-.audit-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.audit-table th, .audit-table td { padding: 10px 12px; border-bottom: 1px solid #e7eeea; text-align: left; vertical-align: top; }
-.audit-table code { white-space: pre-wrap; overflow-wrap: anywhere; }
-.member-edit-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 16px; }
-.member-edit-form label { display: grid; gap: 5px; }
-.member-edit-form input, .member-edit-form select { min-width: 0; padding: 9px; border: 1px solid #dbe7e0; border-radius: 8px; }
-.member-edit-form .member-active-toggle { display: flex; align-items: center; gap: 8px; }
-.member-edit-form .member-active-toggle input { width: auto; }
+.consent-panel h2 {
+  margin: 0 0 10px;
+  font-size: 19px;
+}
+.consent-panel p {
+  line-height: 1.55;
+}
+.consent-acknowledgement,
+.summary-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.consent-acknowledgement input,
+.summary-toggle input {
+  width: auto;
+}
+.report-range {
+  color: #647b71;
+  font-size: 14px;
+}
+.audit-table-wrap {
+  overflow-x: auto;
+}
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.audit-table th,
+.audit-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e7eeea;
+  text-align: left;
+  vertical-align: top;
+}
+.audit-table code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.member-edit-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.member-edit-form label {
+  display: grid;
+  gap: 5px;
+}
+.member-edit-form input,
+.member-edit-form select {
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid #dbe7e0;
+  border-radius: 8px;
+}
+.member-edit-form .member-active-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.member-edit-form .member-active-toggle input {
+  width: auto;
+}
 
 @media (max-width: 640px) {
   .department-edit-row {
@@ -697,7 +748,9 @@
 /* Application and Website usage charts */
 .activity-detail-card {
   min-width: 0;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .activity-detail-card:hover {

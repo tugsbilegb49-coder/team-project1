@@ -166,9 +166,15 @@ class WebsiteActivityIngestSerializer(SegmentValidationMixin, serializers.ModelS
             raise serializers.ValidationError('Use a valid domain name.') from exc
         labels = domain.split('.')
         if (
-            not domain or len(domain) > 253 or any(not label or len(label) > 63 for label in labels)
-            or any(not label[0].isalnum() or not label[-1].isalnum()
-                   or any(not (char.isalnum() or char == '-') for char in label) for label in labels)
+            not domain
+            or len(domain) > 253
+            or any(not label or len(label) > 63 for label in labels)
+            or any(
+                not label[0].isalnum()
+                or not label[-1].isalnum()
+                or any(not (char.isalnum() or char == '-') for char in label)
+                for label in labels
+            )
         ):
             raise serializers.ValidationError('Use a hostname only; paths and URLs are not accepted.')
         return domain

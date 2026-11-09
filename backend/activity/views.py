@@ -182,10 +182,12 @@ class WebsiteActivityViewSet(viewsets.ModelViewSet):
         data = dict(serializer.validated_data)
         device = _resolve_device(request, data)
         from users.operations import current_settings
+
         retention_days = current_settings().activity_retention_days
         _, end = interval(WebsiteActivity, data)
         if end < timezone.now() - timedelta(days=retention_days):
             from rest_framework.exceptions import ValidationError
+
             raise ValidationError({'started_at': 'Activity is outside the configured retention window.'})
         activity, created = save_segment(WebsiteActivity, request.user, data, device)
         return Response(

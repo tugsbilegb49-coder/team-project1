@@ -62,11 +62,16 @@ test('real Django login → department/manager → task/quality → inactive fil
   // Answer the end-of-day question for real this time: it is stored on the server.
   await page.getByRole('dialog').getByRole('button', { name: 'Дунд' }).click();
   await expect(page.getByText('Өнөөдрийн үнэлгээ:')).toContainText('Дунд');
-  // The task stays chosen for the next one-click start.
+  // «Ажил дуусгах» completes the running task, so it is no longer offered for the next start.
   await expect(page.getByRole('button', { name: 'Ажил эхлүүлэх', exact: true })).toBeEnabled();
-  await expect(page.getByLabel('Хийх даалгавар', { exact: true })).toHaveValue(
-    String(workflowTask.id),
-  );
+  await expect(page.getByLabel('Хийх даалгавар', { exact: true })).toHaveValue('none');
+  const finishedTask = await (
+    await request.get(`${process.env.VITE_API_URL}/api/tasks/${workflowTask.id}/`, {
+      headers: workflowHeaders,
+    })
+  ).json();
+  expect(finishedTask.status).toBe('DONE');
+  expect(finishedTask.completed_at).toBeTruthy();
   expect(
     (
       await (

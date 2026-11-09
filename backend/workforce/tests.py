@@ -239,7 +239,7 @@ class LiveUploaderTests(LiveServerTestCase):
         from tempfile import TemporaryDirectory
 
         sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-        from activity_agent.sender import BatchSender
+        from activity_agent.agent_core.sender import BatchSender
         from src.api_logger import CameraEventUploader
         from django.core.cache import cache
 

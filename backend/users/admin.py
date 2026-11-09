@@ -10,7 +10,17 @@ from .audit_admin import AuditedAdminMixin
 @admin.register(User)
 class CustomUserAdmin(AuditedAdminMixin, UserAdmin):
     audit_resource = 'user'
-    audit_fields = ('username', 'first_name', 'last_name', 'email', 'role', 'department_id', 'is_active', 'is_staff', 'is_superuser')
+    audit_fields = (
+        'username',
+        'first_name',
+        'last_name',
+        'email',
+        'role',
+        'department_id',
+        'is_active',
+        'is_staff',
+        'is_superuser',
+    )
     fieldsets = UserAdmin.fieldsets + (('Work profile', {'fields': ('role', 'department')}),)
     list_display = ('username', 'email', 'role', 'department', 'is_staff', 'is_active')
     list_filter = ('role', 'department', 'is_staff', 'is_active')
@@ -19,11 +29,17 @@ class CustomUserAdmin(AuditedAdminMixin, UserAdmin):
         if deleting and request.user.pk == obj.pk:
             raise ValidationError('You cannot delete your own account.')
         next_user = replacement or obj
-        if obj.is_active and obj.is_admin_role and (
-            deleting or not next_user.is_active or not (next_user.is_superuser or next_user.role == User.Role.ADMIN)
+        if (
+            obj.is_active
+            and obj.is_admin_role
+            and (
+                deleting or not next_user.is_active or not (next_user.is_superuser or next_user.role == User.Role.ADMIN)
+            )
         ):
-            others = User.objects.filter(is_active=True).exclude(pk=obj.pk).filter(
-                models.Q(role=User.Role.ADMIN) | models.Q(is_superuser=True)
+            others = (
+                User.objects.filter(is_active=True)
+                .exclude(pk=obj.pk)
+                .filter(models.Q(role=User.Role.ADMIN) | models.Q(is_superuser=True))
             )
             if not others.exists():
                 raise ValidationError('The last active administrator cannot be removed or demoted.')

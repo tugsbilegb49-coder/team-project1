@@ -645,7 +645,10 @@ function App() {
                             <div className="chart-item" key={row.domain}>
                               <div className="chart-value">{minutes.toFixed(1)} мин</div>
                               <div className="chart-bar-bg">
-                                <div className="chart-bar-fill" style={{ width: `${(minutes / maxWebsiteMinutes) * 100}%` }} />
+                                <div
+                                  className="chart-bar-fill"
+                                  style={{ width: `${(minutes / maxWebsiteMinutes) * 100}%` }}
+                                />
                               </div>
                               <div className="chart-label">{row.domain}</div>
                             </div>
@@ -653,7 +656,9 @@ function App() {
                         })}
                       </div>
                     ) : (
-                      <p className="muted">Вэбсайт бүртгэгдээгүй. WorkTrack Website Time extension суулгана уу.</p>
+                      <p className="muted">
+                        Вэбсайт бүртгэгдээгүй. WorkTrack Website Time extension суулгана уу.
+                      </p>
                     )}
                   </div>
 

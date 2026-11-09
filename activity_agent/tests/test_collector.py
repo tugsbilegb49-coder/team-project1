@@ -4,7 +4,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from collector import ActivityCollector
+from agent_core.collector import ActivityCollector
 
 
 class FakeClock:

@@ -138,9 +138,7 @@ class Workday:
             payload = {'session_id': session['id']}
             if complete:
                 payload['complete'] = True
-            self._receive(
-                client._authenticated_post(f'/api/tasks/{session["task_id"]}/work-stop/', payload)
-            )
+            self._receive(client._authenticated_post(f'/api/tasks/{session["task_id"]}/work-stop/', payload))
 
     # Tray actions ------------------------------------------------------------------------------
 

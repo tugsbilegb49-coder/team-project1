@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from sender import BatchSender, StaleTokenError
+from agent_core.sender import BatchSender, StaleTokenError
 from token_store import save_tokens
 
 

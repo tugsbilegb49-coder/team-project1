@@ -57,8 +57,10 @@ class UserViewSet(viewsets.ModelViewSet):
         next_role = serializer.validated_data.get('role', instance.role)
         remains_admin = instance.is_superuser or next_role == User.Role.ADMIN
         if instance.is_active and instance.is_admin_role and (not next_active or not remains_admin):
-            other_admins = User.objects.filter(is_active=True).exclude(pk=instance.pk).filter(
-                models.Q(role=User.Role.ADMIN) | models.Q(is_superuser=True)
+            other_admins = (
+                User.objects.filter(is_active=True)
+                .exclude(pk=instance.pk)
+                .filter(models.Q(role=User.Role.ADMIN) | models.Q(is_superuser=True))
             )
             if not other_admins.exists():
                 raise ValidationError('The last active administrator cannot be deactivated or demoted.')
@@ -80,11 +82,16 @@ class UserViewSet(viewsets.ModelViewSet):
 
         if instance.pk == self.request.user.pk:
             raise ValidationError('You cannot delete your own account.')
-        if instance.is_active and instance.is_admin_role and not User.objects.filter(
-            is_active=True,
-        ).exclude(pk=instance.pk).filter(
-            models.Q(role=User.Role.ADMIN) | models.Q(is_superuser=True)
-        ).exists():
+        if (
+            instance.is_active
+            and instance.is_admin_role
+            and not User.objects.filter(
+                is_active=True,
+            )
+            .exclude(pk=instance.pk)
+            .filter(models.Q(role=User.Role.ADMIN) | models.Q(is_superuser=True))
+            .exists()
+        ):
             raise ValidationError('The last active administrator cannot be deleted.')
         audit_event(self.request.user, 'user', instance.pk, 'delete', {}, instance)
         instance.delete()
