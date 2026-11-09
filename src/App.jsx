@@ -439,6 +439,7 @@ function App() {
             work={taskWork}
             workday={workday}
             busy={busy}
+            refresh={load}
           />
         ) : shown === 'account' ? (
           <PasswordSettings key={`password:${user.id}`} />

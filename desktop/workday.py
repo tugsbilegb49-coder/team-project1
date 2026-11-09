@@ -132,11 +132,14 @@ class Workday:
         if self.thread:
             self.thread.join(timeout=3)
 
-    def _stop_task(self, client):
+    def _stop_task(self, client, complete=False):
         session = self.session if self.session is not None else self.refresh(client)
         if session and session.get('running'):
+            payload = {'session_id': session['id']}
+            if complete:
+                payload['complete'] = True
             self._receive(
-                client._authenticated_post(f'/api/tasks/{session["task_id"]}/work-stop/', {'session_id': session['id']})
+                client._authenticated_post(f'/api/tasks/{session["task_id"]}/work-stop/', payload)
             )
 
     # Tray actions ------------------------------------------------------------------------------
@@ -179,7 +182,7 @@ class Workday:
         user = self.owner()
         if not user:
             return '', False
-        self._stop_task(self.controller._client(user))
+        self._stop_task(self.controller._client(user), complete=finish)
         controller = self.controller
         if finish:
             controller.act(user, None, 'stop', {})

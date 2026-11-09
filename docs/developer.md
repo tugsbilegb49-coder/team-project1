@@ -424,7 +424,7 @@ refresh token 1 өдөр хүчинтэй. Agent-ууд refresh token ашигл
 | `/api/tasks/{id}/transfer-respond/` | POST | `request_id`, `decision`: accept/decline/cancel; accept/decline зөвхөн хүлээн авагч |
 | `/api/tasks/{id}/progress/` | POST | `percent`, `expected_percent`; одоогийн хариуцагчийн хувь, нийт ≤100 |
 | `/api/tasks/{id}/work-start/` | POST | Хоосон JSON; нэг ажилтан нэг идэвхтэй таймер |
-| `/api/tasks/{id}/work-stop/` | POST | `session_id`; зөвхөн өөрийн таймерыг зогсооно |
+| `/api/tasks/{id}/work-stop/` | POST | `session_id`, optional `complete: true`; өөрийн таймерыг зогсооно, `complete` үед өөрийн даалгаврыг Дууссан болгож audit хийнэ |
 | `/api/tasks/work-session/` | GET, POST | Өөрийн session; POST `session_id` холболтыг батална, 90 секундийн хязгаартай |
 | `/api/devices/enroll/` | POST | Өөрийн workstation бүртгүүлэх |
 | `/api/devices/` | GET | Харах эрхтэй device-ууд |

@@ -36,6 +36,7 @@ class TransferDecision(StrictSerializer):
 
 class SessionInput(StrictSerializer):
     session_id = serializers.IntegerField(min_value=1)
+    complete = serializers.BooleanField(required=False, default=False)
 
 
 def validated(serializer_type, request):
@@ -203,6 +204,8 @@ class TaskActions:
         data = validated(SessionInput, request)
         task = self.locked_task()
         User.objects.select_for_update().get(pk=request.user.pk)
+        if data['complete']:
+            workflow.require_owner(request.user, task)
         session = TaskWorkSession.objects.filter(
             pk=data['session_id'], employee=request.user, contribution__task=task
         ).first()
@@ -211,6 +214,20 @@ class TaskActions:
         if session.ended_at is None:
             workflow.finish(session)
             audit_event(request.user, 'task', task.pk, 'work_stop', {}, request.user)
+        if data['complete'] and task.status != Task.Status.DONE:
+            previous_status = task.status
+            task.status = Task.Status.DONE
+            task.completed_at = timezone.now()
+            task.save(update_fields=['status', 'completed_at', 'updated_at'])
+            workflow.close_task(task)
+            audit_event(
+                request.user,
+                'task',
+                task.pk,
+                'complete',
+                {'status': {'before': previous_status, 'after': Task.Status.DONE}},
+                request.user,
+            )
         return Response(workflow.work_state(request.user))
 
     @action(detail=False, methods=['get', 'post'], url_path='work-session')

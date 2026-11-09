@@ -137,13 +137,13 @@ export function useWorkday(user, work) {
     });
   }
 
-  function stop(paused = false) {
+  function stop(paused = false, completeTask = false) {
     return perform(async (send, signal) => {
       const task = work.sample?.data.session;
       if (task) selectTask(task.task_id);
       const errors = [];
       try {
-        await work.stop();
+        await work.stop({ complete: completeTask });
       } catch (error) {
         errors.push(`Даалгаврын цаг: ${error.message}`);
       }
@@ -160,7 +160,9 @@ export function useWorkday(user, work) {
       if (errors.length) throw new Error(errors.join(' '));
       return paused
         ? 'Даалгаврын цаг, аппын бүртгэл түр зогслоо. Програм нээлттэй цаг үргэлжилнэ.'
-        : 'Даалгаврын цаг, аппын бүртгэлийг зогсоолоо. Даалгаврыг дууссан төлөвт оруулаагүй. Програм нээлттэй цаг үргэлжилнэ.';
+        : completeTask && task
+          ? 'Даалгаврыг Дууссан төлөвт оруулж, аппын бүртгэлийг зогсоолоо.'
+          : 'Даалгаврын цаг, аппын бүртгэлийг зогсоолоо. Програм нээлттэй цаг үргэлжилнэ.';
     });
   }
 
@@ -187,7 +189,7 @@ export function useWorkday(user, work) {
     action,
     start,
     pause: () => stop(true),
-    finish: () => stop(false),
+    finish: () => stop(false, true),
     refresh: () => action('status'),
   };
 }

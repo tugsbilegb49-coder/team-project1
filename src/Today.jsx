@@ -407,10 +407,11 @@ function MoreSettings({ state, busy, act, onRelink }) {
   );
 }
 
-export function DesktopPanel({ user, tasks, work, workday, busy, workedToday }) {
+export function DesktopPanel({ user, tasks, work, workday, busy, workedToday, refresh }) {
   const { state, error, connectionError, message, closed } = workday;
   const rating = useSelfRating(user.id);
   const [ratingOpen, setRatingOpen] = useState(false);
+  const [finishError, setFinishError] = useState('');
   const { session, running: taskRunning } = sessionTiming(work.sample, useTick());
   const [asking, setAsking] = useState(null); // null | 'start' | 'relink'
   const pendingStart = useRef(null);
@@ -428,7 +429,17 @@ export function DesktopPanel({ user, tasks, work, workday, busy, workedToday }) 
   }
   async function finish() {
     // The end of the day is when people know how it went: ask once, unless already answered.
-    if ((await workday.finish()) && rating.loaded && !rating.label) setRatingOpen(true);
+    const completedTask = work.sample?.data.session?.task_id;
+    const finished = await workday.finish();
+    if (completedTask && refresh) {
+      try {
+        await refresh();
+        setFinishError('');
+      } catch (failure) {
+        setFinishError(`Даалгаврын төлөв хадгалагдсан. Жагсаалтыг шинэчилж чадсангүй: ${failure.message}`);
+      }
+    }
+    if (finished && rating.loaded && !rating.label) setRatingOpen(true);
   }
   async function accept(body) {
     const next = asking === 'start' ? pendingStart.current : null;
@@ -443,6 +454,7 @@ export function DesktopPanel({ user, tasks, work, workday, busy, workedToday }) 
           {working ? 'Бүртгэж байна' : paused ? 'Түр зогссон' : 'Эхлээгүй'}
         </span>
       </div>
+      {finishError && <p role="alert">{finishError}</p>}
       {closed ? (
         <p role="status">WorkTrack хаагдаж байна. Дараа {launcherName}-аа нээгээрэй.</p>
       ) : (
@@ -564,9 +576,14 @@ export function DesktopPanel({ user, tasks, work, workday, busy, workedToday }) 
   );
 }
 
-export default function Today({ user, navigate, tasks, work, workday, busy }) {
+export default function Today({ user, navigate, tasks, work, workday, busy, refresh }) {
   const [result, setResult] = useState(null),
     [error, setError] = useState('');
+  const [todayRevision, setTodayRevision] = useState(0);
+  async function refreshAfterFinish() {
+    if (refresh) await refresh();
+    setTodayRevision((value) => value + 1);
+  }
   usePolling(
     async (signal) => {
       try {
@@ -580,7 +597,7 @@ export default function Today({ user, navigate, tasks, work, workday, busy }) {
       }
     },
     30000,
-    user.id,
+    `${user.id}:${todayRevision}`,
   );
   return (
     <section className="today-page">
@@ -600,6 +617,7 @@ export default function Today({ user, navigate, tasks, work, workday, busy }) {
         workday={workday}
         busy={busy}
         workedToday={Boolean(result?.application_seconds)}
+        refresh={refreshAfterFinish}
       />
       <section className="stats today-time-stats" aria-label="Өнөөдрийн цаг">
         <TaskWorkClock work={work} card />

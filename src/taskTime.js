@@ -106,7 +106,7 @@ export function useTaskWork(user) {
       mutating.current = false;
     }
   }
-  async function stop() {
+  async function stop({ complete = false } = {}) {
     const session = latest.current?.userId === userId ? latest.current.data.session : null;
     if (!session) return;
     const expected = ++revision.current;
@@ -114,7 +114,7 @@ export function useTaskWork(user) {
     try {
       const data = await api(`/api/tasks/${session.task_id}/work-stop/`, {
         method: 'POST',
-        body: JSON.stringify({ session_id: session.id }),
+        body: JSON.stringify({ session_id: session.id, ...(complete ? { complete: true } : {}) }),
       });
       if (expected === revision.current) receive(data, userId);
     } finally {
