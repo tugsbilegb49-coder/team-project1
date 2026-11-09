@@ -43,7 +43,7 @@ def run_checks(config):
             hint += " (Linux дээр X11 session хэрэгтэй, Wayland дэмжигдэхгүй)"
         results.append(_result(False, "pynput keyboard/mouse listener", hint))
 
-    from collector import get_foreground_app
+    from agent_core.collector import get_foreground_app
     app = get_foreground_app()
     results.append(_result(app != "unknown", "Foreground app detection", app))
 

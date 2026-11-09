@@ -1,129 +1,56 @@
-# АЖЛЫН БҮТЭЭМЖ ШАЛГАХ СИСТЕМ
+# Ажлын бүтээмж шалгах систем
 
-## 1. Төслийн танилцуулга
+## Төслийн зорилго
 
+Компьютерийн идэвхийн мэдээлэл болон зөвшөөрөлтэй camera presence detection-ийг ашиглан турших систем. Camera модуль зураг, бичлэг хадгалахгүй; ажилтны ID, timestamp, хүн байгаа эсэх, confidence утгыг API руу илгээнэ.
 
+## Бүтэц
 
-Энэхүү төсөл нь ажилтны компьютерийн үйл ажиллагаа болон камерын мэдээлэлд үндэслэн ажлын бүтээмжийг хянах систем юм.
+- activity_agent/agent.py — activity agent-ийн entry point
+- activity_agent/agent_core/ — collector, contract, sender, summary модулиуд
+- activity_agent/mock_server.py — SQLite mock API
+- activity_agent/camera_ai/person_detection.py — OpenCV + YOLO presence detection
+- activity_agent/camera_ai/evaluate_detection.py — гараар шошголох camera QA
+- activity_agent/camera_ai/ai_experiment.py — Random Forest туршилт
+- activity_agent/qa_samples.csv — гараар шошголсон AI туршилтын өгөгдөл
+- activity_agent/tests/ — автомат тестүүд
+- activity_agent/docs/camera_ai_qa.md — consent checklist, QA тайлан, хязгаарлалт
 
+## Ажиллуулах
 
+Төслийн activity_agent хавтас дотроос:
 
-## 2. Ашигласан технологи
+1. API сервер: python mock_server.py
+2. Өөр терминалд camera AI: python camera_ai/person_detection.py
+3. Гараар camera QA: python camera_ai/evaluate_detection.py — P хүн байна, N хүн байхгүй, Q дуусгах. Сонгосон label болон prediction qa_samples.csv-д нэмэгдэнэ.
+4. Random Forest туршилт: python camera_ai/ai_experiment.py
+5. Бүх автомат тест: python -m unittest discover -s tests -v
 
+Camera ашиглахаас өмнө камерын зөвшөөрөл авч, API-ийн config.json тохиргоог шалгана.
 
+## Camera detection
 
-- Python
+YOLOv8-ийн COCO person ангилалд 0.5 confidence threshold хэрэглэнэ. Төлөв 5 кадр дараалан тогтвортой байвал өөрчлөлтийг API руу явуулна. Түр зуурын сүлжээний алдаанд илгээхийг програм ажиллаж байх хугацаанд дахин оролдоно. Зураг болон бичлэгийг файлд хадгалахгүй.
 
-- OpenCV
+## QA-ийн одоогийн нотолгоо
 
-- YOLOv8
-
-- Random Forest
-
-- SQLite
-
-- REST API
-
-- Scikit-learn
-
-- Pandas
-
-
-
-## 3. Camera модуль
-
-
-
-- OpenCV ашиглан вебкамераас дүрс уншина.
-
-- YOLOv8 ашиглан хүн байгаа эсэхийг илрүүлнэ.
-
-- Confidence утгыг тооцно.
-
-- Үр дүнг Boolean утгаар илэрхийлнэ.
-
-- Камерын зураг, бичлэг хадгалахгүй.
-
-
-
-## 4. AI модуль
-
-
-
-YOLOv8 нь хүн илрүүлэхэд ашиглагдана.
-
-
-
-Random Forest загварын өгөгдөл одоогоор хангалтгүй тул үр дүнг EXPERIMENTAL гэж тэмдэглэнэ.
-
-
-
-## 5. QA туршилтын үр дүн
-
-
-
-10 дээжийн урьдчилсан туршилт:
-
-
-
-| Үзүүлэлт | Үр дүн |
-
+| Үзүүлэлт | Утга |
 |---|---:|
+| Гараар шошголсон дээж | 12 |
+| TP / FP / FN / TN | 5 / 0 / 2 / 5 |
+| Precision | 1.000 |
+| Recall | 0.714 |
+| F1 | 0.833 |
+| Accuracy | 0.833 |
 
-| TP | 5 |
+Энэ бол 12 дээжийн урьдчилсан туршилт бөгөөд нийтлэг нарийвчлалын баталгаа биш. Одоогийн qa_samples.csv 10 мөртэй тул дээрх 12 дээжийн үр дүнг CSV-ээс бүрэн давтан тооцох боломжгүй. Эцсийн хамгаалалтаас өмнө хоёр эх сурвалжийг тулгаж, QA CSV-г бодит шошготой бүрэн болгоно.
 
-| FP | 0 |
+Random Forest-ийн label нь actual_present; feature нь predicted_present ба confidence. Одоогийн өгөгдөл 10 мөртэй тул туршилтыг зориуд сургахгүй. Одоогийн AI туршилтын үнэлгээ: LOW — 20 мөрийн доод босго хүрээгүй. Accuracy/F1-ийг хангалтгүй өгөгдлөөс зохиомлоор гаргахгүй.
 
-| FN | 0 |
+## Нууцлал ба зөвшөөрөл
 
-| TN | 5 |
+Камер ашиглахаас өмнө зорилго, боловсруулж буй мэдээлэл, хадгалалт ба татгалзах боломжийг тайлбарлан зөвшөөрөл авна. Туршилтын checklist болон системийн үлдсэн хязгаарлалтыг activity_agent/docs/camera_ai_qa.md баримтаас үзнэ.
 
-| Precision | 1.00 |
+## Тестийн төлөв
 
-| Recall | 1.00 |
-
-| Accuracy | 1.00 |
-
-
-
-Энэ нь зөвхөн 10 дээжийн урьдчилсан үр дүн юм.
-
-
-
-## 6. Нууцлал
-
-
-
-- Камерын зураг, бичлэг хадгалахгүй.
-
-- Зөвхөн хүн байгаа эсэх болон confidence утгыг хадгална.
-
-- Камер ашиглахаас өмнө зөвшөөрөл авна.
-
-
-
-## 7. Тест ажиллуулах
-
-
-
-`activity\_agent` хавтас дотроос:
-
-
-
-```bash
-
-python -m unittest discover -s tests -v
-
-```
-
-
-
-Нийт 19 тест амжилттай ажилласан.
-
-
-
-## 8. Дүгнэлт
-
-
-
-Camera болон Activity Agent хэсгүүдийг хөгжүүлж, үндсэн ажиллагааг шалгасан. Random Forest загварт илүү олон шошголсон өгөгдөл шаардлагатай.
+Сүүлийн шалгалтаар Python syntax шалгалт амжилттай, автомат тестүүд 20/20 амжилттай болсон. Бодит вебкамераар live demo-г энэ орчинд шалгаагүй.

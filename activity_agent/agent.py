@@ -18,9 +18,9 @@ import sys
 import time
 import uuid
 
-from collector import ActivityCollector
-from contract import build_batch, validate_batch
-from sender import BatchSender
+from agent_core.collector import ActivityCollector
+from agent_core.contract import build_batch, validate_batch
+from agent_core.sender import BatchSender
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 log = logging.getLogger("agent")
