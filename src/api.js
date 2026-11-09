@@ -121,6 +121,7 @@ function refreshSession(expected) {
 }
 export async function api(path, options = {}, retry = true) {
   const expected = version;
+  const desktopRequest = path.startsWith('/desktop/');
   checkSession(expected, options.signal);
   const response = await fetchResponse(path, {
     ...options,
@@ -131,12 +132,13 @@ export async function api(path, options = {}, retry = true) {
     },
   });
   checkSession(expected, options.signal);
-  if (response.status === 401 && tokens && retry) {
+  if (response.status === 401 && tokens && retry && !desktopRequest) {
     await refreshSession(expected);
     checkSession(expected, options.signal);
     return api(path, options, false);
   }
-  if (response.status === 401 && tokens && path !== '/api/auth/login/') clearAuth('expired');
+  if (response.status === 401 && tokens && path !== '/api/auth/login/' && !desktopRequest)
+    clearAuth('expired');
   const data = await readResponse(response);
   checkSession(expected, options.signal);
   return data;

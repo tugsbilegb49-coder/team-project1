@@ -72,6 +72,19 @@ test('invalid refresh clears the session and exposes authentication error', asyn
   await assert.rejects(client.api('/api/users/me/'), /Нэвтрэх хугацаа дууссан/);
   assert.equal(sessionStorage.getItem('worktrack-auth'), null);
 });
+test('desktop bridge unauthorized response does not clear the web login', async () => {
+  const client = await setup({ access: 'access', refresh: 'refresh' });
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return reply({ detail: 'Desktop bridge login required' }, 401);
+  };
+  await assert.rejects(client.desktop('status'), (error) => error.status === 401);
+  assert.equal(calls, 1);
+  assert.equal(client.hasAuth(), true);
+  assert.equal(JSON.parse(sessionStorage.getItem('worktrack-auth')).refresh, 'refresh');
+});
+
 test('list retrieves every page and delete accepts 204', async () => {
   const client = await setup();
   globalThis.fetch = async (url) =>
