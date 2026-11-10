@@ -194,4 +194,25 @@ class Migration(migrations.Migration):
                 fields=["employee", "observed_at"], name="core_cam_emp_time_idx"
             ),
         ),
+        migrations.AddConstraint(
+            model_name="task",
+            constraint=models.CheckConstraint(
+                condition=models.Q(status__in=["todo", "in_progress", "done"]),
+                name="task_status_valid",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="consentrecord",
+            constraint=models.CheckConstraint(
+                condition=models.Q(consent_type__in=["computer", "camera"]),
+                name="consent_type_valid",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="cameraanalytics",
+            constraint=models.CheckConstraint(
+                condition=models.Q(confidence__gte=0, confidence__lte=1),
+                name="camera_confidence_valid",
+            ),
+        ),
     ]

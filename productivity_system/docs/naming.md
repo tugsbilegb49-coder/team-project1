@@ -1,8 +1,8 @@
-# Naming convention
+# Database naming
 
-- Table: snake_case, olon too (`employees`, `tasks`)
-- Primary key: `id`
-- Foreign key: `<table>_id` (`employee_id`)
-- Ognoo/tsag: `created_at`, `observed_at`
-- Boolean: `is_` ehlelтei (`is_granted`, `is_at_desk`)
-- Django model: PascalCase, neg tootoi (`Employee`); `db_table`-aar table ner zaana
+- Use plural `snake_case` table names, such as `employees` and `tasks`.
+- Use `id` as the primary key (`BigAutoField` in Django).
+- Name foreign-key columns `<related_table>_id`, such as `employee_id`.
+- Use `_at` for timestamps and `_date` for dates.
+- Prefix boolean fields with `is_`, such as `is_granted` and `is_at_desk`.
+- Use PascalCase singular Django model names and set `db_table` explicitly.

@@ -38,6 +38,12 @@ class Task(models.Model):
 
     class Meta:
         db_table = "tasks"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(status__in=["todo", "in_progress", "done"]),
+                name="task_status_valid",
+            )
+        ]
 
     def __str__(self):
         return self.title
@@ -52,6 +58,12 @@ class ConsentRecord(models.Model):
 
     class Meta:
         db_table = "consent_records"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(consent_type__in=["computer", "camera"]),
+                name="consent_type_valid",
+            )
+        ]
 
 
 class ComputerActivity(models.Model):
@@ -85,5 +97,11 @@ class CameraAnalytics(models.Model):
         indexes = [
             models.Index(
                 fields=["employee", "observed_at"], name="core_cam_emp_time_idx"
+            )
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(confidence__gte=0, confidence__lte=1),
+                name="camera_confidence_valid",
             )
         ]

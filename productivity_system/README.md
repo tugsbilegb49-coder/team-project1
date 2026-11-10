@@ -15,6 +15,7 @@ python manage.py migrate
 python manage.py createsuperuser
 python manage.py seed       # turshiltiin medeelel uusgene
 python manage.py report
+python manage.py report --from 2026-01-01 --to 2026-01-31
 ```
 
 Camera collector ashiglah bol optional dependency suulgana:
@@ -26,6 +27,9 @@ pip install opencv-python mediapipe
 Production deer `.env`-d random, nuuts `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=False`
 bolon serveriin domain-uudiig `DJANGO_ALLOWED_HOSTS`-d bichne. Production
 secret key baihgui bol Django aldaatai tohirgoogoor asahaas tatgalzana.
+PostgreSQL suulgaagui local hugjuulelted `.env`-d `DB_ENGINE=sqlite`,
+`DB_NAME=db.sqlite3` gej tohiruulaad SQLite ashiglaj bolno; production deer
+PostgreSQL songono.
 
 ## Ajilluulah
 
@@ -35,6 +39,9 @@ secret key baihgui bol Django aldaatai tohirgoogoor asahaas tatgalzana.
 | Computer collector | `python -m collector.computer_agent <employee_id>` |
 | Camera collector (opencv-python, mediapipe shaardana) | `python -m camera.camera_agent <employee_id>` |
 | Dashboard | `streamlit run dashboard/app.py` |
+
+Dashboard bolon `report` command ijil songoson hugatsaag ashiglaj bolno. Report
+command-d `--from` esvel `--to`-g danгаар ni ugch bolno.
 
 Collector ehluulehees umnu admin deer employee-d `computer` esvel `camera`
 zuvshuurul ugnu. Zuvshuurul tsutslahdaa tuhain employee bolon consent type-d

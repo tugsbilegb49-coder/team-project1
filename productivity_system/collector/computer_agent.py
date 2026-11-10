@@ -15,6 +15,7 @@ import django
 import psutil
 from pynput import keyboard, mouse
 from django.utils import timezone
+from django.db import transaction
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
@@ -53,6 +54,36 @@ def foreground_app():
         return ""
 
 
+def flush_activity(employee_id, active_by_app, idle_seconds, key_count, click_count):
+    """Persist one interval with active time attributed to each foreground app."""
+    unknown_active = active_by_app.get("", 0)
+    records = [
+        ComputerActivity(
+            employee_id=employee_id,
+            date=timezone.localdate(),
+            active_seconds=seconds,
+            app_name=application[:100],
+        )
+        for application, seconds in active_by_app.items()
+        if application and seconds
+    ]
+    if unknown_active or idle_seconds or key_count or click_count or not records:
+        records.append(
+            ComputerActivity(
+                employee_id=employee_id,
+                date=timezone.localdate(),
+                active_seconds=unknown_active,
+                idle_seconds=idle_seconds,
+                key_count=key_count,
+                click_count=click_count,
+                app_name="",
+            )
+        )
+    if records:
+        with transaction.atomic():
+            ComputerActivity.objects.bulk_create(records)
+
+
 def main(employee_id):
     if not Employee.objects.filter(pk=employee_id).exists():
         print(f"Employee oldsongui (id={employee_id}).")
@@ -71,7 +102,8 @@ def main(employee_id):
         raise
     print(f"Collector ehelle (employee_id={employee_id}). Ctrl+C = zogsoh.")
 
-    active = idle = 0
+    active_by_app = {}
+    idle = 0
     last_flush = time.monotonic()
     last_consent_check = last_flush
     app = ""
@@ -89,19 +121,22 @@ def main(employee_id):
             if is_idle:
                 idle += 1
             else:
-                active += 1
                 app = foreground_app() or app
+                active_by_app[app] = active_by_app.get(app, 0) + 1
 
             if now - last_flush >= FLUSH_EVERY:
                 with lock:
                     keys, clicks = state["keys"], state["clicks"]
                     state["keys"] = state["clicks"] = 0
-                ComputerActivity.objects.create(
-                    employee_id=employee_id, date=timezone.localdate(),
-                    active_seconds=active, idle_seconds=idle,
-                    key_count=keys, click_count=clicks, app_name=app[:100],
-                )
-                active = idle = 0
+                try:
+                    flush_activity(employee_id, active_by_app, idle, keys, clicks)
+                except Exception:
+                    with lock:
+                        state["keys"] += keys
+                        state["clicks"] += clicks
+                    raise
+                active_by_app.clear()
+                idle = 0
                 last_flush = time.monotonic()
     except KeyboardInterrupt:
         print("Zogsloo.")
@@ -111,20 +146,20 @@ def main(employee_id):
         with lock:
             keys, clicks = state["keys"], state["clicks"]
             state["keys"] = state["clicks"] = 0
-        if active or idle or keys or clicks:
-            ComputerActivity.objects.create(
-                employee_id=employee_id,
-                date=timezone.localdate(),
-                active_seconds=active,
-                idle_seconds=idle,
-                key_count=keys,
-                click_count=clicks,
-                app_name=app[:100],
-            )
+        if active_by_app or idle or keys or clicks:
+            flush_activity(employee_id, active_by_app, idle, keys, clicks)
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Ashiglalt: python -m collector.computer_agent <employee_id>")
         sys.exit(1)
-    main(int(sys.argv[1]))
+    try:
+        employee_id = int(sys.argv[1])
+    except ValueError:
+        print("employee_id buhel too baih yostoi.")
+        sys.exit(2)
+    if employee_id <= 0:
+        print("employee_id eyreg too baih yostoi.")
+        sys.exit(2)
+    main(employee_id)

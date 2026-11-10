@@ -81,4 +81,12 @@ if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Ashiglalt: python -m camera.camera_agent <employee_id>")
         sys.exit(1)
-    main(int(sys.argv[1]))
+    try:
+        employee_id = int(sys.argv[1])
+    except ValueError:
+        print("employee_id buhel too baih yostoi.")
+        sys.exit(2)
+    if employee_id <= 0:
+        print("employee_id eyreg too baih yostoi.")
+        sys.exit(2)
+    main(employee_id)

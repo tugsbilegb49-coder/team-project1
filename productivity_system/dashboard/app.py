@@ -15,9 +15,10 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
-from django.db.models import Sum  # noqa: E402
+from django.db.models import Avg, Count, Q, Sum  # noqa: E402
 from django.utils import timezone  # noqa: E402
 
+from core.date_ranges import local_datetime_bounds  # noqa: E402
 from core.models import CameraAnalytics, ComputerActivity  # noqa: E402
 
 st.set_page_config(page_title="Productivity dashboard", layout="wide")
@@ -38,6 +39,7 @@ if isinstance(date_selection, (tuple, list)):
         start_date = end_date = today
 else:
     start_date = end_date = date_selection
+start_at, end_at = local_datetime_bounds(start_date, end_date)
 
 act = pd.DataFrame(
     ComputerActivity.objects.filter(date__range=(start_date, end_date))
@@ -60,25 +62,42 @@ else:
             title="Active / idle tsag",
             labels={"employee__full_name": "Employee", "value": "Tsag", "variable": "Turul"},
         ),
-        use_container_width=True)
+        width="stretch")
     c2.plotly_chart(
         px.bar(act, x="employee__full_name", y=["keys", "clicks"],
                barmode="group", title="Tovshilt / click too",
                labels={"employee__full_name": "Employee", "value": "Too", "variable": "Turul"}),
-        use_container_width=True)
+        width="stretch")
 
 cam = pd.DataFrame(
     CameraAnalytics.objects.filter(
-        observed_at__date__range=(start_date, end_date)
-    ).values("employee__full_name", "observed_at", "is_at_desk", "confidence")
+        observed_at__gte=start_at,
+        observed_at__lt=end_at,
+    )
+    .values("employee__full_name")
+    .annotate(
+        total=Count("pk"),
+        at_desk=Count("pk", filter=Q(is_at_desk=True)),
+        avg_confidence=Avg("confidence"),
+    )
 )
 if not cam.empty:
-    desk = cam.groupby("employee__full_name")["is_at_desk"].mean().reset_index()
-    desk["is_at_desk"] *= 100
+    cam["desk_percent"] = cam["at_desk"] * 100 / cam["total"]
     st.plotly_chart(
-        px.bar(desk, x="employee__full_name", y="is_at_desk",
+        px.bar(cam, x="employee__full_name", y="desk_percent",
                title="Suudald baisan huvi (%)",
-               labels={"employee__full_name": "Employee", "is_at_desk": "Huvi (%)"}),
-        use_container_width=True)
+               labels={"employee__full_name": "Employee", "desk_percent": "Huvi (%)"}),
+        width="stretch")
+    st.dataframe(
+        cam[["employee__full_name", "total", "avg_confidence"]].rename(
+            columns={
+                "employee__full_name": "Employee",
+                "total": "Camera samples",
+                "avg_confidence": "Average confidence",
+            }
+        ),
+        hide_index=True,
+        width="stretch",
+    )
 else:
     st.info("Songoson hugatsaand camera analytics alga.")

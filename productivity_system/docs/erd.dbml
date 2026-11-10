@@ -1,42 +1,61 @@
 Table departments {
-  id integer [pk, increment]
-  name varchar(100) [unique]
+  id bigint [pk, increment]
+  name varchar(100) [unique, not null]
 }
+
 Table employees {
-  id integer [pk, increment]
-  department_id integer [ref: > departments.id]
-  full_name varchar(150)
-  email varchar(254) [unique]
-  created_at timestamp
+  id bigint [pk, increment]
+  department_id bigint [not null]
+  full_name varchar(150) [not null]
+  email varchar(254) [unique, not null]
+  created_at timestamp [not null]
 }
+
 Table tasks {
-  id integer [pk, increment]
-  employee_id integer [ref: > employees.id]
-  title varchar(200)
-  status varchar(20)
+  id bigint [pk, increment]
+  employee_id bigint [not null]
+  title varchar(200) [not null]
+  status varchar(20) [not null, default: 'todo']
   due_date date
 }
+
 Table consent_records {
-  id integer [pk, increment]
-  employee_id integer [ref: > employees.id]
-  consent_type varchar(50)
-  is_granted boolean
+  id bigint [pk, increment]
+  employee_id bigint [not null]
+  consent_type varchar(50) [not null]
+  is_granted boolean [not null, default: false]
   granted_at timestamp
 }
+
 Table computer_activities {
-  id integer [pk, increment]
-  employee_id integer [ref: > employees.id]
-  date date
-  active_seconds integer
-  idle_seconds integer
-  key_count integer
-  click_count integer
-  app_name varchar(100)
+  id bigint [pk, increment]
+  employee_id bigint [not null]
+  date date [not null]
+  active_seconds integer [not null, default: 0]
+  idle_seconds integer [not null, default: 0]
+  key_count integer [not null, default: 0]
+  click_count integer [not null, default: 0]
+  app_name varchar(100) [not null, default: '']
+
+  indexes {
+    (employee_id, date) [name: 'core_comp_emp_date_idx']
+  }
 }
+
 Table camera_analytics {
-  id integer [pk, increment]
-  employee_id integer [ref: > employees.id]
-  observed_at timestamp
-  is_at_desk boolean
-  confidence float
+  id bigint [pk, increment]
+  employee_id bigint [not null]
+  observed_at timestamp [not null]
+  is_at_desk boolean [not null]
+  confidence float [not null]
+
+  indexes {
+    (employee_id, observed_at) [name: 'core_cam_emp_time_idx']
+  }
 }
+
+Ref: employees.department_id > departments.id
+Ref: tasks.employee_id > employees.id
+Ref: consent_records.employee_id > employees.id
+Ref: computer_activities.employee_id > employees.id
+Ref: camera_analytics.employee_id > employees.id
