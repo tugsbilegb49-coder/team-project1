@@ -65,7 +65,11 @@ class ComputerActivity(models.Model):
 
     class Meta:
         db_table = "computer_activities"
-        indexes = [models.Index(fields=["employee", "date"])]
+        indexes = [
+            models.Index(
+                fields=["employee", "date"], name="core_comp_emp_date_idx"
+            )
+        ]
 
 
 class CameraAnalytics(models.Model):
@@ -78,4 +82,8 @@ class CameraAnalytics(models.Model):
 
     class Meta:
         db_table = "camera_analytics"
-        indexes = [models.Index(fields=["employee", "observed_at"])]
+        indexes = [
+            models.Index(
+                fields=["employee", "observed_at"], name="core_cam_emp_time_idx"
+            )
+        ]

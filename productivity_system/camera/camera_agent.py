@@ -34,8 +34,9 @@ def main(employee_id):
     pose = mp.solutions.pose.Pose(min_detection_confidence=0.5)
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
+        cap.release()
         pose.close()
-        raise RuntimeError("Camera neegdsenгүй эсвэл ашиглах боломжгүй байна.")
+        raise RuntimeError("Camera neegdsen esvel ashiglah bolomjgui baina.")
     print("Camera ehelle. Ctrl+C = zogsoh.")
     last_consent_check = 0.0
     try:

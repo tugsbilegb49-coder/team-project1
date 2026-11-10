@@ -11,11 +11,16 @@ venv\Scripts\activate
 pip install -r requirements.txt
 copy .env.example .env
 # .env dotor DB_PASSWORD bolon DJANGO_SECRET_KEY-g tohiruulna
-python manage.py makemigrations core
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py seed       # turshiltiin medeelel uusgene
 python manage.py report
+```
+
+Camera collector ashiglah bol optional dependency suulgana:
+
+```powershell
+pip install opencv-python mediapipe
 ```
 
 Production deer `.env`-d random, nuuts `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=False`
