@@ -1,0 +1,9 @@
+django>=5.1
+psycopg2-binary>=2.9.10
+python-dotenv>=1.0
+pynput>=1.7
+psutil>=6.0
+streamlit>=1.38
+plotly>=5.24
+pandas>=2.2
+# Camera (zaaval bish, hundiin package): opencv-python, mediapipe

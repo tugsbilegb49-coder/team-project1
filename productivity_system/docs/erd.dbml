@@ -1,0 +1,42 @@
+Table departments {
+  id integer [pk, increment]
+  name varchar(100) [unique]
+}
+Table employees {
+  id integer [pk, increment]
+  department_id integer [ref: > departments.id]
+  full_name varchar(150)
+  email varchar(254) [unique]
+  created_at timestamp
+}
+Table tasks {
+  id integer [pk, increment]
+  employee_id integer [ref: > employees.id]
+  title varchar(200)
+  status varchar(20)
+  due_date date
+}
+Table consent_records {
+  id integer [pk, increment]
+  employee_id integer [ref: > employees.id]
+  consent_type varchar(50)
+  is_granted boolean
+  granted_at timestamp
+}
+Table computer_activities {
+  id integer [pk, increment]
+  employee_id integer [ref: > employees.id]
+  date date
+  active_seconds integer
+  idle_seconds integer
+  key_count integer
+  click_count integer
+  app_name varchar(100)
+}
+Table camera_analytics {
+  id integer [pk, increment]
+  employee_id integer [ref: > employees.id]
+  observed_at timestamp
+  is_at_desk boolean
+  confidence float
+}
