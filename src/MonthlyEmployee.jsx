@@ -127,43 +127,84 @@ export default function MonthlyEmployee({ row, month, schedule }) {
           empty="Даалгаврын цаг бүртгээгүй."
         />
       </div>
-      <details>
-        <summary>{row.name} — ажлын дэлгэрэнгүй</summary>
-        <h4>Энэ сард цаг бүртгэсэн даалгавар</h4>
-        {row.tasks.length ? (
-          <ul>
-            {row.tasks.map((task) => (
-              <li key={task.id}>
-                {task.title} — {clockTime(task.seconds)}; нийт даалгаварт оруулсан одоогийн хувь:{' '}
-                {task.contribution_percent}%
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p>Даалгаврын цаг бүртгээгүй.</p>
-        )}
-        <h4>Энэ сард дуусгасан даалгавар</h4>
-        {row.completed_tasks.length ? (
-          <ul>
-            {row.completed_tasks.map((task) => (
-              <li key={task.id}>{task.title}</li>
-            ))}
-          </ul>
-        ) : (
-          <p>Дуусгасан даалгавар алга.</p>
-        )}
-        <h4>Аппын бүртгэл</h4>
-        {row.applications.length ? (
-          <ul>
-            {row.applications.map((item) => (
-              <li key={item.application}>
-                {item.application} — {clockTime(item.seconds)}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p>Аппын бүртгэл ирээгүй.</p>
-        )}
+      <details className="monthly-details">
+        <summary>
+          <span className="when-closed">Дэлгэрэнгүй харах</span>
+          <span className="when-open">Дэлгэрэнгүй хаах</span>
+        </summary>
+        <div className="monthly-detail-body">
+          <section>
+            <h4>Цаг бүртгэсэн даалгавар</h4>
+            {row.tasks.length ? (
+              <table className="monthly-table">
+                <thead>
+                  <tr>
+                    <th>Даалгавар</th>
+                    <th>Цаг</th>
+                    <th>Хувь</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {row.tasks.map((task) => (
+                    <tr key={task.id}>
+                      <td>{task.title}</td>
+                      <td>{clockTime(task.seconds)}</td>
+                      <td>{task.contribution_percent}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="monthly-empty">Байхгүй</p>
+            )}
+          </section>
+          <section>
+            <h4>Дуусгасан даалгавар</h4>
+            {row.completed_tasks.length ? (
+              <table className="monthly-table">
+                <thead>
+                  <tr>
+                    <th>Даалгавар</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {row.completed_tasks.map((task) => (
+                    <tr key={task.id}>
+                      <td>{task.title}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="monthly-empty">Байхгүй</p>
+            )}
+          </section>
+          <section>
+            <h4>Ашигласан апп</h4>
+            {row.applications.length ? (
+              <table className="monthly-table">
+                <thead>
+                  <tr>
+                    <th>Апп</th>
+                    <th>Цаг</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...row.applications]
+                    .sort((a, b) => (b.seconds || 0) - (a.seconds || 0))
+                    .map((item) => (
+                      <tr key={item.application}>
+                        <td>{item.application}</td>
+                        <td>{clockTime(item.seconds)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="monthly-empty">Байхгүй</p>
+            )}
+          </section>
+        </div>
       </details>
     </article>
   );
